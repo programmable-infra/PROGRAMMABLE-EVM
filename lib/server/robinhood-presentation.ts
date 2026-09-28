@@ -34,6 +34,25 @@ const same = (left: unknown, right: unknown) =>
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
+// Operator-supplied artwork and links apply only to already indexed coin identities.
+function displayOverride(address: string): Pick<Metadata, "imageUrl" | "links"> | null {
+  try {
+    const raw = process.env.ROBINHOOD_TOKEN_PRESENTATION_OVERRIDES_JSON;
+    if (!raw || Buffer.byteLength(raw) > 65_536) return null;
+    const entries: unknown = JSON.parse(raw);
+    const value = object(entries) ? entries[address] : null;
+    if (!object(value) || !Array.isArray(value.links) || value.links.length > 8) return null;
+    const imageUrl = safePublicImageUrl(value.imageUrl);
+    if (!imageUrl) return null;
+    const links = value.links.flatMap(link => {
+      if (!object(link) || typeof link.label !== "string" || !["Website", "X", "Discord", "Telegram", "GitHub", "GitBook"].includes(link.label)) return [];
+      const url = projectionPublicUrl(link.url);
+      return url ? [{ label: link.label, url }] : [];
+    });
+    return links.length === value.links.length ? { imageUrl, links } : null;
+  } catch { return null; }
+}
+
 async function readJson(url: string, signal: AbortSignal): Promise<unknown> {
   const response = await fetch(url, {
     signal, redirect: "error", cache: "no-store", headers: { accept: "application/json" },
@@ -330,7 +349,8 @@ export async function readRobinhoodPresentations(tokens: readonly RobinhoodLaunc
       links: Array.isArray(publication?.links) ? publication.links.flatMap(link => { const url = projectionPublicUrl(link); return url ? [{ label: "Project link", url }] : []; }) : [],
     } : source.status === "fulfilled" ? source.value.get(key) : undefined;
     const main = key === MAIN_TOKEN;
-    const links = [...(presentation?.links ?? [])];
+    const override = displayOverride(key);
+    const links = [...(override?.links ?? presentation?.links ?? [])];
     if (main) {
       const labels = { website: "Website", x: "X", github: "GitHub", discord: "Discord", gitbook: "GitBook" };
       for (const link of [...PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.links, ...PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.supplementalLinks]) {
@@ -339,7 +359,7 @@ export async function readRobinhoodPresentations(tokens: readonly RobinhoodLaunc
     }
     return {
       tokenAddress: token.tokenAddress,
-      imageUrl: presentation?.imageUrl ?? (main ? PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.imageUrl : isRobinhoodModuleSourceKind(token.sourceKind) ? MODULE_DEFAULT_TOKEN_IMAGE : null),
+      imageUrl: override?.imageUrl ?? presentation?.imageUrl ?? (main ? PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.imageUrl : isRobinhoodModuleSourceKind(token.sourceKind) ? MODULE_DEFAULT_TOKEN_IMAGE : null),
       description: presentation?.description ?? (main ? PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.description : null),
       links,
       market: markets.status === "fulfilled" ? markets.value.get(key) ?? null : null,
