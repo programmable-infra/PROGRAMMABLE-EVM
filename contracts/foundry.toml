@@ -55,6 +55,18 @@ runs = 32
 depth = 24
 fail_on_revert = true
 
+# Dependency-free focused checks for the optional launch wallet cap.
+[profile.launch-wallet-cap]
+skip = []
+src = "src/module-foundation/modules/launch-wallet-cap"
+test = "test/module-foundation/launch-wallet-cap"
+script = "script/module-foundation/modules/launch-wallet-cap"
+out = "out/launch-wallet-cap"
+cache_path = "cache/launch-wallet-cap"
+via_ir = true
+optimizer_runs = 200
+auto_detect_remappings = false
+
 # The late-migration intake uses IR compilation, while enabling IR for the
 # repository-wide profile currently exposes unrelated legacy Yul stack limits.
 # Keep this release surface isolated and reproducible without changing the
