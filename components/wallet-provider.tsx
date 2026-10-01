@@ -67,7 +67,6 @@ import {
 } from "@/lib/custom-launch/robinhood-funding-review-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
-import { WEBSITE_ADMIN_WALLET } from "@/lib/admin-access";
 import { normalizeWalletChainId, walletChainIdsEqual } from "@/lib/wallet-chain-id";
 import { getWalletProviderOnChain } from "@/lib/wallet-network";
 import {
@@ -1825,8 +1824,6 @@ function PrivyWalletBridge({
                 ...(selectAccount ? {
                   requestAccountSelection: true,
                   disableSignup: false,
-                  ...(window.location.pathname.startsWith("/admin/")
-                    ? { expectedAddress: WEBSITE_ADMIN_WALLET } : {}),
                 } : {}),
               })
             ) {
