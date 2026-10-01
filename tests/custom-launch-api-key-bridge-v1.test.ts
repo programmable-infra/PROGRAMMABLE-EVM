@@ -263,7 +263,8 @@ describe("developer API key same-origin bridge", () => {
     const [, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
     expect(new Headers(init.headers).get("X-Programmable-Wallet-Address")?.toLowerCase())
       .toBe(PLATFORM_MODULE_SOURCE_WALLET_V1);
-    expect(JSON.parse(String(init.body)).purpose).toBe("module-contributions");
+    expect(JSON.parse(String(init.body)).scopes).toEqual(MODULE_SCOPES);
+    expect(JSON.parse(String(init.body))).not.toHaveProperty("purpose");
     expect((await response.json()).apiKey.scopes).toEqual(MODULE_SCOPES);
   });
 
