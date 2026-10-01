@@ -383,7 +383,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
             schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
             label: parsed.label,
             expiresInDays: parsed.expiresInDays,
-            ...(platformModuleSource ? { scopes: MODULE_SCOPES } : {}),
+            ...(platformModuleSource ? { scopes: [...MODULE_SCOPES] } : {}),
           }),
           idempotencyKey,
         );
