@@ -4,7 +4,6 @@ import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
-import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { ImageIcon } from "@phosphor-icons/react/dist/csr/Image";
 import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
@@ -87,7 +86,7 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
   const [imageError, setImageError] = useState("");
   const [quoteLookup, setQuoteLookup] = useState<{ address: string; status: "checking" | "resolved" | "error"; contextKey: string; asset?: FoundationQuoteAsset; message?: string } | null>(null);
   const [customQuote, setCustomQuote] = useState(Boolean(initialDraft?.quoteAsset && !quoteAssets.some(asset => asset.supportsNativeEth && asset.address.toLowerCase() === initialDraft.quoteAsset?.toLowerCase())));
-  const [pairDialogOpen, setPairDialogOpen] = useState(false);
+  const [modulePickerView, setModulePickerView] = useState<"modules" | "quote" | null>(null);
   const [phase, setPhase] = useState<Phase>("editing");
   const [errors, setErrors] = useState<Errors>({});
   const [error, setError] = useState("");
@@ -349,12 +348,12 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
             <section className={styles.formSection} aria-labelledby="foundation-market-heading">
               <div className={styles.moduleSectionHeading}>
                 <h2 id="foundation-market-heading" className={styles.marketLabel}>Modules</h2>
-                {onResolveQuote && !customQuote ? <button id="foundation-add-module" type="button" className={styles.addModuleButton} onClick={() => setPairDialogOpen(true)}><PlusIcon size={16} aria-hidden="true" /> Add module</button> : null}
+                {onResolveQuote || catalog.length ? <button id="foundation-add-module" type="button" className={styles.addModuleButton} onClick={() => setModulePickerView("modules")}><PlusIcon size={16} aria-hidden="true" /> Add module</button> : null}
               </div>
               {customQuote ? <div className={styles.attachedModule}>
                 <PlugsConnectedIcon size={24} aria-hidden="true" />
-                <button id="foundation-quote" type="button" className={styles.moduleEdit} aria-label="Edit pair module" data-invalid={Boolean(errors.quoteAsset) || undefined} aria-describedby={errors.quoteAsset ? "foundation-quote-error" : undefined} onClick={() => setPairDialogOpen(true)}>
-                  <strong>Pair another token</strong><span>{quote?.supported ? `${quote.name} · ${quoteSymbol}` : `${quoteAddress.slice(0, 6)}…${quoteAddress.slice(-4)}`}</span>
+                <button id="foundation-quote" type="button" className={styles.moduleEdit} aria-label="Edit pair module" data-invalid={Boolean(errors.quoteAsset) || undefined} aria-describedby={errors.quoteAsset ? "foundation-quote-error" : undefined} onClick={() => setModulePickerView("quote")}>
+                  <strong>Any Quote Pool</strong><span>{quote?.supported ? `${quote.name} · ${quoteSymbol}` : `${quoteAddress.slice(0, 6)}…${quoteAddress.slice(-4)}`}</span>
                 </button>
                 <button type="button" className={styles.iconButton} aria-label="Remove pair module" onClick={() => { chooseMarket(false); requestAnimationFrame(() => document.getElementById("foundation-add-module")?.focus()); }}><XIcon size={18} aria-hidden="true" /></button>
               </div> : <div id="foundation-quote" tabIndex={errors.quoteAsset ? -1 : undefined} className={styles.classicPair} data-invalid={Boolean(errors.quoteAsset) || undefined} aria-describedby={errors.quoteAsset ? "foundation-quote-error" : undefined}>
@@ -362,19 +361,17 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
                 <span>Classic <span className={styles.muted}>· Paired with ETH</span></span>
               </div>}
               {errors.quoteAsset ? <p id="foundation-quote-error" className={styles.error}>{errors.quoteAsset}</p> : null}
+              {draft.modules.length ? <div className={styles.catalog}>{catalog.filter(descriptor => draft.modules.some(item => item.id === descriptor.id)).map(descriptor => {
+                const selection = draft.modules.find(item => item.id === descriptor.id)!;
+                return <div className={styles.module} key={`${descriptor.id}:${descriptor.version}`}><div className={styles.moduleHeading}><div><h3>{descriptor.name}</h3><p>{descriptor.description}</p></div><button className={styles.iconButton} type="button" aria-label={`Remove ${descriptor.name}`} onClick={() => toggleModule(descriptor)}><XIcon size={18} aria-hidden="true" /></button></div>{!descriptor.available ? <p className={styles.help}>{descriptor.unavailableReason ?? "This module is currently unavailable."}</p> : null}<div className={styles.moduleFields}>{descriptor.fields.map(field => <ModuleField key={field.key} field={field} id={`foundation-module-${encodeURIComponent(descriptor.id)}-${encodeURIComponent(field.key)}`} value={selection.configuration[field.key]} showErrors={Boolean(errors.modules)} onChange={value => update("modules", draft.modules.map(item => item.id === descriptor.id ? { ...item, configuration: { ...item.configuration, [field.key]: value } } : item))} />)}<details className={styles.transactionDetails}><summary>Module capabilities and version</summary><p className={styles.help}>Version {descriptor.version}</p><ul className={styles.notes}>{descriptor.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul></details></div></div>;
+              })}</div> : null}
+              {errors.modules ? <p className={styles.error} role="alert">{errors.modules}</p> : null}
               <div className={styles.creatorFees} role="group" aria-labelledby="foundation-creator-fees-heading">
                 <h3 id="foundation-creator-fees-heading" className={styles.marketLabel}>Creator fees <span className={styles.muted}>(Platform Fee 0.3%)</span></h3>
                 <CreatorFeeField value={draft.creatorFeeBps} error={errors.creatorFeeBps} onChange={value => update("creatorFeeBps", value)} />
               </div>
               <Field label="First buy" id="foundation-initial-buy" error={errors.initialBuy}><div className={styles.amountInput}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" required value={initialBuy} placeholder="ETH amount" aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} onChange={event => update("initialBuy", event.target.value)} /><span>ETH</span></div></Field>
             </section>
-            {catalog.length || draft.modules.length ? <section className={styles.formSection} aria-labelledby="foundation-modules-heading"><div className={styles.sectionHeading}><div className={styles.sectionTitle}><h2 id="foundation-modules-heading">Modules</h2>{draft.modules.length ? <span className={styles.muted}>{draft.modules.length} selected</span> : null}</div></div>
-              {catalog.length ? <div className={styles.catalog}>{catalog.map(descriptor => {
-                const selection = draft.modules.find(item => item.id === descriptor.id);
-                return <div className={styles.module} key={`${descriptor.id}:${descriptor.version}`}><div className={styles.moduleHeading}><div><h3>{descriptor.name}</h3><p>{descriptor.description}</p></div><button className={selection ? styles.selectedButton : styles.secondaryButton} type="button" aria-pressed={Boolean(selection)} disabled={locked || (!descriptor.available && !selection)} onClick={() => toggleModule(descriptor)}>{selection ? <><CheckIcon size={16} aria-hidden="true" /> Remove</> : <><PlusIcon size={16} aria-hidden="true" /> Add</>}</button></div>{!descriptor.available ? <p className={styles.help}>{descriptor.unavailableReason ?? "This module is currently unavailable."}</p> : null}{selection ? <div className={styles.moduleFields}>{descriptor.fields.map(field => <ModuleField key={field.key} field={field} id={`foundation-module-${encodeURIComponent(descriptor.id)}-${encodeURIComponent(field.key)}`} value={selection.configuration[field.key]} showErrors={Boolean(errors.modules)} onChange={value => update("modules", draft.modules.map(item => item.id === descriptor.id ? { ...item, configuration: { ...item.configuration, [field.key]: value } } : item))} />)}<details className={styles.transactionDetails}><summary>Module capabilities and version</summary><p className={styles.help}>Version {descriptor.version}</p><ul className={styles.notes}>{descriptor.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul></details></div> : null}</div>;
-              })}</div> : null}
-              {errors.modules ? <p className={styles.error} role="alert">{errors.modules}</p> : null}
-            </section> : null}
           </fieldset>
           <div className={styles.formFooter}><p className={styles.error} role="alert">{error}</p>{phase === "preparing" ? <p className={styles.help} role="status">Checking your launch. MetaMask will open when the checks finish.</p> : null}<button type="submit" className={styles.primaryButton} disabled={locked || imagePreparing || unavailable || Boolean(submissionBlocked) || walletAction?.busy} aria-busy={busy || walletAction?.busy}>{actionLabel}<ArrowRightIcon size={18} aria-hidden="true" /></button></div>
         </form>}
@@ -382,16 +379,17 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
       <aside className={styles.preview} aria-label="Coin preview">
         <div className={styles.previewHeading}><span>Preview</span>{moduleCount ? <span className={styles.moduleBadge}>+{moduleCount} {moduleCount === 1 ? "module" : "modules"}</span> : null}</div>
         <div className={styles.previewArtwork}><Image src={imageSource ?? FOUNDATION_DEFAULT_IMAGE.url} alt={`${draft.name.trim() || "Coin"} preview`} width={320} height={320} loading="eager" unoptimized /></div>
-        <div className={styles.previewContent}><div className={styles.coinName}><h2>{draft.name.trim() || "Your coin"}</h2><span>${draft.symbol.trim() || "COIN"}</span></div>{draft.description.trim() ? <p className={styles.previewDescription}>{draft.description.trim()}</p> : null}<div className={styles.previewMarket}><span>Pair</span><strong>{draft.symbol.trim() || "COIN"} / {quoteSymbol}</strong></div><div className={styles.previewModules}>{customQuote ? <span><PlugsConnectedIcon size={16} aria-hidden="true" /> Pair another token</span> : null}{draft.modules.map(selection => <span key={selection.id}>{catalog.find(item => item.id === selection.id)?.name ?? selection.id}</span>)}</div><div className={styles.previewFoot}><span>{availability.chainName}</span><span>Uniswap v4</span></div></div>
+        <div className={styles.previewContent}><div className={styles.coinName}><h2>{draft.name.trim() || "Your coin"}</h2><span>${draft.symbol.trim() || "COIN"}</span></div>{draft.description.trim() ? <p className={styles.previewDescription}>{draft.description.trim()}</p> : null}<div className={styles.previewMarket}><span>Pair</span><strong>{draft.symbol.trim() || "COIN"} / {quoteSymbol}</strong></div><div className={styles.previewModules}>{customQuote ? <span><PlugsConnectedIcon size={16} aria-hidden="true" /> Any Quote Pool</span> : null}{draft.modules.map(selection => <span key={selection.id}>{catalog.find(item => item.id === selection.id)?.name ?? selection.id}</span>)}</div><div className={styles.previewFoot}><span>{availability.chainName}</span><span>Uniswap v4</span></div></div>
       </aside>
     </div>
-    {pairDialogOpen && onResolveQuote && !locked ? <ModuleFoundationPairDialog key={contextKey} chainId={availability.chainId} quoteAssets={quoteAssets}
+    {modulePickerView && !locked ? <ModuleFoundationPairDialog key={contextKey} chainId={availability.chainId} quoteAssets={quoteAssets}
+      initialView={modulePickerView} catalog={catalog} selectedModules={draft.modules} onToggleModule={toggleModule}
+      onRemoveQuote={() => chooseMarket(false)}
       initialAddress={customQuote ? quoteAddress : undefined} initialAsset={customQuote ? quote : undefined} onResolveQuote={onResolveQuote}
-      onClose={() => setPairDialogOpen(false)} onApply={asset => {
+      onClose={() => setModulePickerView(null)} onApply={asset => {
         quoteGeneration.current += 1; pendingQuote.current = null;
         setCustomQuote(true); setQuoteLookup({ address: asset.address, status: "resolved", contextKey, asset });
-        update("quoteAsset", asset.address); setPairDialogOpen(false); setAnnouncement(`${asset.symbol} pair module added.`);
-        requestAnimationFrame(() => document.getElementById("foundation-quote")?.focus());
+        update("quoteAsset", asset.address); setAnnouncement(`${asset.symbol} pair module added.`);
       }} /> : null}
     <p className={styles.srOnly} role="status">{announcement || (phase === "uploading" ? "Saving the exact selected image." : phase === "preparing" ? "Preparing a current launch simulation." : "")}</p>
   </div>;

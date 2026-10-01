@@ -4,24 +4,30 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
+import { PlusIcon } from "@phosphor-icons/react/dist/csr/Plus";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/csr/PlugsConnected";
 import type { Address } from "viem";
-import type { FoundationQuoteAsset } from "@/lib/module-foundation/ui-types";
+import type { FoundationModuleDescriptor, FoundationModuleSelection, FoundationQuoteAsset } from "@/lib/module-foundation/ui-types";
 import { ModulePickerDialog } from "./module-picker-dialog";
 import styles from "./module-foundation-ui.module.css";
 
 type Lookup = { address: string; asset?: FoundationQuoteAsset; error?: string };
 
-export function ModuleFoundationPairDialog({ chainId, initialAddress = "", initialAsset, quoteAssets, onResolveQuote, onApply, onClose }: {
+export function ModuleFoundationPairDialog({ chainId, initialView, initialAddress = "", initialAsset, quoteAssets, catalog, selectedModules, onToggleModule, onRemoveQuote, onResolveQuote, onApply, onClose }: {
   chainId: number;
+  initialView: "modules" | "quote";
   initialAddress?: string;
   initialAsset?: FoundationQuoteAsset;
   quoteAssets: readonly FoundationQuoteAsset[];
-  onResolveQuote: (address: Address) => Promise<FoundationQuoteAsset>;
+  catalog: readonly FoundationModuleDescriptor[];
+  selectedModules: readonly FoundationModuleSelection[];
+  onToggleModule: (descriptor: FoundationModuleDescriptor) => void;
+  onRemoveQuote: () => void;
+  onResolveQuote?: (address: Address) => Promise<FoundationQuoteAsset>;
   onApply: (asset: FoundationQuoteAsset) => void;
   onClose: () => void;
 }) {
-  const [configuring, setConfiguring] = useState(Boolean(initialAddress));
+  const [configuring, setConfiguring] = useState(initialView === "quote");
   const [address, setAddress] = useState(initialAddress);
   const [lookup, setLookup] = useState<Lookup | null>(initialAsset ? { address: initialAddress, asset: initialAsset } : null);
   const [retry, setRetry] = useState(0);
@@ -37,10 +43,10 @@ export function ModuleFoundationPairDialog({ chainId, initialAddress = "", initi
   const supported = Boolean(asset?.supported && asset.chainId === chainId && !asset.supportsNativeEth);
 
   useEffect(() => {
-    if (!configuring || !validAddress || known) return;
+    if (!configuring || !validAddress || known || !resolver.current) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void resolver.current(trimmed as Address).then(resolved => {
+      void resolver.current!(trimmed as Address).then(resolved => {
         if (cancelled) return;
         if (resolved.address.toLowerCase() !== trimmed.toLowerCase() || resolved.chainId !== chainId || !Number.isInteger(resolved.decimals) || resolved.decimals < 0 || resolved.decimals > 36) {
           throw new Error("This token could not be verified. Check its address and try again.");
@@ -53,11 +59,14 @@ export function ModuleFoundationPairDialog({ chainId, initialAddress = "", initi
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [chainId, configuring, known, trimmed, validAddress, retry]);
 
-  return <ModulePickerDialog variant="compact" animateOpen title={configuring ? "Pair another token" : "Add a module"}
-    description={configuring ? "Pair with a meme coin or tokenized stock instead of ETH." : undefined}
-    onClose={onClose} showDone={configuring} doneLabel={initialAddress ? "Save module" : "Add module"}
-    doneDisabled={!supported} onDone={() => { if (asset && supported) onApply(asset); }}
-    footer={configuring && !initialAddress ? <button type="button" className={styles.textButton} onClick={() => setConfiguring(false)}><ArrowLeftIcon size={16} aria-hidden="true" /> Modules</button> : undefined}>
+  return <ModulePickerDialog variant="compact" animateOpen title={configuring ? "Any Quote Pool" : "Add modules"}
+    description={configuring ? "Pair your coin with another token instead of ETH." : "Choose modules individually or combine them."}
+    onClose={onClose} doneLabel={configuring ? initialAddress ? "Save module" : "Add module" : "Done"}
+    doneDisabled={configuring && !supported} onDone={() => {
+      if (!configuring) { onClose(); return; }
+      if (asset && supported) { onApply(asset); if (initialView === "quote") onClose(); else setConfiguring(false); }
+    }}
+    footer={configuring ? <button type="button" className={styles.textButton} onClick={() => setConfiguring(false)}><ArrowLeftIcon size={16} aria-hidden="true" /> Modules</button> : undefined}>
     {configuring ? <div className={styles.pairConfiguration}>
       <div className={styles.field}>
         <label htmlFor="foundation-pair-address">Token address</label>
@@ -69,10 +78,23 @@ export function ModuleFoundationPairDialog({ chainId, initialAddress = "", initi
         </p>
         {current?.error ? <button type="button" className={styles.textButton} onClick={() => { setLookup(null); setRetry(value => value + 1); }}>Try again</button> : null}
       </div>
-    </div> : <button type="button" className={styles.moduleOption} onClick={() => { setConfiguring(true); requestAnimationFrame(() => input.current?.focus()); }}>
+    </div> : <div className={styles.catalog}>
+    {onResolveQuote ? <button type="button" className={styles.moduleOption} aria-pressed={Boolean(initialAddress)} onClick={() => {
+      if (initialAddress) onRemoveQuote();
+      else { setConfiguring(true); requestAnimationFrame(() => input.current?.focus()); }
+    }}>
       <PlugsConnectedIcon size={24} aria-hidden="true" />
-      <span><strong>Pair another token</strong><small>Meme coins or tokenized stocks instead of ETH.</small></span>
-      <ArrowRightIcon size={20} aria-hidden="true" />
-    </button>}
+      <span><strong>Any Quote Pool</strong><small>{initialAddress ? `${initialAsset?.symbol ?? "Token"} selected · Click to remove` : "Pair with another token instead of ETH."}</small></span>
+      {initialAddress ? <CheckIcon size={20} aria-hidden="true" /> : <ArrowRightIcon size={20} aria-hidden="true" />}
+    </button> : null}
+    {catalog.map(descriptor => {
+      const selected = selectedModules.some(selection => selection.id === descriptor.id);
+      return <button key={`${descriptor.id}:${descriptor.version}`} type="button" className={styles.moduleOption}
+        aria-pressed={selected} disabled={!descriptor.available && !selected} onClick={() => onToggleModule(descriptor)}>
+        <span><strong>{descriptor.name}</strong><small>{descriptor.available ? descriptor.description : descriptor.unavailableReason ?? "This module is currently unavailable."}</small></span>
+        {selected ? <CheckIcon size={20} aria-hidden="true" /> : <PlusIcon size={20} aria-hidden="true" />}
+      </button>;
+    })}
+    </div>}
   </ModulePickerDialog>;
 }

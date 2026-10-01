@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ModuleFoundationBuilder } from "@/components/module-foundation-builder";
+import { ModuleFoundationPairDialog } from "@/components/module-foundation-pair-dialog";
 import { ModuleFoundationMarket } from "@/components/module-foundation-market";
 import { FoundationFeeDisclosure, ModuleFoundationLaunchReview, ModuleFoundationTransactionResult } from "@/components/module-foundation-review";
 import { FOUNDATION_PLATFORM_FEE_RECIPIENT, foundationDecimalError, foundationReviewError, foundationSelectionErrors, isFoundationCreatorFee, type FoundationLaunchReview, type FoundationModuleDescriptor, type FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
@@ -35,10 +36,20 @@ describe("Module foundation UI financial and lifecycle boundaries", () => {
         catalog={[cap]} quoteAssets={[eth, quote]} onResolveQuote={vi.fn()} {...actions}
         initialDraft={{ quoteAsset: customPair ? quote.address : eth.address, modules }} />);
       expect(html.includes('aria-label="Remove pair module"')).toBe(customPair);
+      expect(html).toContain('id="foundation-add-module"');
+      expect(html.match(/id="foundation-market-heading"/g)).toHaveLength(1);
+      expect(html).not.toContain('id="foundation-modules-heading"');
       expect(html.includes("Supply limit per wallet (%)")).toBe(capped);
       expect(html.includes("Protection duration (minutes)")).toBe(capped);
       if (capped) { expect(html).toContain('value="0.5"'); expect(html).toContain('value="7"'); }
       expect(html).toContain(customPair ? "COIN / Q" : "COIN / ETH");
+      const picker = renderToStaticMarkup(<ModuleFoundationPairDialog chainId={4663} initialView="modules"
+        initialAddress={customPair ? quote.address : undefined} initialAsset={customPair ? quote : undefined}
+        quoteAssets={[eth, quote]} catalog={[cap]} selectedModules={modules} onToggleModule={vi.fn()}
+        onRemoveQuote={vi.fn()} onResolveQuote={vi.fn()} onApply={vi.fn()} onClose={vi.fn()} />);
+      expect(picker).toContain("Any Quote Pool");
+      expect(picker).toContain(cap.name);
+      expect(picker.match(/aria-pressed="true"/g) ?? []).toHaveLength(Number(customPair) + Number(capped));
     }
   });
   it("preserves quote units and rejects rounded or invalid decimal entry", () => {
