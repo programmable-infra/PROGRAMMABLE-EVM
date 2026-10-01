@@ -1,4 +1,5 @@
 import { foundationCreatorFeeFields, type FoundationCreatorFees } from "./creator-fees";
+import { FOUNDATION_PERCENT_BPS_UNIT_V1, foundationPercentFromBpsV1, foundationPercentToBpsV1 } from "./percentage";
 import { encodeFunctionData, getAddress, keccak256, parseAbi, type Address, type Hex } from "viem";
 import {
   assertOpenConfigSchema, compileOpenConfig, type OpenAssetContext, type OpenConfigContext, type OpenConfigSchema, type OpenConfigValue,
@@ -101,10 +102,13 @@ export function presentFoundationFieldsV1(schema: OpenConfigSchema, defaults: un
       kind: "text", required: required && node.type !== "string", ...(node.help ? { description: node.help } : {}),
     };
     if (node.type === "uint") {
-      field.kind = "integer";
-      if (typeof value === "string" || typeof value === "number") field.defaultValue = String(value);
-      field.description = [node.help, node.unit ? `Unit: ${node.unit}.` : undefined,
-        node.max !== undefined ? `Range: ${node.min ?? 0} to ${node.max}.` : node.min !== undefined ? `Minimum: ${node.min}.` : undefined].filter(Boolean).join(" ");
+      const percent = node.unit === FOUNDATION_PERCENT_BPS_UNIT_V1;
+      field.kind = percent ? "decimal" : "integer";
+      if (typeof value === "string" || typeof value === "number") field.defaultValue = percent ? foundationPercentFromBpsV1(value) : String(value);
+      field.description = percent
+        ? [node.help, `Range: ${foundationPercentFromBpsV1(node.min ?? "0")}% to ${foundationPercentFromBpsV1(node.max ?? "10000")}%. Up to two decimal places.`].filter(Boolean).join(" ")
+        : [node.help, node.unit ? `Unit: ${node.unit}.` : undefined,
+          node.max !== undefined ? `Range: ${node.min ?? 0} to ${node.max}.` : node.min !== undefined ? `Minimum: ${node.min}.` : undefined].filter(Boolean).join(" ");
     } else if (node.type === "bool") {
       field.kind = "boolean"; if (typeof value === "boolean") field.defaultValue = value;
     } else if (["address", "account", "component"].includes(node.type)) {
@@ -144,6 +148,7 @@ export function decodeFoundationFieldsV1(schema: OpenConfigSchema, input: Founda
     }
     const key = pointer(path), supplied = hasOwn(raw, key) ? raw[key] : undefined;
     if (supplied === undefined) return value === undefined ? missing : nativeJson(value);
+    if (node.type === "uint" && node.unit === FOUNDATION_PERCENT_BPS_UNIT_V1) return foundationPercentToBpsV1(supplied);
     if (node.type === "account" || node.type === "component") return { address: supplied };
     if (node.type === "asset") {
       foundationRequire(typeof supplied === "string", "FOUNDATION_ASSET_CONTEXT_REQUIRED", "Enter an ERC20 contract address.", key);
