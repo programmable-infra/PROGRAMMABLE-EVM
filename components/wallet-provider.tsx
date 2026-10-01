@@ -67,6 +67,7 @@ import {
 } from "@/lib/custom-launch/robinhood-funding-review-v1";
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
+import { WEBSITE_ADMIN_WALLET } from "@/lib/admin-access";
 import { normalizeWalletChainId, walletChainIdsEqual } from "@/lib/wallet-chain-id";
 import { getWalletProviderOnChain } from "@/lib/wallet-network";
 import {
@@ -119,6 +120,7 @@ import type {
 import {
   loginConnectedEthereumWalletWithSiwe,
   selectInjectedEthereumProvider,
+  WalletAccountSelectionError,
 } from "../lib/wallet-siwe-login";
 import styles from "./wallet-dialog.module.css";
 
@@ -1297,6 +1299,7 @@ function PrivyWalletBridge({
   }, [authenticated, disconnecting, ready, sessionSuppressed, user]);
   const walletLoginIntentRef = useRef<"login" | "connect" | "link" | null>(null);
   const walletConnectionAttemptRef = useRef<{ userId: string } | null>(null);
+  const walletAccountSelectionRequestedRef = useRef(false);
   const walletLoginAttemptGateRef = useRef(createWalletLoginAttemptGate());
   const walletLoginLeaseRef = useRef<BrowserWalletLoginLease | null>(null);
   const settleWalletLoginAttempt = useCallback(() => {
@@ -1307,7 +1310,7 @@ function PrivyWalletBridge({
     walletLoginLeaseRef.current = null;
     setLoginPending(false);
   }, []);
-  const { login } = useLogin({
+  const loginCallbacks: NonNullable<Parameters<typeof useLogin>[0]> = {
     onComplete: ({ user: signedInUser, loginAccount }) => {
       settleWalletLoginAttempt();
       if (loginAccount?.type === "wallet" && isEthereumAddress(loginAccount.address)) {
@@ -1338,8 +1341,9 @@ function PrivyWalletBridge({
       setWalletLoginStatus("");
       setDialogOpen(true);
     },
-  });
-  const { generateSiweMessage, loginWithSiwe } = useLoginWithSiwe();
+  };
+  const { login } = useLogin(loginCallbacks);
+  const { generateSiweMessage, loginWithSiwe } = useLoginWithSiwe(loginCallbacks);
   const { connectWallet } = useConnectWallet({
     onSuccess: async ({ wallet: reconnectedWallet }) => {
       const attempt = walletConnectionAttemptRef.current;
@@ -1515,13 +1519,13 @@ function PrivyWalletBridge({
   ), [user?.linkedAccounts]);
   const connectedWallet = useMemo(() => {
     if (!activeAuthenticated) return undefined;
-    const selected = selectedWallet?.userId !== user?.id
-      ? undefined
-      : wallets.find((candidate) =>
+    if (selectedWallet?.userId === user?.id && selectedWallet) {
+      return wallets.find((candidate) =>
         isEthereumAddress(candidate.address)
         && ownedWalletAddresses.has(candidate.address.toLowerCase())
         && candidate.address.toLowerCase() === selectedWallet?.address.toLowerCase());
-    return selected ?? selectAuthenticatedWallet(activeAuthenticated, wallets, user?.wallet?.address, ownedWalletAddresses);
+    }
+    return selectAuthenticatedWallet(activeAuthenticated, wallets, user?.wallet?.address, ownedWalletAddresses);
   }, [
     activeAuthenticated,
     ownedWalletAddresses,
@@ -1803,16 +1807,27 @@ function PrivyWalletBridge({
         }
 
         try {
-          if (window.location.pathname === "/ops/classic-v4-canary") {
+          const selectAccount = walletAccountSelectionRequestedRef.current;
+          walletAccountSelectionRequestedRef.current = false;
+          if (selectAccount || window.location.pathname === "/ops/classic-v4-canary") {
             const provider = selectInjectedEthereumProvider(
               (window as typeof window & { ethereum?: unknown }).ethereum,
             );
+            if (selectAccount && (!provider || !provider.isMetaMask)) {
+              throw new WalletAccountSelectionError("Open MetaMask to choose the account you want to use.");
+            }
             if (
               provider
               && await loginConnectedEthereumWalletWithSiwe({
                 provider,
                 generateSiweMessage,
                 loginWithSiwe,
+                ...(selectAccount ? {
+                  requestAccountSelection: true,
+                  disableSignup: false,
+                  ...(window.location.pathname.startsWith("/admin/")
+                    ? { expectedAddress: WEBSITE_ADMIN_WALLET } : {}),
+                } : {}),
               })
             ) {
               settleWalletLoginAttempt();
@@ -1829,9 +1844,10 @@ function PrivyWalletBridge({
             loginMethods: ["wallet", "email"],
             walletChainType: "ethereum-only",
           });
-        } catch {
+        } catch (connectionError) {
           settleWalletLoginAttempt();
-          setError("Unable to connect wallet. Try again.");
+          setError(connectionError instanceof WalletAccountSelectionError
+            ? connectionError.message : "Unable to connect wallet. Try again.");
           setWalletLoginStatus("");
           setDialogOpen(true);
         }
@@ -2033,11 +2049,15 @@ function PrivyWalletBridge({
 
   const switchAccount = useCallback(() => {
     if (disconnecting || accountSwitchRequested) return;
+    walletAccountSelectionRequestedRef.current = connectedWallet?.walletClientType === "metamask";
     setAccountSwitchRequested(true);
     void disconnect().then((succeeded) => {
-      if (!succeeded) setAccountSwitchRequested(false);
+      if (!succeeded) {
+        walletAccountSelectionRequestedRef.current = false;
+        setAccountSwitchRequested(false);
+      }
     });
-  }, [accountSwitchRequested, disconnect, disconnecting]);
+  }, [accountSwitchRequested, connectedWallet?.walletClientType, disconnect, disconnecting]);
 
   useEffect(() => {
     // Privy's logout promise can resolve before it clears the current user.
@@ -3597,6 +3617,11 @@ function WalletDialog({
           {copied ? "Address copied" : ""}
         </span>
         <div className={styles.actions}>
+          {hasSession && sessionReady && !accountMismatch ? (
+            <button className={styles.signOut} type="button" disabled={disconnecting} onClick={onSwitchAccount}>
+              Switch account
+            </button>
+          ) : null}
           <button
             className={styles.primaryButton}
             type="button"
