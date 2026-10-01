@@ -60,6 +60,8 @@
 .pairConfiguration .field { margin-bottom: 0; }
 .pairConfiguration input { font-family: inherit; font-size: 16px; }
 .pairConfiguration :is(.saved, .help, .error) { min-height: 40px; padding-top: 8px; }
+.moduleConfiguration { display: grid; gap: 24px; }
+.moduleConfiguration .field { margin-bottom: 0; }
 @media (hover: hover) { .moduleOption:hover { background: #272727; } .moduleEdit:hover strong, .addModuleButton:hover { text-decoration: underline; text-underline-offset: 4px; } }
 .pairChoices { display: flex; gap: 8px; margin-bottom: 24px; }
 .pairChoices > button { align-items: center; background: transparent; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-muted); cursor: pointer; display: flex; flex: 1; font: inherit; gap: 12px; min-height: 56px; min-width: 0; padding: 12px 16px; text-align: left; }
@@ -70,8 +72,9 @@
 .pairChoices svg { flex-shrink: 0; }
 .customPair { min-width: 0; }
 .customPair .saved { min-height: 20px; }
-.creatorFees { margin-bottom: 0; }
-.catalog + .creatorFees { margin-top: 24px; }
+.feesBuyRow { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.feesBuyRow > .field { margin-bottom: 0; }
+.catalog + .feesBuyRow { margin-top: 24px; }
 .feeFields { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .feeControls { display: flex; align-items: stretch; gap: 4px; }
 .feeControls > button { align-items: center; background: #1f1f1f; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-ink); cursor: pointer; display: flex; flex: 0 0 44px; justify-content: center; min-height: 48px; }
@@ -81,7 +84,8 @@
 .feeControls input::-webkit-inner-spin-button, .feeControls input::-webkit-outer-spin-button { appearance: none; margin: 0; }
 .feeControls > div > span { color: var(--mf-muted); pointer-events: none; position: absolute; right: 12px; top: 50%; transform: translateY(-50%); }
 .builderPage .formFooter { gap: 16px; margin-top: 8px; }
-.builderPage .formFooter > .primaryButton { justify-self: stretch; justify-content: space-between; min-height: 48px; padding: 12px 16px; }
+.builderPage .formFooter > .primaryButton { justify-self: stretch; justify-content: center; min-height: 48px; padding: 12px 48px; position: relative; }
+.builderPage .formFooter > .primaryButton > svg { position: absolute; right: 16px; }
 .builderPage .preview { padding: 16px; }
 .builderPage .previewHeading { padding: 0 0 16px; }
 .builderPage .previewArtwork { aspect-ratio: 1; border-radius: 8px; }
@@ -115,6 +119,7 @@
 }
 @media (max-width: 420px) {
   .builderPage .form { padding: 16px; }
+  .feesBuyRow { grid-template-columns: 1fr; }
   .pairChoices { flex-direction: column; }
   .feeFields { gap: 12px; }
   .feeControls { gap: 2px; }

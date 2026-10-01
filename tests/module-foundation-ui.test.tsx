@@ -45,8 +45,8 @@ describe("Module foundation UI financial and lifecycle boundaries", () => {
       expect(html).toContain(customPair ? "COIN / Q" : "COIN / ETH");
       const picker = renderToStaticMarkup(<ModuleFoundationPairDialog chainId={4663} initialView="modules"
         initialAddress={customPair ? quote.address : undefined} initialAsset={customPair ? quote : undefined}
-        quoteAssets={[eth, quote]} catalog={[cap]} selectedModules={modules} onToggleModule={vi.fn()}
-        onRemoveQuote={vi.fn()} onResolveQuote={vi.fn()} onApply={vi.fn()} onClose={vi.fn()} />);
+        quoteAssets={[eth, quote]} catalog={[cap]} selectedModules={modules} onApplyModule={vi.fn()}
+        onResolveQuote={vi.fn()} onApply={vi.fn()} onClose={vi.fn()} />);
       expect(picker).toContain("Any Quote Pool");
       expect(picker).toContain(cap.name);
       expect(picker.match(/aria-pressed="true"/g) ?? []).toHaveLength(Number(customPair) + Number(capped));
