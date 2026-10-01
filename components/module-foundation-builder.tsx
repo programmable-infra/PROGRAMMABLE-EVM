@@ -12,13 +12,14 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { sha256, type Address, type Hex } from "viem";
 import { prepareTokenImage, isProgrammableTokenImageUrl } from "@/lib/token-image";
 import { validateModuleSocialLinks, type ModuleSocialKind, type ModuleSocialLinks } from "@/lib/module-mode/token-metadata";
-import { foundationDecimalError, foundationReviewError, foundationSelectionErrors, isFoundationCreatorFee, type FoundationAvailability, type FoundationConfigurationField, type FoundationImage, type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationModuleDescriptor, type FoundationModuleSelection, type FoundationQuoteAsset, type FoundationTransactionResult, type FoundationWalletAction } from "@/lib/module-foundation/ui-types";
+import { foundationDecimalError, foundationReviewError, foundationSelectionErrors, isFoundationCreatorFee, type FoundationAvailability, type FoundationImage, type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationModuleDescriptor, type FoundationModuleSelection, type FoundationQuoteAsset, type FoundationTransactionResult, type FoundationWalletAction } from "@/lib/module-foundation/ui-types";
 import { foundationCreatorFeesEqual } from "@/lib/module-foundation/creator-fees";
 import { FOUNDATION_WETH } from "@/lib/module-foundation/native-funding";
 import { FOUNDATION_DEFAULT_IMAGE, isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
 import { normalizeFoundationSocialInput, normalizeFoundationSocialInputs } from "@/lib/module-foundation/social-input";
 import { ModuleFoundationTransactionResult } from "./module-foundation-review";
 import { ModuleFoundationPairDialog } from "./module-foundation-pair-dialog";
+import { ModuleFoundationConfigField } from "./module-foundation-config-field";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/csr/PlugsConnected";
 import styles from "./module-foundation-ui.module.css";
 
@@ -199,12 +200,6 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
     return () => window.clearTimeout(timer);
   }, [customQuote, canResolveQuote, knownQuote, lookedUpQuote, quoteAddress, resolveQuote]);
 
-  function toggleModule(descriptor: FoundationModuleDescriptor) {
-    if (draft.modules.some(selection => selection.id === descriptor.id)) update("modules", draft.modules.filter(selection => selection.id !== descriptor.id));
-    else update("modules", [...draft.modules, { id: descriptor.id, version: descriptor.version, digest: descriptor.digest,
-      configuration: Object.fromEntries(descriptor.fields.map(field => [field.key, field.defaultValue ?? (field.kind === "boolean" ? false : "")])) }]);
-  }
-
   function validate(selectedQuote: FoundationQuoteAsset | undefined, buyAmount: string): { errors: Errors; links: ModuleSocialLinks } {
     const next: Errors = {};
     if (!draft.name.trim() || new TextEncoder().encode(draft.name.trim()).length > 48) next.name = "Enter a coin name of up to 48 bytes.";
@@ -363,17 +358,16 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
               {errors.quoteAsset ? <p id="foundation-quote-error" className={styles.error}>{errors.quoteAsset}</p> : null}
               {draft.modules.length ? <div className={styles.catalog}>{catalog.filter(descriptor => draft.modules.some(item => item.id === descriptor.id)).map(descriptor => {
                 const selection = draft.modules.find(item => item.id === descriptor.id)!;
-                return <div className={styles.module} key={`${descriptor.id}:${descriptor.version}`}><div className={styles.moduleHeading}><div><h3>{descriptor.name}</h3><p>{descriptor.description}</p></div><button className={styles.iconButton} type="button" aria-label={`Remove ${descriptor.name}`} onClick={() => toggleModule(descriptor)}><XIcon size={18} aria-hidden="true" /></button></div>{!descriptor.available ? <p className={styles.help}>{descriptor.unavailableReason ?? "This module is currently unavailable."}</p> : null}<div className={styles.moduleFields}>{descriptor.fields.map(field => <ModuleField key={field.key} field={field} id={`foundation-module-${encodeURIComponent(descriptor.id)}-${encodeURIComponent(field.key)}`} value={selection.configuration[field.key]} showErrors={Boolean(errors.modules)} onChange={value => update("modules", draft.modules.map(item => item.id === descriptor.id ? { ...item, configuration: { ...item.configuration, [field.key]: value } } : item))} />)}<details className={styles.transactionDetails}><summary>Module capabilities and version</summary><p className={styles.help}>Version {descriptor.version}</p><ul className={styles.notes}>{descriptor.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul></details></div></div>;
+                return <div className={styles.module} key={`${descriptor.id}:${descriptor.version}`}><div className={styles.moduleHeading}><div><h3>{descriptor.name}</h3><p>{descriptor.description}</p></div><button className={styles.iconButton} type="button" aria-label={`Remove ${descriptor.name}`} onClick={() => update("modules", draft.modules.filter(item => item.id !== descriptor.id))}><XIcon size={18} aria-hidden="true" /></button></div>{!descriptor.available ? <p className={styles.help}>{descriptor.unavailableReason ?? "This module is currently unavailable."}</p> : null}<div className={styles.moduleFields}>{descriptor.fields.map(field => <ModuleFoundationConfigField key={field.key} field={field} id={`foundation-module-${encodeURIComponent(descriptor.id)}-${encodeURIComponent(field.key)}`} value={selection.configuration[field.key]} showErrors={Boolean(errors.modules)} onChange={value => update("modules", draft.modules.map(item => item.id === descriptor.id ? { ...item, configuration: { ...item.configuration, [field.key]: value } } : item))} />)}<details className={styles.transactionDetails}><summary>Module capabilities and version</summary><p className={styles.help}>Version {descriptor.version}</p><ul className={styles.notes}>{descriptor.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul></details></div></div>;
               })}</div> : null}
               {errors.modules ? <p className={styles.error} role="alert">{errors.modules}</p> : null}
-              <div className={styles.creatorFees} role="group" aria-labelledby="foundation-creator-fees-heading">
-                <h3 id="foundation-creator-fees-heading" className={styles.marketLabel}>Creator fees <span className={styles.muted}>(Platform Fee 0.3%)</span></h3>
+              <div className={styles.feesBuyRow}>
                 <CreatorFeeField value={draft.creatorFeeBps} error={errors.creatorFeeBps} onChange={value => update("creatorFeeBps", value)} />
+                <Field label="First buy" id="foundation-initial-buy" error={errors.initialBuy}><div className={styles.amountInput}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" required value={initialBuy} placeholder="ETH amount" aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} onChange={event => update("initialBuy", event.target.value)} /><span>ETH</span></div></Field>
               </div>
-              <Field label="First buy" id="foundation-initial-buy" error={errors.initialBuy}><div className={styles.amountInput}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" required value={initialBuy} placeholder="ETH amount" aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} onChange={event => update("initialBuy", event.target.value)} /><span>ETH</span></div></Field>
             </section>
           </fieldset>
-          <div className={styles.formFooter}><p className={styles.error} role="alert">{error}</p>{phase === "preparing" ? <p className={styles.help} role="status">Checking your launch. MetaMask will open when the checks finish.</p> : null}<button type="submit" className={styles.primaryButton} disabled={locked || imagePreparing || unavailable || Boolean(submissionBlocked) || walletAction?.busy} aria-busy={busy || walletAction?.busy}>{actionLabel}<ArrowRightIcon size={18} aria-hidden="true" /></button></div>
+          <div className={styles.formFooter}><p className={styles.error} role="alert">{error}</p>{phase === "preparing" ? <p className={styles.help} role="status">Checking your launch. MetaMask will open when the checks finish.</p> : null}<button type="submit" className={styles.primaryButton} disabled={locked || imagePreparing || unavailable || Boolean(submissionBlocked) || walletAction?.busy} aria-busy={busy || walletAction?.busy}><span>{actionLabel}</span><ArrowRightIcon size={18} aria-hidden="true" /></button></div>
         </form>}
       </div>
       <aside className={styles.preview} aria-label="Coin preview">
@@ -383,8 +377,11 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
       </aside>
     </div>
     {modulePickerView && !locked ? <ModuleFoundationPairDialog key={contextKey} chainId={availability.chainId} quoteAssets={quoteAssets}
-      initialView={modulePickerView} catalog={catalog} selectedModules={draft.modules} onToggleModule={toggleModule}
-      onRemoveQuote={() => chooseMarket(false)}
+      initialView={modulePickerView} catalog={catalog} selectedModules={draft.modules}
+      onApplyModule={selection => {
+        update("modules", [...draft.modules.filter(item => item.id !== selection.id), selection]);
+        setAnnouncement(`${catalog.find(item => item.id === selection.id)?.name ?? "Module"} saved.`);
+      }}
       initialAddress={customQuote ? quoteAddress : undefined} initialAsset={customQuote ? quote : undefined} onResolveQuote={onResolveQuote}
       onClose={() => setModulePickerView(null)} onApply={asset => {
         quoteGeneration.current += 1; pendingQuote.current = null;
@@ -401,9 +398,9 @@ function Field({ label, id, error, hint, children }: { label: React.ReactNode; i
 
 function CreatorFeeField({ value, error, onChange }: { value: number; error?: string; onChange: (value: number) => void }) {
   const id = "foundation-creator-fee";
-  return <Field label="Buy & Sell" id={id} error={error}><div className={styles.feeControls}>
+  return <Field label="Creator fees" id={id} hint="Buy & Sell (Platform Fee 0.3%)" error={error}><div className={styles.feeControls}>
     <button type="button" aria-label="Decrease creator fee" disabled={value <= 0} onClick={() => onChange(Math.max(0, value - 100))}><MinusIcon size={16} aria-hidden="true" /></button>
-    <div><input id={id} name="creatorFeeBps" type="number" min={0} max={10} step={1} value={value / 100} aria-invalid={Boolean(error) || undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={event => onChange(Number(event.target.value) * 100)} /><span>%</span></div>
+    <div><input id={id} name="creatorFeeBps" type="number" min={0} max={10} step={1} value={value / 100} aria-invalid={Boolean(error) || undefined} aria-describedby={[`${id}-help`, error ? `${id}-error` : ""].filter(Boolean).join(" ")} onChange={event => onChange(Number(event.target.value) * 100)} /><span>%</span></div>
     <button type="button" aria-label="Increase creator fee" disabled={value >= 1000} onClick={() => onChange(Math.min(1000, value + 100))}><PlusIcon size={16} aria-hidden="true" /></button>
   </div></Field>;
 }
@@ -411,10 +408,4 @@ function CreatorFeeField({ value, error, onChange }: { value: number; error?: st
 function SocialField({ kind, value, error, onChange }: { kind: ModuleSocialKind; value: string; error?: string; onChange: (value: string) => void }) {
   const id = `foundation-social-${kind}`;
   return <Field label={SOCIAL_LABELS[kind]} id={id} error={error}><input id={id} name={kind} type={kind === "twitter" ? "text" : "url"} autoComplete="off" autoCapitalize="none" spellCheck={false} value={value} placeholder={kind === "twitter" ? "@username" : kind === "website" ? "example.com" : "https://…"} aria-invalid={Boolean(error) || undefined} aria-describedby={error ? `${id}-error` : undefined} onChange={event => onChange(event.target.value)} onBlur={() => { const normalized = normalizeFoundationSocialInput(kind, value); if (normalized !== value) onChange(normalized); }} /></Field>;
-}
-
-function ModuleField({ field, id, value, showErrors, onChange }: { field: FoundationConfigurationField; id: string; value: string | boolean | undefined; showErrors?: boolean; onChange: (value: string | boolean) => void }) {
-  if (field.kind === "boolean") return <label className={styles.checkLabel}><input id={id} type="checkbox" checked={value === true} onChange={event => onChange(event.target.checked)} /><span><strong>{field.label}</strong>{field.description ? <small>{field.description}</small> : null}</span></label>;
-  const missing = Boolean(showErrors && field.required && (value === undefined || value === ""));
-  return <Field label={field.label} id={id} hint={field.description} error={missing ? `Complete ${field.label}.` : undefined}>{field.kind === "select" ? <select id={id} value={String(value ?? "")} required={field.required} aria-invalid={missing || undefined} aria-describedby={[field.description ? `${id}-help` : "", missing ? `${id}-error` : ""].filter(Boolean).join(" ") || undefined} onChange={event => onChange(event.target.value)}><option value="">Choose an option</option>{field.options?.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input id={id} value={String(value ?? "")} required={field.required} aria-invalid={missing || undefined} autoComplete="off" spellCheck={false} inputMode={field.kind === "decimal" ? "decimal" : field.kind === "integer" ? "numeric" : "text"} aria-describedby={[field.description ? `${id}-help` : "", missing ? `${id}-error` : ""].filter(Boolean).join(" ") || undefined} onChange={event => onChange(event.target.value)} />}</Field>;
 }
