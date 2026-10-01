@@ -57,6 +57,9 @@ const MODULE_SCOPES = Object.freeze([
   "modules:submit",
   "modules:read",
 ] as const);
+// Must match the protected backend's platform-source allowlist.
+export const PLATFORM_MODULE_SOURCE_WALLET_V1 =
+  "0x0dbe4f551b318fbba7e7a1975c3a62b9392b8595" as const;
 const METADATA_SCOPE_PATTERN = /^[a-z][a-z0-9-]{1,63}:[a-z][a-z0-9-]{1,63}$/u;
 type DeveloperApiKeyPurposeV1 = "custom-launches" | "module-contributions" | "all";
 
@@ -363,7 +366,9 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
         const idempotencyKey = requireIdempotencyKey(request);
         const principal = await input.authenticator.authenticate(request);
         const walletAddress = requireLinkedWallet(principal, parsed.walletAddress);
-        if (parsed.purpose !== "custom-launches") {
+        const platformModuleSource = parsed.purpose === "module-contributions"
+          && walletAddress.toLowerCase() === PLATFORM_MODULE_SOURCE_WALLET_V1;
+        if (parsed.purpose !== "custom-launches" && !platformModuleSource) {
           throw new BrowserRequestErrorV1(403, "custom_hook_api_keys_only");
         }
         // The backend checks fresh admission after exact completed replay.
@@ -378,6 +383,7 @@ export function createDeveloperApiKeyBridgeV1(input: Readonly<{
             schemaVersion: CUSTOM_LAUNCH_API_SCHEMA_V1,
             label: parsed.label,
             expiresInDays: parsed.expiresInDays,
+            ...(platformModuleSource ? { purpose: "module-contributions" } : {}),
           }),
           idempotencyKey,
         );

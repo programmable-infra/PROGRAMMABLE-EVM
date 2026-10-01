@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import {
   createDeveloperApiKeyBridgeV1,
   CUSTOM_LAUNCH_API_SCHEMA_V1,
+  PLATFORM_MODULE_SOURCE_WALLET_V1,
 } from "../lib/server/custom-launch/api-key-bridge-v1";
 
 const WALLET = "0x1111111111111111111111111111111111111111" as const;
@@ -243,6 +244,34 @@ describe("developer API key same-origin bridge", () => {
     expect(response.status).toBe(403);
     expect((await response.json()).error.code).toBe("custom_hook_api_keys_only");
     expect(authenticate).toHaveBeenCalledTimes(1);
+    expect(fetchBackend).not.toHaveBeenCalled();
+  });
+
+  it("issues a platform Module key only for the genuinely authenticated automation wallet", async () => {
+    authenticate.mockResolvedValueOnce({
+      privyUserId: "did:privy:platform-source",
+      privySessionId: "platform-session",
+      wallets: [PLATFORM_MODULE_SOURCE_WALLET_V1],
+    });
+    fetchBackend.mockResolvedValueOnce(backendJson({
+      apiKey: summary({ scopes: MODULE_SCOPES }), secretState: "already-delivered",
+    }));
+    const response = await bridge().create(createRequest({
+      purpose: "module-contributions", walletAddress: PLATFORM_MODULE_SOURCE_WALLET_V1,
+    }));
+    expect(response.status).toBe(200);
+    const [, init] = fetchBackend.mock.calls[0] as [URL, RequestInit];
+    expect(new Headers(init.headers).get("X-Programmable-Wallet-Address")?.toLowerCase())
+      .toBe(PLATFORM_MODULE_SOURCE_WALLET_V1);
+    expect(JSON.parse(String(init.body)).purpose).toBe("module-contributions");
+    expect((await response.json()).apiKey.scopes).toEqual(MODULE_SCOPES);
+  });
+
+  it("does not grant platform Module scopes from a caller-supplied automation address", async () => {
+    const response = await bridge().create(createRequest({
+      purpose: "module-contributions", walletAddress: PLATFORM_MODULE_SOURCE_WALLET_V1,
+    }));
+    expect(response.status).toBe(403);
     expect(fetchBackend).not.toHaveBeenCalled();
   });
 
