@@ -17,6 +17,30 @@ const descriptor: FoundationModuleDescriptor = { id: "technical.fixture.counter"
 const selected: FoundationModuleSelection = { id: descriptor.id, version: descriptor.version, digest: descriptor.digest, configuration: { recipient: address } };
 
 describe("Module foundation UI financial and lifecycle boundaries", () => {
+  it("keeps the pair-token option and optional wallet cap independently selectable in all four combinations", () => {
+    const eth = { address: "0x2222222222222222222222222222222222222222" as const, chainId: 4663,
+      symbol: "WETH", name: "Wrapped Ether", decimals: 18, supported: true, supportsNativeEth: true };
+    const cap: FoundationModuleDescriptor = { id: "wallet-cap-fixture", version: "1.0.0", digest: hash,
+      name: "Initial wallet buy limit", description: "Cumulative purchases during the selected launch window.",
+      capabilities: ["beforeSwap", "afterSwap"], available: true, fields: [
+        { key: "/supplyLimitBps", label: "Supply limit per wallet (%)", kind: "decimal", defaultValue: "2" },
+        { key: "/durationMinutes", label: "Protection duration (minutes)", kind: "integer", defaultValue: "3" },
+      ] };
+    const capSelection: FoundationModuleSelection = { id: cap.id, version: cap.version, digest: cap.digest,
+      configuration: { "/supplyLimitBps": "0.5", "/durationMinutes": "7" } };
+    for (const customPair of [false, true]) for (const capped of [false, true]) {
+      const modules = capped ? [capSelection] : [];
+      expect(foundationSelectionErrors(modules, [cap])).toEqual([]);
+      const html = renderToStaticMarkup(<ModuleFoundationBuilder availability={availability} contextKey="fixture"
+        catalog={[cap]} quoteAssets={[eth, quote]} onResolveQuote={vi.fn()} {...actions}
+        initialDraft={{ quoteAsset: customPair ? quote.address : eth.address, modules }} />);
+      expect(html.includes('aria-label="Remove pair module"')).toBe(customPair);
+      expect(html.includes("Supply limit per wallet (%)")).toBe(capped);
+      expect(html.includes("Protection duration (minutes)")).toBe(capped);
+      if (capped) { expect(html).toContain('value="0.5"'); expect(html).toContain('value="7"'); }
+      expect(html).toContain(customPair ? "COIN / Q" : "COIN / ETH");
+    }
+  });
   it("preserves quote units and rejects rounded or invalid decimal entry", () => {
     expect(foundationDecimalError("0", 6)).toBeNull();
     expect(foundationDecimalError("0", 6, false)).toContain("greater than zero");
