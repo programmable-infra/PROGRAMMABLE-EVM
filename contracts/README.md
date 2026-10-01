@@ -100,7 +100,9 @@ Every dependency is pinned to an exact commit. `npm run contracts:official-deplo
 first runs the verifier regression tests and then:
 
 - matches the checked-in Ethereum deployment snapshots against Uniswap's
-  official `developers.uniswap.org/deployments.json` registry;
+  official `developers.uniswap.org/deployments.json` registry; when its Universal
+  Router address differs, verifies the exact router against Uniswap's deployment
+  file at the snapshot's reviewed source commit and reports the registry drift;
 - reads PoolManager, PositionManager, StateView, V4Quoter, Universal Router and
   Permit2 bytecode from one explicit current Ethereum Mainnet block and rejects
   any runtime hash mismatch;

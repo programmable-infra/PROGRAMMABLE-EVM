@@ -85,6 +85,30 @@ test("rejects a canonical Mainnet address that differs from the official registr
   );
 });
 
+test("a newer registry router preserves the exact reviewed official deployment and reports drift", async () => {
+  const dataset = await readFixture("official-deployments.json");
+  const snapshot = await readFixture("ethereum-mainnet.json");
+  const router = dataset.records.find((record) => record.contract === "UniversalRouter");
+  router.address = "0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af";
+  const deployment = {
+    chainId: "1", latest: { UniversalRouter: {
+      address: snapshot.contracts.universalRouter.address,
+      proxy: false, deploymentTxn: `0x${"12".repeat(32)}`,
+      commitHash: snapshot.contracts.universalRouter.sourceRef,
+    } },
+  };
+  const result = verifierImport.verifyOfficialDeploymentSnapshot({ dataset, snapshot, pinnedRouterDeployment: deployment });
+  assert.equal(result.verifiedCount, 6);
+  assert.match(result.reviewWarnings[0], /Universal Router registry address drift/);
+  for (const invalid of [
+    { ...deployment, chainId: "11155111" },
+    { ...deployment, latest: { UniversalRouter: { ...deployment.latest.UniversalRouter, address: router.address } } },
+    { ...deployment, latest: { UniversalRouter: { ...deployment.latest.UniversalRouter, commitHash: "abcdef0" } } },
+  ]) {
+    assert.throws(() => verifierImport.verifyOfficialDeploymentSnapshot({ dataset, snapshot, pinnedRouterDeployment: invalid }), /mismatch/);
+  }
+});
+
 test("flags registry metadata drift for review without rewriting the pinned snapshot", async () => {
   const dataset = await readFixture("official-deployments.json");
   const snapshot = await readFixture("ethereum-mainnet.json");

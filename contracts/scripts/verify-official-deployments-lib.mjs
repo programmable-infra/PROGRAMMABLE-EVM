@@ -37,7 +37,29 @@ function normalizeSourceRef(sourceRef) {
     .replace(/^(?:v4-core|v4-periphery)@/, "");
 }
 
-export function verifyOfficialDeploymentSnapshot({ dataset, snapshot }) {
+export function pinnedRouterDeploymentUrl(snapshot) {
+  const commit = snapshot.source?.sourceCommit;
+  assert(/^[0-9a-f]{40}$/.test(commit ?? ""), "Invalid reviewed deployment source commit");
+  assert([1, 11155111].includes(snapshot.chainId), "Unexpected pinned router chain");
+  return `https://raw.githubusercontent.com/Uniswap/contracts/${commit}/deployments/json/${snapshot.chainId}.json`;
+}
+
+export function verifyOfficialPinnedRouter({ snapshot, deployment }) {
+  const url = pinnedRouterDeploymentUrl(snapshot);
+  assert(Number(deployment?.chainId) === snapshot.chainId, "Pinned router deployment chain mismatch");
+  const local = snapshot.contracts?.universalRouter;
+  const official = deployment.latest?.UniversalRouter;
+  assert(local && official, "Pinned official Universal Router deployment is missing");
+  assert(official.proxy === false, "Pinned Universal Router must not be a proxy");
+  assert(/^0x[0-9a-fA-F]{64}$/.test(official.deploymentTxn ?? ""), "Pinned router deployment transaction is missing");
+  assert(official.address?.toLowerCase() === local.address.toLowerCase(), "universalRouter address mismatch in pinned official deployment");
+  if (official.commitHash) {
+    assert(normalizeSourceRef(local.sourceRef) === official.commitHash.toLowerCase(), "universalRouter source reference mismatch in pinned official deployment");
+  }
+  return { url, deploymentTransaction: official.deploymentTxn };
+}
+
+export function verifyOfficialDeploymentSnapshot({ dataset, snapshot, pinnedRouterDeployment }) {
   assert(dataset.version === "1.0.0", `Unsupported dataset ${dataset.version}`);
   assert(
     dataset.source?.repo === EXPECTED_DATASET_REPOSITORY,
@@ -82,6 +104,13 @@ export function verifyOfficialDeploymentSnapshot({ dataset, snapshot }) {
       official.status === "active",
       `${official.id} is ${official.status}, not active`,
     );
+    if (key === "universalRouter" && pinnedRouterDeployment &&
+        official.address.toLowerCase() !== local.address.toLowerCase()) {
+      const pinned = verifyOfficialPinnedRouter({ snapshot, deployment: pinnedRouterDeployment });
+      reviewWarnings.push(`Universal Router registry address drift: pinned ${local.address}, upstream ${official.address}; pinned deployment verified at ${pinned.url}`);
+      verifiedCount += 1;
+      continue;
+    }
     assert(
       official.address.toLowerCase() === local.address.toLowerCase(),
       `${key} address mismatch on Mainnet`,

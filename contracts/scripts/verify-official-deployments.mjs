@@ -7,9 +7,11 @@ import {
   OFFICIAL_DEPLOYMENTS_URL,
   REQUIRED_SOURCE_DEPENDENCIES,
   fetchMainnetRuntimeHashesWithFallback,
+  pinnedRouterDeploymentUrl,
   verifyDependencyPins,
   verifyMainnetRuntimeHashes,
   verifyOfficialDeploymentSnapshot,
+  verifyOfficialPinnedRouter,
 } from "./verify-official-deployments-lib.mjs";
 
 const EXPECTED_DATASET_REPOSITORY = "https://github.com/Uniswap/contracts";
@@ -161,11 +163,24 @@ for (const network of networks) {
     snapshot.source?.deployments === OFFICIAL_DEPLOYMENTS_URL,
     `${network.file} points to an unexpected deployment source`,
   );
+  const currentRouter = dataset.records.find((record) =>
+    record.chainId === snapshot.chainId &&
+    record.protocol === "universal-router" && record.contract === "UniversalRouter");
+  let pinnedRouterDeployment;
+  if (currentRouter?.address.toLowerCase() !== snapshot.contracts.universalRouter.address.toLowerCase()) {
+    const pinnedResponse = await fetch(pinnedRouterDeploymentUrl(snapshot), {
+      headers: { accept: "application/json" }, signal: AbortSignal.timeout(10_000),
+    });
+    assert(pinnedResponse.ok, `Pinned official router deployment returned HTTP ${pinnedResponse.status}`);
+    pinnedRouterDeployment = await pinnedResponse.json();
+    verifyOfficialPinnedRouter({ snapshot, deployment: pinnedRouterDeployment });
+  }
   if (network.file === "ethereum-mainnet.json") {
     mainnetSnapshot = snapshot;
     const verification = verifyOfficialDeploymentSnapshot({
       dataset,
       snapshot,
+      pinnedRouterDeployment,
     });
     reviewWarnings.push(...verification.reviewWarnings);
   } else {
@@ -203,6 +218,13 @@ for (const network of networks) {
       official.status === "active",
       `${official.id} is ${official.status}, not active`,
     );
+    if (key === "universalRouter" && pinnedRouterDeployment) {
+      if (network.file !== "ethereum-mainnet.json") {
+        reviewWarnings.push(`Universal Router registry address drift on ${network.file}: pinned ${local.address}, upstream ${official.address}; pinned deployment verified at ${pinnedRouterDeploymentUrl(snapshot)}`);
+      }
+      verifiedCount += 1;
+      continue;
+    }
     assert(
       official.address.toLowerCase() === local.address.toLowerCase(),
       `${key} address mismatch on ${network.file}`,
@@ -284,7 +306,7 @@ const dependencyVerification = verifyDependencyPins({
 reviewWarnings.push(...dependencyVerification.reviewWarnings);
 
 console.log(
-  `Verified ${verifiedCount} active contracts against Uniswap deployments ${dataset.generatedAt}`,
+  `Verified ${verifiedCount} pinned contracts against official Uniswap deployment records; current registry ${dataset.generatedAt}`,
 );
 console.log(`Dataset commit ${dataset.source.commit}`);
 console.log(
