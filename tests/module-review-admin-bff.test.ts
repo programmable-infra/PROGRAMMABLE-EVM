@@ -103,6 +103,16 @@ describe("Module review admin BFF", () => {
   it("rejects an unlinked wallet before any backend read", async () => {
     const f = setup(); const result = await f.client.handle(new Request(f.read().url.replace(f.wallet, f.subject.author)), "list"); expect(result.status).toBe(403); expect(f.fetchBackend).not.toHaveBeenCalled();
   });
+  it("allows the linked owner Treasury and rejects naming it from another authenticated account", async () => {
+    const treasury = "0xe1939b7a5a6840f061299de8246071891c4d81e9";
+    const owner = setup({ wallet: treasury });
+    expect((await owner.client.handle(owner.read(), "list")).status).toBe(200);
+    expect(new Headers(owner.fetchBackend.mock.calls[0][1]?.headers)
+      .get("X-Programmable-Wallet-Address")).toBe(treasury);
+    const other = setup({ wallet: "0x2222222222222222222222222222222222222222" });
+    expect((await other.client.handle(new Request(other.read().url.replace(other.wallet, treasury)), "list")).status).toBe(403);
+    expect(other.fetchBackend).not.toHaveBeenCalled();
+  });
   it.each(["list", "decision"] as const)("rejects another linked wallet for %s without forwarding credentials", async operation => {
     const f = setup({ wallet: "0x2222222222222222222222222222222222222222" });
     const request = operation === "list" ? f.read()

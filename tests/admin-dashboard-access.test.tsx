@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AdminDashboardLink } from "../components/admin-dashboard-link";
-import { WEBSITE_ADMIN_WALLET } from "../lib/admin-access";
+import { WEBSITE_ADMIN_WALLET, WEBSITE_ADMIN_WALLETS } from "../lib/admin-access";
 
 function menu(account: string | null, authenticated = true, menuOpen = true) {
   return renderToStaticMarkup(<AdminDashboardLink account={account}
@@ -9,7 +9,7 @@ function menu(account: string | null, authenticated = true, menuOpen = true) {
 }
 
 describe("admin dashboard wallet boundary", () => {
-  it.each([WEBSITE_ADMIN_WALLET, WEBSITE_ADMIN_WALLET.toLowerCase()])(
+  it.each(WEBSITE_ADMIN_WALLETS.flatMap((wallet) => [wallet, wallet.toLowerCase()]))(
     "shows one dashboard entry for the authenticated admin %s", account => {
       const html = menu(account);
       expect(html).toContain('href="/admin/modules"');
