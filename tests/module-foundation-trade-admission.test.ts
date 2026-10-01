@@ -215,6 +215,7 @@ describe("Foundation modular trade admission and asset completeness", () => {
 
   it("runs actual source and runtime validation while preserving exact approvals, the official route and the extra asset zero-loss check", async () => {
     const f = fixture(); f.state.quoteAllowance = 5n; f.state.permitAllowance = 0n;
+    f.simulateContract.mockImplementation(async () => { throw new Error("UnsupportedBuyRouter"); });
     const prepared = await prepareFoundationTrade(f.input), permit2 = FOUNDATION_INFRASTRUCTURE.permit2.address, router = FOUNDATION_INFRASTRUCTURE.universalRouter.address;
     expect(prepared.balanceChecks).toEqual([{ token: quote, account, delta: -10n }, { token, account, minimumDelta: 99n }, { token: extra, account, minimumDelta: 0n }]);
     expect(prepared.moduleAssetPins).toEqual(f.pins); expect(prepared.moduleReview!.selections).toEqual(f.input.moduleReview.selections);
@@ -227,13 +228,17 @@ describe("Foundation modular trade admission and asset completeness", () => {
       minimumOutput: 99n, deadline: BigInt(now + 300), now: BigInt(now) }).transaction);
     expect(f.readContract.mock.calls.some(([call]) => call.functionName === "configurationHash" && call.address === moduleInstance)).toBe(true);
     expect(f.simulateCalls.mock.calls[0][0].calls).toHaveLength(10);
+    expect(f.simulateContract).not.toHaveBeenCalled();
+    expect(f.simulateCalls).toHaveBeenCalledTimes(2);
+    expect(prepared.amountOut).toBe(100n);
+    expect(prepared.minimumOutput).toBe(99n);
     expect(Object.isFrozen(prepared.moduleReview!.context.assets)).toBe(true);
   });
 
   it("rejects an actual extra-asset wallet debit even when the admitted module and swap both return success", async () => {
     const f = fixture(); f.state.extraDelta = -1n;
     await expect(prepareFoundationTrade(f.input)).rejects.toThrow("actual simulated wallet balances");
-    expect(f.simulateContract).toHaveBeenCalledOnce(); expect(f.simulateCalls).toHaveBeenCalledOnce();
+    expect(f.simulateContract).not.toHaveBeenCalled(); expect(f.simulateCalls).toHaveBeenCalledOnce();
   });
 
   it.each(["admission", "asset-code", "asset-decimals", "module-code"])("rejects %s withdrawal or drift before wallet replay can simulate, estimate or request a transaction", async change => {

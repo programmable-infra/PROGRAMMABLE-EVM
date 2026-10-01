@@ -415,17 +415,22 @@ export async function prepareFoundationTrade(input: { client: PublicClient; bind
   const path = input.nativeEth && getAddress(input.pool.quote) !== FOUNDATION_WETH
     ? input.externalRoute ? foundationNativeTradePath(input.pool, input.side, input.externalRoute) : null : null;
   if (input.nativeEth && getAddress(input.pool.quote) !== FOUNDATION_WETH && !path) throw new Error("An ETH route is required for this pool.");
-  const amountOut = path ? (await client.simulateContract({ address: FOUNDATION_INFRASTRUCTURE.v4Quoter.address, abi: foundationQuoterAbi,
+  // A modular hook may authenticate Universal Router.msgSender(). A Quoter
+  // cannot supply that identity; quote the actual payer's router sequence instead.
+  const routerQuote = moduleCount > 0n;
+  let amountOut = routerQuote ? 0n : path ? (await client.simulateContract({ address: FOUNDATION_INFRASTRUCTURE.v4Quoter.address, abi: foundationQuoterAbi,
     functionName: "quoteExactInput", args: [{ exactCurrency: currencyIn, path, exactAmount: input.amountIn }], blockNumber: checkpoint.blockNumber })).result[0]
     : (await client.simulateContract({ address: FOUNDATION_INFRASTRUCTURE.v4Quoter.address, abi: foundationQuoterAbi,
     functionName: "quoteExactInputSingle", args: [{ poolKey: key, zeroForOne: getAddress(singleCurrencyIn) === key.currency0,
       exactAmount: input.amountIn, hookData: "0x" }], blockNumber: checkpoint.blockNumber })).result[0];
-  const minimumOutput = amountOut * BigInt(10_000 - input.slippageBps) / 10_000n;
+  let minimumOutput = routerQuote ? 1n : amountOut * BigInt(10_000 - input.slippageBps) / 10_000n;
   if (minimumOutput === 0n) throw new Error("The trade is too small for a positive minimum output.");
-  // Discovery provides current pool keys; the amount above is freshly quoted for this complete path.
   const deadline = checkpoint.timestamp + 300n;
-  const routeInput = { ...input, owner: account, recipient: account, minimumOutput, deadline, now: checkpoint.timestamp };
-  const route = input.nativeEth ? buildFoundationNativeExactInput(routeInput) : buildFoundationExactInput(routeInput);
+  const makeRoute = (minimumOutput: bigint) => {
+    const routeInput = { ...input, owner: account, recipient: account, minimumOutput, deadline, now: checkpoint.timestamp };
+    return input.nativeEth ? buildFoundationNativeExactInput(routeInput) : buildFoundationExactInput(routeInput);
+  };
+  let route = makeRoute(minimumOutput);
   const approvals: FoundationPreparedStep[] = [];
   if (route.approval) {
     approvals.push(...await erc20Approvals(client, { account, token: currencyIn, spender: route.approval.spender, amount: input.amountIn, blockNumber: checkpoint.blockNumber }));
@@ -443,7 +448,19 @@ export async function prepareFoundationTrade(input: { client: PublicClient; bind
     { token: route.currencyOut, account, minimumDelta: minimumOutput },
     ...moduleAssetPins.map(([asset]) => ({ token: asset, account, minimumDelta: 0n })),
   ];
-  const simulation = await simulateFoundationSequence(client, [...approvals, trade], checkpoint, balanceChecks);
+  let simulation = await simulateFoundationSequence(client, [...approvals, trade], checkpoint, balanceChecks);
+  if (routerQuote) {
+    amountOut = simulation.balances[1].delta;
+    minimumOutput = amountOut * BigInt(10_000 - input.slippageBps) / 10_000n;
+    if (minimumOutput <= 0n) throw new Error("The trade is too small for a positive minimum output.");
+    route = makeRoute(minimumOutput);
+    trade.transaction = route.transaction;
+    trade.effect = `Receive at least ${minimumOutput} raw output units after fees.`;
+    balanceChecks[1].minimumDelta = minimumOutput;
+    // Only the full slippage-protected sequence can enter the wallet boundary.
+    // Both simulations start from the same checkpoint; quote state is ephemeral.
+    simulation = await simulateFoundationSequence(client, [...approvals, trade], checkpoint, balanceChecks);
+  }
   if (route.transaction.value > 0n) await assertFoundationNativeBalance(client, account, simulation.steps, checkpoint.blockNumber);
   return sealFoundationSequence({ kind: "trade" as const, sourceKind: "module-foundation-v1" as const, account, binding, checkpoint,
     expiresAt: route.deadline, pool: input.pool, side: input.side, amountIn: input.amountIn, amountOut, minimumOutput,
