@@ -23,6 +23,8 @@ type LoginWithSiwe = (input: Readonly<{
   connectorType?: string;
 }>) => Promise<unknown>;
 
+export class WalletAccountSelectionError extends Error {}
+
 function isInjectedEthereumProvider(
   candidate: unknown,
 ): candidate is InjectedEthereumProvider {
@@ -63,19 +65,31 @@ export async function loginConnectedEthereumWalletWithSiwe(input: Readonly<{
   provider: InjectedEthereumProvider;
   generateSiweMessage: GenerateSiweMessage;
   loginWithSiwe: LoginWithSiwe;
+  requestAccountSelection?: boolean;
+  expectedAddress?: string;
+  disableSignup?: boolean;
 }>): Promise<boolean> {
+  if (input.requestAccountSelection) {
+    await input.provider.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
+  }
   const accounts = await input.provider.request({ method: "eth_accounts" });
   const account = Array.isArray(accounts) ? accounts[0] : undefined;
-  if (typeof account !== "string") return false;
+  if (typeof account !== "string") {
+    if (input.requestAccountSelection) throw new WalletAccountSelectionError("Choose an account in MetaMask to continue.");
+    return false;
+  }
 
   const address = getAddress(account);
+  if (input.expectedAddress && address.toLowerCase() !== input.expectedAddress.toLowerCase()) {
+    throw new WalletAccountSelectionError(`Select ${input.expectedAddress} in MetaMask and connect only that account.`);
+  }
   const chainId = parseChainId(
     await input.provider.request({ method: "eth_chainId" }),
   );
   const message = await input.generateSiweMessage({
     address,
     chainId: `eip155:${chainId}`,
-    disableSignup: true,
+    disableSignup: input.disableSignup ?? true,
   });
   const signature = await input.provider.request({
     method: "personal_sign",
@@ -85,10 +99,17 @@ export async function loginConnectedEthereumWalletWithSiwe(input: Readonly<{
     throw new Error("The connected wallet returned an invalid signature");
   }
 
+  if (input.requestAccountSelection) {
+    const current = await input.provider.request({ method: "eth_accounts" });
+    if (!Array.isArray(current) || typeof current[0] !== "string" || current[0].toLowerCase() !== address.toLowerCase()) {
+      throw new WalletAccountSelectionError("Your wallet account changed. Choose the wallet again.");
+    }
+  }
+
   await input.loginWithSiwe({
     signature,
     message,
-    disableSignup: true,
+    disableSignup: input.disableSignup ?? true,
     walletClientType: input.provider.isMetaMask ? "metamask" : undefined,
     connectorType: "injected",
   });
