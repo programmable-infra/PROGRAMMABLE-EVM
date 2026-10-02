@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const profile = await readRobinhoodProfileLaunches(account.toLowerCase(), Number(page), pageSize === "5" ? 5 : 50);
     const items = await readRobinhoodPresentations(profile.items);
     return Response.json({ items }, { headers: {
-      "cache-control": "public, max-age=0, s-maxage=60, stale-while-revalidate=60",
+      "cache-control": "public, max-age=0, s-maxage=15, stale-while-revalidate=15",
       "x-content-type-options": "nosniff",
     } });
   }
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     : [(await readRobinhoodTokenPresentation(token!)).presentation].filter((row) => row !== null);
   return Response.json({ items }, { headers: {
     // Single-coin markets already have a bounded server cache; do not age them again at the CDN.
-    "cache-control": listQuery ? "public, max-age=0, s-maxage=60, stale-while-revalidate=60" : "no-store",
+    "cache-control": listQuery ? "public, max-age=0, s-maxage=15, stale-while-revalidate=15" : "no-store",
     "x-content-type-options": "nosniff",
   } });
 }

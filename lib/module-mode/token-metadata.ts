@@ -5,14 +5,16 @@ import { sanitizeSocialUrl, sanitizeWebsiteUrl, type SocialMetadataKind } from "
 export const MODULE_DEFAULT_TOKEN_IMAGE = "https://programmable.market/brand/loop/programmable-module-token-default-v1.png";
 export const MODULE_SOCIAL_KEYS = ["website", "twitter", "telegram", "discord", "github", "gitbook"] as const;
 export type ModuleSocialKind = typeof MODULE_SOCIAL_KEYS[number];
-export type ModuleSocialLinks = Partial<Record<ModuleSocialKind, string>>;
+export type ModuleSocialLinks = Partial<Record<ModuleSocialKind, string>> & { other?: string[] };
+export const MAX_OTHER_LINKS = 6;
 export type ModuleSocialIssue = { path: string; message: string };
 
 const labels: Record<ModuleSocialKind, string> = { website: "Website", twitter: "X", telegram: "Telegram", discord: "Discord", github: "GitHub", gitbook: "GitBook" };
 
 function socialExtraData(links: ModuleSocialLinks): Hex {
-  const social = Object.fromEntries(MODULE_SOCIAL_KEYS.filter(key => key !== "website" && links[key])
-    .map(key => [key === "twitter" ? "x" : key, links[key]]));
+  const social: Record<string, string | string[]> = Object.fromEntries(MODULE_SOCIAL_KEYS.filter(key => key !== "website" && links[key])
+    .map(key => [key === "twitter" ? "x" : key, links[key]!]));
+  if (links.other?.length) social.other = links.other;
   if (Object.keys(social).length === 0) return "0x";
   const json = JSON.stringify({ v: 1, ...social });
   if (utf8ByteLength(json) > MAX_SOCIAL_EXTRA_DATA_BYTES) throw new Error("Use shorter social links. Their combined metadata exceeds 1,200 bytes.");
@@ -26,7 +28,7 @@ export function validateModuleSocialLinks(raw: unknown): { ok: true; links: Modu
     return { ok: false, issues: [{ path: "/socialLinks", message: "Check the social links." }] };
   }
   const descriptors = Object.getOwnPropertyDescriptors(raw);
-  if (Reflect.ownKeys(raw).length !== Object.keys(descriptors).length || Object.entries(descriptors).some(([key, descriptor]) => !MODULE_SOCIAL_KEYS.includes(key as ModuleSocialKind) || !descriptor.enumerable || !("value" in descriptor))) {
+  if (Reflect.ownKeys(raw).length !== Object.keys(descriptors).length || Object.entries(descriptors).some(([key, descriptor]) => (key !== "other" && !MODULE_SOCIAL_KEYS.includes(key as ModuleSocialKind)) || !descriptor.enumerable || !("value" in descriptor))) {
     return { ok: false, issues: [{ path: "/socialLinks", message: "Choose a supported social link type." }] };
   }
   const links: ModuleSocialLinks = {};
@@ -47,6 +49,25 @@ export function validateModuleSocialLinks(raw: unknown): { ok: true; links: Modu
         ? `Enter a public HTTPS ${labels[key]} URL.`
         : `Enter an HTTPS link to ${labels[key]}.` });
     } else links[key] = safe;
+  }
+  if (descriptors.other) {
+    const other: unknown = descriptors.other.value;
+    const entries = Array.isArray(other) ? Object.getOwnPropertyDescriptors(other) : null;
+    if (!Array.isArray(other) || Object.getPrototypeOf(other) !== Array.prototype || other.length > MAX_OTHER_LINKS
+      || !entries || Reflect.ownKeys(other).length !== other.length + 1
+      || Array.from({ length: other.length }, (_, index) => entries[index]).some(entry => !entry || !("value" in entry) || typeof entry.value !== "string")) {
+      issues.push({ path: "/socialLinks/other", message: "Add up to six public HTTPS links." });
+    } else {
+      const accepted: string[] = [];
+      for (let index = 0; index < other.length; index++) {
+        const value = (entries[index]!.value as string).trim();
+        if (!value) continue;
+        const safe = sanitizeWebsiteUrl(value);
+        if (!safe || utf8ByteLength(safe) > MAX_SOCIAL_URL_BYTES) issues.push({ path: "/socialLinks/other", message: "Enter a public HTTPS link." });
+        else if (!accepted.includes(safe)) accepted.push(safe);
+      }
+      if (accepted.length) links.other = accepted;
+    }
   }
   try { socialExtraData(links); }
   catch (error) { issues.push({ path: "/socialLinks", message: (error as Error).message }); }

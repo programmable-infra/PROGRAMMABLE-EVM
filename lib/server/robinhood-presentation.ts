@@ -1,3 +1,4 @@
+import { readCodexMarkets } from "./codex-market";
 import "server-only";
 
 import { unstable_cache } from "next/cache";
@@ -306,7 +307,7 @@ async function readCachedModuleMetadata(tokens: readonly RobinhoodLaunch[]): Pro
 
 // A shared full-catalog observation makes sorting independent of the current page.
 const cachedMarkets = unstable_cache(async (tokens: readonly VerifiedMarketToken[]) =>
-  Array.from(await readMarkets(tokens)), ["robinhood-coin-markets-v3"], { revalidate: 60 });
+  Array.from(await readMarkets(tokens)), ["robinhood-coin-markets-v4"], { revalidate: 15 });
 
 export async function readRobinhoodMarkets(tokens: readonly MarketToken[]): Promise<Map<string, RobinhoodCoinMarket>> {
   if (tokens.length === 0) return new Map();
@@ -318,7 +319,10 @@ export async function readRobinhoodMarkets(tokens: readonly MarketToken[]): Prom
     blockNumber: token.blockNumber, blockHash: token.blockHash }])
     .toSorted((a, b) => a.tokenAddress.localeCompare(b.tokenAddress));
   if (identities.length === 0) return new Map();
-  const entries = await cachedMarkets(identities);
+  const codex = await readCodexMarkets(identities);
+  const missing = identities.filter(token => !codex.has(token.tokenAddress));
+  const fallback = missing.length ? await cachedMarkets(missing).catch(error => { if (!codex.size) throw error; return []; }) : [];
+  const entries = [...codex.entries(), ...fallback];
   const now = Date.now();
   return new Map(entries.filter(([, market]) => {
     const age = now - Date.parse(market.observedAt);

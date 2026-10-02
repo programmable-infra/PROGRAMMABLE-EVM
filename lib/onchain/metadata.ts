@@ -15,8 +15,9 @@ export type SocialMetadataV1 = {
   discord?: string;
   github?: string;
   gitbook?: string;
+  other?: string[];
 };
-export type SocialMetadataKind = Exclude<keyof SocialMetadataV1, "v">;
+export type SocialMetadataKind = Exclude<keyof SocialMetadataV1, "v" | "other">;
 const socialKinds: readonly SocialMetadataKind[] = ["x", "telegram", "discord", "github", "gitbook"];
 
 function parseHttpsUrl(
@@ -105,7 +106,9 @@ export function decodeSocialMetadata(extraData: Hex): SocialMetadataV1 | null {
     if (socialKinds.some(kind => value[kind] !== undefined && typeof value[kind] !== "string")) {
       return null;
     }
-    return { v: 1, ...Object.fromEntries(socialKinds.filter(kind => typeof value[kind] === "string").map(kind => [kind, value[kind]])) };
+    if (value.other !== undefined && (!Array.isArray(value.other) || value.other.length > 6
+      || value.other.some(link => typeof link !== "string" || utf8ByteLength(link) > MAX_SOCIAL_URL_BYTES || !sanitizeWebsiteUrl(link)))) return null;
+    return { v: 1, ...(Array.isArray(value.other) ? { other: value.other as string[] } : {}), ...Object.fromEntries(socialKinds.filter(kind => typeof value[kind] === "string").map(kind => [kind, value[kind]])) };
   } catch {
     return null;
   }
@@ -123,5 +126,6 @@ export function buildTokenLinks(website: unknown, extraData: Hex) {
       if (url) links.push({ kind, url });
     }
   }
+  for (const url of social?.other ?? []) if (!links.some(link => link.url === url)) links.push({ kind: "other", url });
   return links;
 }

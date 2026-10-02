@@ -57,19 +57,19 @@
 .canvasAdd:focus-visible { outline-offset: -4px !important; }
 .connections { position: absolute; inset: 0; height: 100%; width: 100%; pointer-events: none; }
 .connections path { fill: none; vector-effect: non-scaling-stroke; stroke-linecap: round; }
-.connectionBase { stroke-width: 2px; opacity: .7; }
+.connectionBase { stroke-width: 2px; opacity: .7; animation: connectionGrow .32s cubic-bezier(.2,.8,.2,1) both; }
 .connection[data-active="true"] .connectionBase { opacity: 1; }
-.connectionPulse { stroke-width: 3.5px; stroke-dasharray: 15 85; opacity: 1; filter: drop-shadow(0 0 5px #d5a7f8); animation: connectionFlow 3.8s linear infinite; }
-.connectionPort { fill: #ead2f8; stroke: #13151c; stroke-width: 1.5px; }
+.connectionPulse { stroke-width: 3.5px; stroke-dasharray: 15 85; opacity: 1; filter: drop-shadow(0 0 5px #d5a7f8); animation: connectionReveal .2s .3s both,connectionFlow 3.8s .3s linear infinite; }
+.connectionPort { animation: connectionReveal .2s .3s both; fill: #ead2f8; stroke: #13151c; stroke-width: 1.5px; }
 @keyframes connectionFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
-.coinNode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 172px; padding: 12px; border: 1px solid transparent; border-radius: 17px; background: #13151cf5; display: grid; gap: 6px; text-align: center; box-shadow: 0 18px 50px #0005; z-index: 2; transition: border-color .2s; touch-action: none; user-select: none; }
+.coinNode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 196px; padding: 12px; border: 1px solid transparent; border-radius: 17px; background: #13151cf5; display: grid; gap: 6px; text-align: center; box-shadow: 0 18px 50px #0005; z-index: 2; transition: border-color .2s; touch-action: none; user-select: none; }
 .flowNode:hover { border-color: #d4bcdd; }
 .coinArtwork { aspect-ratio: 1; overflow: hidden; border: 0; border-radius: 10px; background: var(--panel-fill); margin-bottom: 6px; }
 .coinArtwork img { object-fit: cover; display: block; width: 100%; height: 100%; }
 .coinNode > strong { font-size: 21px; line-height: 25px; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .coinNode > span { color: var(--muted); font-size: 12px; }
 .coinPair { border-top: 1px solid #393d41; padding-top: 9px; margin-top: 5px; color: #bbc0c6; font-size: 11px; }
-.flowNode { position: absolute; width: 154px; min-height: 68px; border: 1px solid #454a53; border-radius: 12px; background: #13151cf5; padding: 12px; text-align: left; display: flex; align-items: center; gap: 10px; transform: translate(-50%,-50%); z-index: 2; transition: border-color .2s,box-shadow .2s; touch-action: none; user-select: none; }
+.flowNode { animation: connectionReveal .24s .25s ease-out both; position: absolute; width: 174px; min-height: 68px; border: 1px solid #454a53; border-radius: 12px; background: #13151cf5; padding: 12px; text-align: left; display: flex; align-items: center; gap: 10px; transform: translate(-50%,-50%); z-index: 2; transition: border-color .2s,box-shadow .2s; touch-action: none; user-select: none; }
 .flowNode[aria-pressed="true"] { border-color: #9bbea4; }
 .flowNode strong { font-size: 13px; font-weight: 500; line-height: 18px; overflow-wrap: break-word; }
 .nodeIcon { color: #a5b8ab; flex: 0 0 auto; display: flex; }
@@ -148,14 +148,32 @@
 .error { color: #ffb2a9; font-size: 12px; line-height: 18px; }
 .mobileNavigation { display: none; }
 @keyframes reveal { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-@media(min-width:1600px) { .workspace { grid-template-columns: 276px minmax(0,1fr) 336px; } .coinNode { width: 216px; } .flowNode { width: 178px; } }
-@media(max-width:1280px) and (min-width:1101px) { .studio { padding: 14px; } .workspace { grid-template-columns: 216px minmax(350px,1fr) 260px; gap: 10px; } .flowNode { width: 142px; padding: 10px; gap: 8px; } .coinNode { width: 148px; } .moduleName { font-size: 13px !important; } }
-@media(max-width:1100px) { .studio { grid-template-rows: 90px 38px minmax(0,1fr); gap: 10px; padding: 14px; } .heading h1 { font-size: 32px; } .workspace { display: block; } .library,.market,.inspector { height: 100%; } .workspace[data-mobile-panel="modules"] > :not(.library),.workspace[data-mobile-panel="canvas"] > :not(.market),.workspace[data-mobile-panel="settings"] > :not(.inspector) { display: none; } .mobileNavigation { display: flex; background: var(--panel-fill); padding: 4px; border-radius: 8px; border: 1px solid var(--line); gap: 4px; } .mobileNavigation button { flex: 1; background: transparent; border: 0; border-radius: 5px; font-size: 13px; color: var(--muted); } .mobileNavigation button[aria-pressed="true"] { background: var(--panel-fill-hover); color: white; } .flowNode { width: 154px; } .coinNode { width: 180px; } }
-@media(max-width:520px) { .launchPage { background-image: linear-gradient(#0005,#0006),url('/brand/atmosphere/programmable-floral-foreground-mobile-v1.avif'); } .studio { padding: 10px; } .heading h1 { font-size: 29px; } .flowNode { width: 110px; padding: 10px; } .flowNode strong { font-size: 12px; line-height: 17px; } .coinNode { width: 138px; padding: 10px; } .coinNode > strong { font-size: 18px; } .nodeIcon svg { width: 17px; } .launch { padding: 0 12px; gap: 8px; font-size: 14px !important; } }
+@media(min-width:1600px) { .workspace { grid-template-columns: 276px minmax(0,1fr) 336px; } .coinNode { width: 240px; } .flowNode { width: 198px; } }
+@media(max-width:1280px) and (min-width:1101px) { .studio { padding: 14px; } .workspace { grid-template-columns: 216px minmax(350px,1fr) 260px; gap: 10px; } .flowNode { width: 158px; padding: 10px; gap: 8px; } .coinNode { width: 174px; } .moduleName { font-size: 13px !important; } }
+@media(max-width:1100px) { .studio { grid-template-rows: 90px 38px minmax(0,1fr); gap: 10px; padding: 14px; } .heading h1 { font-size: 32px; } .workspace { display: block; } .library,.market,.inspector { height: 100%; } .workspace[data-mobile-panel="modules"] > :not(.library),.workspace[data-mobile-panel="canvas"] > :not(.market),.workspace[data-mobile-panel="settings"] > :not(.inspector) { display: none; } .mobileNavigation { display: flex; background: var(--panel-fill); padding: 4px; border-radius: 8px; border: 1px solid var(--line); gap: 4px; } .mobileNavigation button { flex: 1; background: transparent; border: 0; border-radius: 5px; font-size: 13px; color: var(--muted); } .mobileNavigation button[aria-pressed="true"] { background: var(--panel-fill-hover); color: white; } .flowNode { width: 174px; } .coinNode { width: 200px; } }
+@media(max-width:520px) { .launchPage { background-image: linear-gradient(#0005,#0006),url('/brand/atmosphere/programmable-floral-foreground-mobile-v1.avif'); } .studio { padding: 10px; } .heading h1 { font-size: 29px; } .flowNode { width: 122px; padding: 10px; } .flowNode strong { font-size: 12px; line-height: 17px; } .coinNode { width: 154px; padding: 10px; } .coinNode > strong { font-size: 18px; } .nodeIcon svg { width: 17px; } .launch { padding: 0 12px; gap: 8px; font-size: 14px !important; } }
 @media(prefers-reduced-motion:reduce) { .studio *, .stars i { animation: none !important; transition: none !important; } .connectionPulse { display: none; } .stars i { opacity: .35; } }
 @media(max-width:380px) { .flowNode { width: 100px; padding: 8px; } .coinNode { width: 112px; } }
 @media(max-width:520px) { .flowNode .nodeIcon { display: none; } }
 @media(max-width:520px) { .previewTag { padding: 3px 5px; font-size: 9px; } }
-@media(max-height:760px) { .studio { padding-top: 10px; padding-bottom: 10px; gap: 8px; } .coinArtwork { width: 88px; height: 88px; justify-self: center; margin-bottom: 0; } .coinNode { gap: 3px; } .panelHeading { min-height: 52px; padding-top: 12px; padding-bottom: 12px; } }
+@media(max-height:760px) { .studio { padding-top: 10px; padding-bottom: 10px; gap: 8px; } .coinArtwork { width: 106px; height: 106px; justify-self: center; margin-bottom: 0; } .coinNode { gap: 3px; } .panelHeading { min-height: 52px; padding-top: 12px; padding-bottom: 12px; } }
 
 @media(max-width:520px) { .title p { font-size: 12px; line-height: 18px; } .title { max-width: calc(100% - 64px); gap: 6px; padding: 6px 8px; } .heading h1 { font-size: 28px; } .previewTag { top: 0; } .homeLogo { top: 0; } .moduleName .moduleArt { width: 34px; height: 34px; } }
+
+@keyframes connectionGrow { from { stroke-dasharray: 100; stroke-dashoffset: 100; } to { stroke-dasharray: 100; stroke-dashoffset: 0; } }
+@keyframes connectionReveal { from { opacity: 0; } to { opacity: 1; } }
+.baseSection { padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-fill-soft); margin: 14px 0; }
+.baseSection h3,.otherHeading h3 { margin: 0 0 12px; font-size: 13px; font-weight: 550; }
+.baseSection > .field:last-child { margin-bottom: 0; }
+.cashtagInput { display: flex; align-items: center; border: 1px solid #3b3f46; border-radius: 9px; background: var(--panel-fill-control); }
+.cashtagInput > span { padding-left: 12px; color: #a0a0a6; }
+.field .cashtagInput input { border: 0; background: transparent; padding-left: 6px; }
+.otherHeading { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; margin-bottom: 8px; }
+.otherHeading h3 { margin: 0; }
+.otherHeading button,.otherLink > button { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel-fill-control); }
+.otherLink { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.otherLink .field { margin: 0; min-width: 0; flex: 1; }
+.otherLink > button { flex-shrink: 0; }
+.settingsPanels { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 12px 0; flex-shrink: 0; }
+.settingsPanels button { padding: 7px 9px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-fill-soft); font-size: 12px; line-height: 16px; text-align: left; }
+.settingsPanels button[aria-pressed="true"] { border-color: #9bbea4; background: var(--panel-fill-selected); }

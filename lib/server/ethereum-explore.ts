@@ -4,6 +4,7 @@ import { readWebsiteRouterCustomIdentitySnapshotV1 } from "@/lib/alchemy/router-
 import { readEnvioClassicV3CatalogV1 } from "@/lib/market-data/envio-classic-v3-catalog.server";
 import { publicExploreCatalogEntriesV1, publicExplorePresentationEntryV1 } from "@/lib/public-explore-catalog-v1";
 import { isPublicExploreIdentityV1 } from "@/lib/explore-public-visibility";
+import { readCodexMarkets } from "./codex-market";
 import { ETHEREUM_EXPLORE_FILTERS } from "@/lib/ethereum-explore";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 
@@ -75,6 +76,7 @@ export async function readEthereumLaunches(page = 1, query = "", filters = ETHER
   const totalPages = Math.ceil(filtered.length / pageSize);
   const number = Math.min(Math.max(1, page), Math.max(1, totalPages));
   const selected = filtered.slice((number - 1) * pageSize, number * pageSize);
+  const markets = await readCodexMarkets(selected, 1);
   return {
     chainId: catalog.chainId, status: catalog.status, sources: catalog.sources, sourceEvidence: catalog.sourceEvidence, updatedAt: catalog.updatedAt,
     items: selected.map(entry => ({
@@ -86,7 +88,7 @@ export async function readEthereumLaunches(page = 1, query = "", filters = ETHER
       provenance: entry.launchCategoryProvenance,
     })),
     presentations: selected.map(entry => ({ tokenAddress: entry.tokenAddress, imageUrl: entry.imageUrl ?? null,
-      description: entry.description ?? null, links: (entry.links ?? []).map(link => ({ label: link.kind, url: link.url })), market: null })),
+      description: entry.description ?? null, links: (entry.links ?? []).map(link => ({ label: link.kind, url: link.url })), market: markets.get(entry.tokenAddress.toLowerCase()) ?? null })),
     page: { number, size: pageSize, totalItems: filtered.length, totalPages, hasMore: number < totalPages },
   };
 }

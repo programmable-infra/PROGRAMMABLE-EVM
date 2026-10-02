@@ -356,7 +356,7 @@ describe("Robinhood presentation HTTP boundary", () => {
     expect(storage.list).toHaveBeenCalledWith(2, "RHV4", { sort: "newest", mode: "all" }, 50);
     expect(storage.token).not.toHaveBeenCalled();
     expect(fetch).not.toHaveBeenCalled();
-    expect(response.headers.get("cache-control")).toContain("s-maxage=60");
+    expect(response.headers.get("cache-control")).toContain("s-maxage=15");
     expect((await response.json()).items[0].tokenAddress).toBe(TOKEN.tokenAddress);
   });
   it("enriches the same filtered page as the launch list", async () => {

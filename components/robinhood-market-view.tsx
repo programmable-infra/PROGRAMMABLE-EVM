@@ -101,7 +101,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
         </dl>
         {delayed ? <p className={styles.notice} role="status">{market ? "Price updates are delayed." : "Market data is temporarily unavailable."}</p> : null}
         <div className={styles.tradingLayout}>
-          {launch?.poolId ? <RobinhoodChart poolId={launch.poolId} name={name} market={market} /> : <div className={styles.chart}><p className={styles.chartState}>No trading market is verified for this coin.</p></div>}
+          {launch?.poolId ? <RobinhoodChart tokenAddress={address} poolId={launch.poolId} name={name} market={market} /> : <div className={styles.chart}><p className={styles.chartState}>No trading market is verified for this coin.</p></div>}
           <ResponsiveTradePanel symbol={symbol ?? undefined}>{trade}</ResponsiveTradePanel>
         </div>
       </> : <p className={styles.notice}>No primary asset is declared for this launch.</p>}

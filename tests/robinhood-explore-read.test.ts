@@ -72,7 +72,7 @@ describe("Robinhood Explore read model", () => {
     expect(await readRobinhoodToken(hex(99, 40))).toMatchObject({ status: "stale", token: null });
   });
 
-  it("filters unpriced launches before pagination and ranks the remaining full catalog using the same prices", async () => {
+  it("applies explicit Explore exclusions before pagination and ranks the full catalog using the same prices", async () => {
     const rows = Array.from({ length: 60 }, (_, index) => token(index + 1));
     const canary = { ...token(61), tokenAddress: "0x15fca474b23cafe775120b1fafbcff0e7a827af2" };
     const observations = new Map(rows.map((row, index) => [row.tokenAddress, market(row, 60 - index)]));
@@ -97,20 +97,20 @@ describe("Robinhood Explore read model", () => {
     const first = await readRobinhoodLaunches(1, "", { sort: "activity" }, 10);
     const second = await readRobinhoodLaunches(2, "", { sort: "activity" }, 10);
     expect(first.items).toEqual(rows.slice(0, 10));
-    expect(second.items).toEqual(rows.slice(10, 11));
+    expect(second.items).toEqual(rows.slice(10));
     expect(first.presentations[0].market?.volume24hUsd).toBe(10);
     expect(second.presentations[0].market?.volume24hUsd).toBe(0);
   });
 
-  it("requires a positive reported market cap and excludes FDV-only pools even for the pinned coin", async () => {
+  it("keeps verified launches visible before market data arrives and ranks unknown caps after priced coins", async () => {
     const rows = Array.from({ length: 6 }, (_, index) => token(index + 1));
     rows[0] = { ...rows[0], tokenAddress: PINNED_ROBINHOOD_TOKEN };
     mocks.read.mockResolvedValue({ snapshot: saved(rows) });
     mocks.markets.mockResolvedValue(new Map(rows.map((row, index) => [row.tokenAddress.toLowerCase(),
       { ...market(row, [0, -1, NaN, Infinity, 100, 0][index]), ...(index === 5 ? { marketCapUsd: null, fdvUsd: 200 } : {}) }])));
-    const result = await readRobinhoodLaunches();
-    expect(result.items).toEqual([rows[4]]);
-    expect(result.page.totalItems).toBe(1);
+    const result = await readRobinhoodLaunches(1, "", { sort: "highest" });
+    expect(result.items).toEqual([rows[0], rows[4], rows[5], rows[3], rows[2], rows[1]]);
+    expect(result.page.totalItems).toBe(6);
   });
 
   it("shares Explore's full catalog market observation on direct coin visits", async () => {
@@ -127,14 +127,14 @@ describe("Robinhood Explore read model", () => {
     expect(await readRobinhoodTokenPresentation(rows[1].tokenAddress)).toMatchObject({ status: "ready", token: rows[1], presentation: null });
   });
 
-  it("hides unpriced launches from Explore while keeping direct visits when market data is unavailable", async () => {
+  it("retains verified launches in Explore and direct visits during a market provider outage", async () => {
     const rows = [token(1), token(2)];
     mocks.read.mockResolvedValue({ snapshot: saved(rows) });
     mocks.markets.mockRejectedValue(new Error("provider unavailable"));
     const result = await readRobinhoodLaunches();
     expect(result.status).toBe("ready");
-    expect(result.items).toEqual([]);
-    expect(result.presentations).toEqual([]);
+    expect(result.items).toEqual(rows.toReversed());
+    expect(result.presentations.every(item => item.market === null)).toBe(true);
     expect((await readRobinhoodToken(rows[0].tokenAddress)).token).toEqual(rows[0]);
   });
 

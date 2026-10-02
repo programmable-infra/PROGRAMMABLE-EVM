@@ -1,3 +1,4 @@
+import { readCodexMarkets } from "@/lib/server/codex-market";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getAddress, isAddress } from "viem";
@@ -74,7 +75,8 @@ export default async function TokenPage({
     </TokenRouteChainSync>;
   }
   if (resolved.chainId === 1) {
-    return <TokenRouteChainSync key={1} chainId={1}><EthereumTokenView address={address} token={resolved.token} status={resolved.status} updatedAt={resolved.updatedAt} /></TokenRouteChainSync>;
+    const market = resolved.token ? (await readCodexMarkets([resolved.token], 1)).get(address.toLowerCase()) ?? null : null;
+    return <TokenRouteChainSync key={1} chainId={1}><EthereumTokenView address={address} token={resolved.token} status={resolved.status} updatedAt={resolved.updatedAt} market={market} /></TokenRouteChainSync>;
   }
   return <TokenIndexResetView unresolved />;
 }

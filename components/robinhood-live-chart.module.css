@@ -38,3 +38,13 @@
   .price { font-size: 24px; line-height: 32px; }
   .status { padding-top: 0; }
 }
+
+.ranges { display: flex; gap: 4px; }
+.ranges button { border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--webde-muted); padding: 7px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.ranges button[aria-pressed="true"] { border-color: var(--webde-line); background: var(--panel-fill-control); color: var(--webde-ink); }
+.ranges button:focus-visible { outline: 2px solid var(--webde-ink); outline-offset: 2px; }
+.crosshair { stroke: var(--webde-muted); stroke-width: 1; stroke-dasharray: 3 5; opacity: .5; }
+.chartFooter { display: flex; justify-content: space-between; gap: 12px; min-height: 20px; font-size: 11px; color: var(--webde-muted); font-variant-numeric: tabular-nums; }
+.skeleton { width: 100%; height: 2px; border-radius: 2px; background: var(--webde-line); animation: chartLoading 1.2s ease-in-out infinite; }
+@keyframes chartLoading { 50% { opacity: .25; } }
+@media(prefers-reduced-motion:reduce) { .skeleton { animation: none; } }

@@ -872,6 +872,7 @@ const tokenLinkOrder: Record<TokenLink["kind"], number> = {
   discord: 3,
   github: 4,
   gitbook: 5,
+  other: 6,
 };
 
 function launchBlockNumber(token: LauncherToken) {
