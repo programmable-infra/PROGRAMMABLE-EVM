@@ -6,7 +6,7 @@ import { readBoundedUtf8BodyV1 } from "./custom-launch/bounded-utf8-body-v1";
 
 const endpoint = "https://graph.codex.io/graphql";
 const marketQuery = `query Markets($tokens:[String]) { filterTokens(tokens:$tokens,limit:25,useAggregatedStats:true) { results { token { address networkId } priceUSD marketCap circulatingMarketCap totalLiquidityUsd liquidity volume24 change24 } } }`;
-const barsQuery = `query Chart($symbol:String!,$from:Int!,$to:Int!,$resolution:String!) { getTokenBars(symbol:$symbol,from:$from,to:$to,resolution:$resolution,currencyCode:USD,removeEmptyBars:false,removeLeadingNullValues:true) { t c s token {address networkId} } }`;
+const barsQuery = `query Chart($symbol:String!,$from:Int!,$to:Int!,$resolution:String!) { getTokenBars(symbol:$symbol,from:$from,to:$to,resolution:$resolution,currencyCode:USD,removeEmptyBars:true,removeLeadingNullValues:true) { t c s token {address networkId} } }`;
 
 export async function codexQuery(query: string, variables: Record<string, unknown>) {
   const key = process.env.CODEX_API_KEY?.trim();
