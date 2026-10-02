@@ -42,7 +42,8 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
   if (additions.length) {
     const next = { ...positions };
     for (const node of additions) {
-      const index = Object.keys(next).length - 1;
+      // Removed cards retain their positions without consuming new layout slots.
+      const index = nodes.findIndex(item => item.id === node.id);
       next[node.id] = { x: index % 2 ? .8 : .2, y: .16 + Math.floor(index / 2) * .17 };
     }
     setPositions(next);
