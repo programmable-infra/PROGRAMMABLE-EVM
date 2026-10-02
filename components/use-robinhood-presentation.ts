@@ -24,7 +24,9 @@ export function useRobinhoodPresentation(query: string, enabled = true, initialP
     let timer: ReturnType<typeof setTimeout> | undefined;
     let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     let misses = 0;
-    let items = readRememberedRobinhoodPresentation(query)?.items ?? [];
+    const remembered = readRememberedRobinhoodPresentation(query);
+    let items = remembered?.items ?? [];
+    let lastAttemptAt = 0;
     const isVisible = () => document.visibilityState !== "hidden";
     function accept(incoming: readonly RobinhoodCoinPresentation[] | null) {
       const next = rememberRobinhoodPresentation(query, mergeRobinhoodPresentations(items, incoming));
@@ -33,12 +35,13 @@ export function useRobinhoodPresentation(query: string, enabled = true, initialP
       setState({ query, ...next, loading: false });
       clearTimeout(expiryTimer);
       const expiries = items.flatMap(item => item.market ? [Date.parse(item.market.observedAt) + ROBINHOOD_MARKET_MAX_AGE_MS + 1] : []);
-      if (expiries.length) expiryTimer = setTimeout(() => { if (!disposed) accept(items); }, Math.max(0, Math.min(...expiries) - Date.now()));
+      if (expiries.length) expiryTimer = setTimeout(() => { if (!disposed) { accept(items); schedule(); } }, Math.max(0, Math.min(...expiries) - Date.now()));
       misses = items.length && items.every(item => item.market !== null) ? 0 : misses + 1;
     }
     function schedule() {
       clearTimeout(timer);
-      if (!disposed && isVisible()) timer = setTimeout(load, misses > 0 && misses <= 3 ? 5_000 : 60_000);
+      const interval = misses > 0 && misses <= 3 ? 5_000 : 60_000;
+      if (!disposed && isVisible()) timer = setTimeout(load, Math.max(0, interval - (Date.now() - lastAttemptAt)));
     }
     async function load() {
       if (disposed || controller || !isVisible()) return;
@@ -55,27 +58,32 @@ export function useRobinhoodPresentation(query: string, enabled = true, initialP
         if (disposed || active.signal.aborted) return;
         accept(body.items);
       } catch {
-        if (!disposed && active.signal.reason !== "hidden") {
+        if (!disposed) {
           accept(null);
         }
       } finally {
         clearTimeout(timeout);
         controller = null;
+        lastAttemptAt = Date.now();
         schedule();
       }
     }
     function onVisibility() {
       clearTimeout(timer);
-      if (!isVisible()) controller?.abort("hidden");
-      else { accept(items); void load(); }
+      if (isVisible()) { accept(items); schedule(); }
     }
     if (initialPresentation) {
       // React's streamed thenable is not necessarily a chainable native Promise.
       void Promise.resolve(initialPresentation).then(item => {
         if (disposed) return;
-        if (item) { accept([item]); schedule(); }
+        if (item) { lastAttemptAt = Date.now(); accept([item]); schedule(); }
         else void load();
       }).catch(() => { if (!disposed) void load(); });
+    } else if (remembered && !remembered.delayed && items.length > 0 && items.every(item => item.market
+      && Date.now() >= Date.parse(item.market.observedAt) && Date.now() - Date.parse(item.market.observedAt) < 30_000)) {
+      lastAttemptAt = Math.min(...items.map(item => Date.parse(item.market!.observedAt)));
+      accept(items);
+      schedule();
     } else void load();
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
