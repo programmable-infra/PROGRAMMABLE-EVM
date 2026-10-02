@@ -33,6 +33,7 @@ import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, type Fo
   type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationQuoteAsset, type FoundationTransactionResult } from "@/lib/module-foundation/ui-types";
 import styles from "./module-foundation-ui.module.css";
 import studioStyles from "./module-studio/studio.module.css";
+import { StudioAtmosphere } from "./module-studio/studio-atmosphere";
 
 const openedLaunchKey = (account: Address) => `programmable:foundation-launch-opened:v1:${account.toLowerCase()}`;
 const openedLaunches = new Map<string, string>();
@@ -225,12 +226,12 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     uploads.current.set(`${account.toLowerCase()}:${result.uri}`, input.image.sha256);
     return { url: result.uri, sha256: input.image.sha256 };
   }
-  if (layout === "studio" && !session.account) return <div className={studioStyles.launchPage}><section className={studioStyles.connectGate} aria-label="Module Mode">
+  if (layout === "studio" && !session.account) return <div className={studioStyles.launchPage}><StudioAtmosphere /><section className={studioStyles.connectGate} aria-label="Module Mode">
     <div className={studioStyles.connectCard}><button type="button" className={studioStyles.launch} disabled={session.walletAction?.busy} aria-busy={session.walletAction?.busy} onClick={() => { setConnectionError(""); try { session.walletContext.openWallet(); } catch { setConnectionError("Could not open your wallet. Try again."); } }}>Connect wallet</button>
       {connectionError ? <p className={studioStyles.error} role="alert">{connectionError}</p> : null}
     </div>
   </section></div>;
-  return <div className={layout === "studio" ? studioStyles.launchPage : undefined}><FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
+  return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
     {savedLaunchError && savedLaunchError === session.resolution?.operationId ? <div className={`${styles.page} ${styles.sessionStatus}`}>
       <p role="alert">Your saved launch could not be opened yet.</p>
       <button type="button" className={styles.secondaryButton} onClick={() => { setSavedLaunchError(null); setRecoveryRetry(value => value + 1); }}>Open coin</button>
