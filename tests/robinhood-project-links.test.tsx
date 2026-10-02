@@ -22,13 +22,14 @@ describe("Coin metadata presentation", () => {
     expect(renderToStaticMarkup(<RobinhoodProjectLinks links={[]} name="Coin" />)).toBe("");
   });
 
-  it("uses the supplied fallback only for missing or invalid artwork", () => {
+  it("uses the shared or supplied fallback only for missing or invalid artwork", () => {
     expect(renderToStaticMarkup(<RobinhoodCoinArtwork fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE} />)).toContain(`src="${MODULE_TOKEN_FALLBACK_IMAGE}"`);
     expect(renderToStaticMarkup(<RobinhoodCoinArtwork imageUrl="javascript:bad" fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE} />)).toContain(`src="${MODULE_TOKEN_FALLBACK_IMAGE}"`);
     const chosen = "https://example.com/chosen.png";
     const custom = renderToStaticMarkup(<RobinhoodCoinArtwork imageUrl={chosen} fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE} />);
     expect(custom).toContain(`src="${chosen}"`);
     expect(custom).not.toContain(`src="${MODULE_TOKEN_FALLBACK_IMAGE}"`);
-    expect(renderToStaticMarkup(<RobinhoodCoinArtwork />)).not.toContain("<img");
+    expect(renderToStaticMarkup(<RobinhoodCoinArtwork />)).toContain(`src="${MODULE_TOKEN_FALLBACK_IMAGE}"`);
+    expect(renderToStaticMarkup(<RobinhoodCoinArtwork fallbackImageUrl={null} />)).not.toContain("<img");
   });
 });

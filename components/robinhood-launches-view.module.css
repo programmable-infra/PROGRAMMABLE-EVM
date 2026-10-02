@@ -34,8 +34,11 @@
   align-items: center;
   display: grid;
   gap: 8px;
-  grid-template-columns: minmax(180px, 1fr) auto auto auto;
+  grid-template-columns: minmax(180px, 280px) max-content max-content max-content;
+  justify-content: center;
+  margin-inline: auto;
   margin-bottom: 16px;
+  max-width: 820px;
   min-width: 0;
 }
 
@@ -171,7 +174,7 @@
 .socials { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 0; max-width: 176px; }
 .socials a { width: 100%; }
 .identity { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 6px; min-width: 0; padding: 8px 4px 0; }
-.identity .nameRow { grid-column: 1 / -1; }
+.identity .nameRow, .identity .skeletonName { grid-column: 1 / -1; }
 .nameRow { align-items: center; display: flex; gap: 8px; min-width: 0; }
 .name, .symbol { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .name { font-size: 17px; font-weight: 550; line-height: 24px; }
@@ -191,6 +194,7 @@
 .skeletonCaption { height: 12px; margin-block: 2px; width: 64px; }
 .skeletonNumber { height: 20px; margin-block: 4px; width: 88px; }
 .skeletonAge { height: 12px; margin-block: 8px; width: 40px; }
+.skeletonSocial { background: var(--webde-surface-raised); border-radius: 50%; display: block; height: 18px; margin: 13px auto; width: 18px; }
 
 .empty {
   border: 1px solid var(--webde-line);
@@ -273,6 +277,7 @@
   .list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .toolbar {
     grid-template-columns: minmax(0, 1fr) auto auto;
+    max-width: 440px;
   }
   .sorts { grid-column: 1 / -1; grid-row: 2; margin-top: 4px; }
   .sorts button { flex: 1; }

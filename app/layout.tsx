@@ -121,6 +121,7 @@ export default function RootLayout({
           type="application/vnd.oai.openapi+json"
         />
         <link href="/agents.md" rel="help" type="text/markdown" title="Agent guide" />
+        <link href="/llms.txt" rel="alternate" type="text/plain" title="Programmable documentation index" />
         <script
           dangerouslySetInnerHTML={{
             __html: serializeStructuredData(programmableSiteStructuredData),

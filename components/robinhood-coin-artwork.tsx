@@ -8,7 +8,7 @@ import styles from "./robinhood-coin-artwork.module.css";
 
 export const MODULE_TOKEN_FALLBACK_IMAGE = "/brand/loop/programmable-module-token-default-v1.png";
 
-export function RobinhoodCoinArtwork({ imageUrl, fallbackImageUrl, loading = false, eager = false, className = "" }: {
+export function RobinhoodCoinArtwork({ imageUrl, fallbackImageUrl = MODULE_TOKEN_FALLBACK_IMAGE, loading = false, eager = false, className = "" }: {
   imageUrl?: string | null;
   fallbackImageUrl?: string | null;
   loading?: boolean;

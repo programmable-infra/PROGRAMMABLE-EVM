@@ -1,13 +1,10 @@
-.fields { display: grid; gap: 28px; padding-top: 4px; }
-.pair { display: grid; gap: 14px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fields { display: grid; gap: 16px; padding: 18px; }
 .label, .control, .avatar { background: var(--panel-fill-control); display: block; }
-.label { border-radius: 4px; height: 14px; margin-bottom: 12px; width: 72px; }
-.control { border: 1px solid #343332; border-radius: 12px; height: 48px; }
-.image { height: 78px; }
-.preview { align-items: center; background: var(--panel-fill); display: flex; min-width: 0; padding: 32px; }
-.card { border: 1px solid #3b3937; border-radius: 20px; padding: 24px; width: 100%; }
-.avatar { border-radius: 16px; height: 64px; margin-bottom: 24px; width: 64px; }
-.rows { border-top: 1px solid #343332; display: grid; gap: 16px; margin-top: 24px; padding-top: 24px; }
-.rows .label { margin: 0; width: 100%; }
-@media (max-width: 800px) { .preview { padding: 24px; } }
-@media (max-width: 600px) { .fields { gap: 24px; } .preview { padding: 20px; } }
+.label { border-radius: 4px; height: 14px; margin-bottom: 10px; width: 88px; }
+.control { border: 1px solid var(--panel-line); border-radius: 10px; height: 48px; }
+.canvas { display: grid; place-items: center; }
+.card { background: var(--panel-fill); border: 1px solid var(--panel-line); border-radius: 16px; padding: 14px; width: clamp(138px, 16vw, 190px); }
+.card .label { margin: 14px auto 0; max-width: 100%; }
+.avatar { aspect-ratio: 1; border-radius: 10px; width: 100%; }
+.navigation { display: none; }
+@media (max-width: 1100px) { .navigation { display: grid; gap: 6px; grid-template-columns: repeat(3, minmax(0, 1fr)); } .navigation .control { height: 38px; } }

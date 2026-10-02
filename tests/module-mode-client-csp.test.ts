@@ -31,6 +31,9 @@ it("loads the actual Module Mode launch and management client graphs without str
     write: false,
     outdir: "/module-mode-csp-test",
     loader: { ".css": "empty" },
+    plugins: [{ name: "non-executable-styles", setup(builder) {
+      builder.onLoad({ filter: /\.css$/ }, () => ({ contents: "", loader: "empty" }));
+    } }],
     define: { "process.env.NODE_ENV": '"production"', "process.env.NEXT_PUBLIC_PRIVY_APP_ID": '""' },
     metafile: true,
   });
