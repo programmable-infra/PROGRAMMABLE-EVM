@@ -10,7 +10,7 @@
 }
 
 .dialog {
-  background: #0b0b0f;
+  background: var(--panel-fill-dialog);
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 1rem;
   box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
@@ -25,7 +25,7 @@
 .dialogHeader,
 .dialogFooter {
   align-items: center;
-  background: #0b0b0f;
+  background: var(--panel-fill-dialog);
   display: flex;
   justify-content: space-between;
   padding: 1rem 1.25rem;
@@ -71,7 +71,7 @@
 
 .dialogArt {
   align-items: center;
-  background: #17171c;
+  background: var(--panel-fill-dialog);
   border-radius: 0.65rem;
   display: flex;
   flex: none;
@@ -215,7 +215,7 @@
 
 .toolbar {
   align-items: center;
-  background: #0e0e13;
+  background: var(--panel-fill-control);
   border-bottom: 1px solid rgb(255 255 255 / 10%);
   display: flex;
   flex-wrap: nowrap;
@@ -248,7 +248,7 @@
 }
 
 .toolbar button[aria-pressed="true"] {
-  background: #f0eee8;
+  background: var(--panel-fill-action);
   color: #0a0a0c;
 }
 
@@ -446,13 +446,13 @@
 }
 
 .dialogFooter .publish {
-  background: #f0eee8;
+  background: var(--panel-fill-action);
   border-color: #f0eee8;
   color: #0a0a0c;
 }
 
 .dialogFooter .danger {
-  background: #ffb1b1;
+  background: rgb(255 177 177 / 0.9);
   border-color: #ffb1b1;
   color: #220808;
 }

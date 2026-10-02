@@ -1,6 +1,7 @@
 "use client";
 
 import styles from "@/app/error-boundary.module.css";
+import "./surfaces.css";
 
 type GlobalErrorProps = Readonly<{
   error: Error & { digest?: string };

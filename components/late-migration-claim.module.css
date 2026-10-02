@@ -8,8 +8,8 @@
   --intake-text: #f4f0e7;
   --intake-muted: #aaa8a2;
   --intake-border: #313131;
-  --intake-surface: #181818;
-  background: #000;
+  --intake-surface: var(--panel-fill);
+  background: var(--panel-fill);
   color: var(--intake-text);
   display: flex;
   flex-direction: column;
@@ -55,18 +55,18 @@
 .eligibilityLine strong, .payoutLine strong { font-weight: 500; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .eligibilityLine strong { color: #e1efb6; }
 .amountLabel { display: block; margin: 24px 0 8px; font-size: 14px; line-height: 20px; }
-.amountInputRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 12px; border: 1px solid var(--intake-border); border-radius: 8px; background: #000; }
+.amountInputRow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 12px; border: 1px solid var(--intake-border); border-radius: 8px; background: var(--panel-fill-control); }
 .amountInput { display: block; grid-column: 1 / -1; font-size: 24px; line-height: 32px; font-variant-numeric: tabular-nums; font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
 .tokenSymbol { color: var(--intake-muted); font-size: 14px; line-height: 20px; }
-.maxButton { background: #272727; border: 1px solid #313131; border-radius: 4px; color: var(--intake-text); padding: 8px 12px; min-width: 64px; min-height: 44px; font-size: 14px !important; font-weight: 600 !important; }
+.maxButton { background: var(--panel-fill-control); border: 1px solid #313131; border-radius: 4px; color: var(--intake-text); padding: 8px 12px; min-width: 64px; min-height: 44px; font-size: 14px !important; font-weight: 600 !important; }
 .amountHint { color: var(--intake-muted); font-size: 12px; line-height: 16px; margin: 12px 0 24px; text-wrap: pretty; }
 .disclosure { color: var(--intake-muted); font-size: 14px; line-height: 20px; margin: 24px 0; text-wrap: pretty; }
 .disclosure strong { color: var(--intake-text); font-weight: 500; }
 .disclosure > span { display: block; margin-top: 12px; }
 .actionZone { margin-top: 24px; }
 .primaryAction { display: flex; width: 100%; justify-content: center; align-items: center; min-height: 48px; border: 1px solid var(--intake-text); border-radius: 8px; background: var(--intake-text); color: #000 !important; font-weight: 600 !important; font-size: 16px; line-height: 24px; text-decoration: none; padding: 12px; }
-.primaryAction:disabled { background: #272727; border-color: #313131; color: #aaa8a2 !important; }
-.maxButton:disabled { color: #aaa8a2; background: #181818; }
+.primaryAction:disabled { background: var(--panel-fill-control); border-color: #313131; color: #aaa8a2 !important; }
+.maxButton:disabled { color: #aaa8a2; background: var(--panel-fill-control); }
 .statusMessage { display: flex; align-items: baseline; gap: 8px; margin-top: 16px; color: var(--intake-muted); font-size: 14px; line-height: 20px; min-height: 40px; }
 .statusMessage > span { width: 4px; height: 4px; background: currentColor; border-radius: 50%; flex: 0 0 4px; }
 .statusMessage p { margin: 0; text-wrap: pretty; }
@@ -78,8 +78,8 @@
 .footer a { display: inline-flex; align-items: center; min-height: 44px; text-underline-offset: 4px; }
 .footer > span { display: inline-flex; align-items: center; min-height: 44px; }
 @media (hover: hover) {
-  .primaryAction:not(:disabled):hover { background: #fff; border-color: #fff; }
-  .maxButton:not(:disabled):hover { background: #313131; }
+  .primaryAction:not(:disabled):hover { background: var(--panel-fill-action-hover); border-color: #fff; }
+  .maxButton:not(:disabled):hover { background: var(--panel-fill-hover); }
   .walletButton:hover { color: var(--intake-text); }
   .fomoHelp a:hover { color: #fff; }
 }

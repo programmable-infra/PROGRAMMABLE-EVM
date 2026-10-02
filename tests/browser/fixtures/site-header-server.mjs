@@ -65,7 +65,7 @@ export async function createSiteHeaderServer() {
   `;
   const bundled = await build({
     stdin: {
-      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {SiteHeader} from './components/site-navigation'; import {Fixture} from 'fixture-state'; import './app/globals.css'; import './app/programmable-experience.css'; import './app/interface.css'; import './app/webde-final-ui.css'; createRoot(document.getElementById('root')).render(<Fixture><SiteHeader/></Fixture>);`,
+      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {SiteHeader} from './components/site-navigation'; import {Fixture} from 'fixture-state'; import './app/globals.css'; import './app/programmable-experience.css'; import './app/interface.css'; import './app/webde-final-ui.css'; import './app/surfaces.css'; createRoot(document.getElementById('root')).render(<Fixture><SiteHeader/></Fixture>);`,
       loader: "tsx", resolveDir: root,
     },
     bundle: true, format: "esm", platform: "browser", write: false,

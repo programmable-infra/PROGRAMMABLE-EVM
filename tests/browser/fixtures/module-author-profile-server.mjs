@@ -23,7 +23,7 @@ export async function createModuleAuthorProfileServer() {
         page:{number:1,size:12,totalItems:items.length,totalPages:1}});
     };
   `;
-  const bundled = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ProfileModules} from './components/profile-modules'; import {account} from 'author-profile-fixture'; import './app/globals.css'; import './app/interface.css'; import './app/programmable-experience.css'; import './app/webde-final-ui.css'; createRoot(document.getElementById('root')).render(<main><h1>Contributor profile</h1><ProfileModules account={account}/></main>);`, loader: "tsx", resolveDir: root },
+  const bundled = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ProfileModules} from './components/profile-modules'; import {account} from 'author-profile-fixture'; import './app/globals.css'; import './app/interface.css'; import './app/programmable-experience.css'; import './app/webde-final-ui.css'; import './app/surfaces.css'; createRoot(document.getElementById('root')).render(<main><h1>Contributor profile</h1><ProfileModules account={account}/></main>);`, loader: "tsx", resolveDir: root },
     bundle: true, format: "esm", platform: "browser", write: false, outdir: "/fixture-output", jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' }, external: ["/fonts/*", "/brand/*"],
     plugins: [{ name: "module-author-profile-fixture", setup(plugin) {
       plugin.onResolve({ filter: /^(author-profile-fixture|next\/link)$/ }, args => ({ path: args.path, namespace: "fixture" }));

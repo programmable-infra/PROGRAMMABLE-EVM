@@ -185,10 +185,10 @@
 
 @media (hover: hover) and (pointer: fine) {
   .iconButton:hover, .signOut:hover, .walletOption:hover:not(:disabled) {
-    background: #272727;
+    background: var(--panel-fill-hover);
     color: #fff;
   }
-  .primaryButton:hover:not(:disabled) { background: #efa3c7; }
+  .primaryButton:hover:not(:disabled) { background: rgb(239 163 199 / 0.9); }
 }
 
 @media (max-width: 380px) {

@@ -2144,7 +2144,7 @@
 .amountCard,
 .tradeFacts.tradeSettings > div,
 .reviewOutput {
-  background: #111;
+  background: var(--panel-fill-control);
   border: 1px solid var(--webde-line);
   border-radius: 10px;
   box-shadow: none;
@@ -2174,7 +2174,7 @@
 }
 
 .primaryAction {
-  background: #fff;
+  background: var(--panel-fill-action);
   border: 1px solid #fff;
   box-shadow: none;
   color: #000;

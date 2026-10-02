@@ -33,7 +33,7 @@
 .embedded .card { width: 100%; padding: 20px; box-shadow: none; }
 .sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; margin-bottom: 20px; border-radius: 12px; background: var(--webde-control); }
 .sides button { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--webde-muted); font: inherit; font-size: 15px; font-weight: 550; cursor: pointer; }
-.sides button[aria-pressed="true"] { background: #ecece9; color: #161616; }
+.sides button[aria-pressed="true"] { background: var(--panel-fill-action); color: #161616; }
 .estimate { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; color: var(--webde-muted); font-size: 13px; min-height: 24px; }
 .estimate output { text-align: right; color: var(--webde-ink); overflow-wrap: anywhere; min-width: 0; font-variant-numeric: tabular-nums; }
 .estimate output[data-empty="true"] { color: var(--webde-muted); }
@@ -50,11 +50,11 @@
 .amountInput::placeholder { color: #b7b7b3; opacity: 1; }
 .output { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .output[data-empty="true"] { color: #b7b7b3; }
-.asset { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 7px; max-width: 135px; padding: 6px 9px 6px 6px; background: #303030; border: 1px solid #444; border-radius: 16px; font-size: 16px; line-height: 24px; font-weight: 500; }
+.asset { display: inline-flex; align-items: center; flex: 0 0 auto; gap: 7px; max-width: 135px; padding: 6px 9px 6px 6px; background: var(--panel-fill); border: 1px solid #444; border-radius: 16px; font-size: 16px; line-height: 24px; font-weight: 500; }
 .asset span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.assetIcon { width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center; background: #444; color: #fff; font-size: 13px; font-weight: 600; flex: 0 0 25px; }
+.assetIcon { width: 25px; height: 25px; border-radius: 50%; display: grid; place-items: center; background: var(--panel-fill); color: #fff; font-size: 13px; font-weight: 600; flex: 0 0 25px; }
 .eth { background: #333; color: #fff; }
-.reverse { position: relative; display: grid; place-items: center; z-index: 1; width: 44px; height: 44px; padding: 0; border: 4px solid var(--webde-surface); border-radius: 14px; background: #323232; color: #dededb; cursor: pointer; margin: -12px auto; transition: background .16s ease; }
+.reverse { position: relative; display: grid; place-items: center; z-index: 1; width: 44px; height: 44px; padding: 0; border: 4px solid var(--webde-surface); border-radius: 14px; background: var(--panel-fill); color: #dededb; cursor: pointer; margin: -12px auto; transition: background .16s ease; }
 .summary { margin: 0 0 16px; font-size: 13px; line-height: 20px; color: var(--webde-muted); }
 .summary > div { display: flex; gap: 16px; justify-content: space-between; padding: 3px 0; }
 .summary dt, .summary dd { margin: 0; }
@@ -64,10 +64,10 @@
 .refresh { color: var(--webde-muted); display: grid; place-items: center; background: transparent; border: 1px solid var(--webde-line); border-radius: 10px; width: 44px; height: 44px; cursor: pointer; }
 .slippage { border: 0; margin: 0 0 16px; padding: 0; display: flex; gap: 8px; }
 .slippage legend { font-size: 13px; color: var(--webde-muted); margin-bottom: 8px; }
-.slippage button { flex: 1; background: #252525; color: #ddd; border: 1px solid #454545; border-radius: 10px; min-height: 44px; font: inherit; font-size: 14px; cursor: pointer; }
-.slippage button[aria-pressed="true"] { background: #f0f0ed; border-color: #f0f0ed; color: #151515; }
-.primary { background: #f0f0ed; color: #151515; border: 1px solid transparent; border-radius: 14px; font: inherit; font-size: 17px; font-weight: 600; letter-spacing: -.015em; min-height: 56px; width: 100%; padding: 14px 16px; display: flex; align-items: center; justify-content: center; gap: 9px; cursor: pointer; transition: background .16s ease; }
-.primary:disabled { background: #303030; color: #aaa; cursor: not-allowed; }
+.slippage button { flex: 1; background: var(--panel-fill-control); color: #ddd; border: 1px solid #454545; border-radius: 10px; min-height: 44px; font: inherit; font-size: 14px; cursor: pointer; }
+.slippage button[aria-pressed="true"] { background: var(--panel-fill-action); border-color: #f0f0ed; color: #151515; }
+.primary { background: var(--panel-fill-action); color: #151515; border: 1px solid transparent; border-radius: 14px; font: inherit; font-size: 17px; font-weight: 600; letter-spacing: -.015em; min-height: 56px; width: 100%; padding: 14px 16px; display: flex; align-items: center; justify-content: center; gap: 9px; cursor: pointer; transition: background .16s ease; }
+.primary:disabled { background: var(--panel-fill); color: #aaa; cursor: not-allowed; }
 .card button:disabled, .card select:disabled { cursor: not-allowed; }
 .card button:disabled:not(.primary) { opacity: .45; }
 .note, .error, .success { margin: 14px 0 0; font-size: 14px; line-height: 21px; overflow-wrap: anywhere; }
@@ -76,13 +76,13 @@
 .success { color: #b9e3c7; }
 .note a, .error a, .success a { color: inherit; text-underline-offset: 3px; }
 .pendingActions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
-.pendingActions button { background: #282828; border: 1px solid #505050; border-radius: 10px; color: #eee; padding: 9px 12px; min-height: 44px; font: inherit; font-size: 14px; cursor: pointer; }
+.pendingActions button { background: var(--panel-fill-control); border: 1px solid #505050; border-radius: 10px; color: #eee; padding: 9px 12px; min-height: 44px; font: inherit; font-size: 14px; cursor: pointer; }
 .card :is(button, select, a):focus-visible { outline: 2px solid #f0f0ed; outline-offset: 3px; }
 .spin { animation: turn 1s linear infinite; }
 @keyframes turn { to { transform: rotate(360deg); } }
 @media (hover: hover) and (pointer: fine) {
-  .primary:hover:not(:disabled) { background: #fff; }
-  .reverse:hover:not(:disabled), .refresh:hover:not(:disabled) { background: #424242; }
+  .primary:hover:not(:disabled) { background: var(--panel-fill-action-hover); }
+  .reverse:hover:not(:disabled), .refresh:hover:not(:disabled) { background: var(--panel-fill-hover); }
   .paste:hover:not(:disabled), .settingsToggle:hover { color: #fff; }
 }
 @media (max-width: 480px) {

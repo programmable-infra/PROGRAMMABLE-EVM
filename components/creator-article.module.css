@@ -219,7 +219,7 @@
 }
 
 .media img {
-  background: #101014;
+  background: var(--panel-fill);
   display: block;
   height: auto;
   max-width: 100%;

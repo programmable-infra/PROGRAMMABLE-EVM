@@ -112,10 +112,10 @@ describe("launch model artwork", () => {
     expect(css).toContain(
       '.formPage.formPage[data-launch-model="classic-v3"]',
     );
-    expect(css).toContain("--classic-control-surface: rgb(17 17 17 / 0.86)");
-    expect(css).toContain("--classic-control-surface-selected: #242424");
+    expect(css).toContain("--classic-control-surface: var(--panel-fill-control)");
+    expect(css).toContain("--classic-control-surface-selected: var(--panel-fill-raised)");
     expect(css).toMatch(
-      /\.formPage\.formPage\s+:global\(\.classic-launch-button\)\s*\{[\s\S]*?background:\s*#fff;[\s\S]*?color:\s*#000;/,
+      /\.formPage\.formPage\s+:global\(\.classic-launch-button\)\s*\{[\s\S]*?background:\s*var\(--panel-fill-action\);[\s\S]*?color:\s*#000;/,
     );
   });
 

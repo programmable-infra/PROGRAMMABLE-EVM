@@ -1,6 +1,6 @@
 .page {
   --docs-canvas: #12212b;
-  --surface: #182a35;
+  --surface: var(--panel-fill);
   --surface-raised: #213742;
   --surface-soft: #29414d;
   --body-background: var(--docs-canvas);
@@ -1950,9 +1950,9 @@
  * decorative rules remain reserved for controls and data tables. */
 .page {
   --docs-canvas: #09080d;
-  --surface: #111019;
-  --surface-raised: #171520;
-  --surface-soft: #201d2a;
+  --surface: var(--panel-fill);
+  --surface-raised: var(--panel-fill-raised);
+  --surface-soft: var(--panel-fill-soft);
   background:
     radial-gradient(
       circle at 80% 2%,

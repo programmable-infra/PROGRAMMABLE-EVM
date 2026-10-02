@@ -153,7 +153,7 @@
 
 .launchButton {
   align-items: center;
-  background: var(--webde-ink);
+  background: var(--panel-fill-action);
   border: 1px solid var(--webde-ink);
   border-radius: var(--webde-radius-control);
   color: var(--webde-canvas);
@@ -184,7 +184,7 @@
 
 .scrollCue {
   align-items: center;
-  background: var(--webde-ink);
+  background: var(--panel-fill-action);
   border: 1px solid var(--webde-ink);
   border-radius: var(--webde-radius-control);
   bottom: 25px;
@@ -337,12 +337,12 @@
 
 @media (hover: hover) and (pointer: fine) {
   .launchButton:hover {
-    background: #fff;
+    background: var(--panel-fill-action-hover);
     color: var(--webde-canvas);
   }
 
   .scrollCue:hover {
-    background: #fff;
+    background: var(--panel-fill-action-hover);
     color: var(--webde-canvas);
   }
 }

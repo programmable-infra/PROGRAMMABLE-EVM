@@ -48,7 +48,7 @@
 }
 
 .primaryAction {
-  background: var(--webde-ink);
+  background: var(--panel-fill-action);
   border-color: var(--webde-ink);
   color: var(--webde-canvas);
 }
@@ -113,7 +113,7 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .primaryAction:hover { background: #e5e5e5; }
+  .primaryAction:hover { background: var(--panel-fill-action-hover); }
   .secondaryAction:hover { background: var(--webde-control); }
   .serviceLinks a:hover { text-decoration: underline; text-underline-offset: 4px; }
 }

@@ -9,7 +9,7 @@
 .details li { display: grid; padding-block: 8px; }
 .details a { min-height: 44px; display: inline-flex; align-items: center; overflow-wrap: anywhere; }
 .details code, .details pre { overflow-wrap: anywhere; word-break: break-word; font-size: 12px; }
-.details pre { max-height: 320px; overflow: auto; white-space: pre-wrap; padding: 12px; background: #151515; }
+.details pre { max-height: 320px; overflow: auto; white-space: pre-wrap; padding: 12px; background: var(--panel-fill-control); }
 .claims { display: grid; gap: 16px; }
 .claims dt { overflow-wrap: anywhere; }
 .claims small { display: block; color: #aaa; margin-top: 4px; }

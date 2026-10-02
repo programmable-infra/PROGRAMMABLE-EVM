@@ -7,13 +7,13 @@
   --adaptive-text-soft: #716970;
   --adaptive-muted: #817881;
   --adaptive-panel: rgba(255, 255, 255, 0.78);
-  --adaptive-input: #ffffff;
+  --adaptive-input: var(--panel-fill-action);
   --adaptive-plot-layer: rgba(255, 255, 255, 0.88);
   --adaptive-grid: rgba(69, 51, 64, 0.055);
   --adaptive-grid-border: rgba(69, 51, 64, 0.12);
   --adaptive-handle-border: #ffffff;
   --adaptive-focus-ring: rgba(255, 255, 255, 0.96);
-  --adaptive-tooltip: #30272e;
+  --adaptive-tooltip: var(--panel-fill-dialog);
   --adaptive-tooltip-text: #ffffff;
   display: grid;
   gap: 14px;
@@ -28,14 +28,14 @@
   --adaptive-text-strong: #f7f2f6;
   --adaptive-text-soft: #b9b0ba;
   --adaptive-muted: #9b929d;
-  --adaptive-panel: rgba(18, 29, 47, 0.8);
-  --adaptive-input: #172235;
+  --adaptive-panel: var(--panel-fill);
+  --adaptive-input: var(--panel-fill-control);
   --adaptive-plot-layer: rgba(12, 21, 36, 0.88);
   --adaptive-grid: rgba(226, 230, 242, 0.07);
   --adaptive-grid-border: rgba(226, 230, 242, 0.12);
   --adaptive-handle-border: #172235;
   --adaptive-focus-ring: rgba(23, 34, 53, 0.98);
-  --adaptive-tooltip: #f4edf3;
+  --adaptive-tooltip: var(--panel-fill-action);
   --adaptive-tooltip-text: #172033;
 }
 

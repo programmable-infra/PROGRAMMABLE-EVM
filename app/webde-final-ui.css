@@ -1,9 +1,9 @@
 :root {
   --header-height: calc(88px + env(safe-area-inset-top));
   --webde-canvas: #000;
-  --webde-surface: #181818;
-  --webde-surface-raised: #202020;
-  --webde-control: #242424;
+  --webde-surface: var(--panel-fill);
+  --webde-surface-raised: var(--panel-fill-raised);
+  --webde-control: var(--panel-fill-control);
   --webde-line: #323232;
   --webde-ink: #fff;
   --webde-muted: #b7b7b3;
@@ -345,7 +345,7 @@ body:has([data-docs-shell]) .site-header::before {
 .wallet-menu {
   -webkit-backdrop-filter: blur(24px);
   backdrop-filter: blur(24px);
-  background: rgb(24 24 24 / 0.98);
+  background: var(--panel-fill-dialog);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-card);
   box-shadow: 0 22px 60px rgb(0 0 0 / 0.55);

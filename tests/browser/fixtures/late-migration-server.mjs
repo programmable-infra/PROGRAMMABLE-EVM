@@ -9,7 +9,7 @@ export async function createLateMigrationServer() {
   const root = process.cwd();
   const bundled = await build({
     stdin: {
-      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {LateMigrationClaim} from './components/late-migration-claim'; import {FixtureWallet,FIXTURE_CONTRACT} from './tests/browser/fixtures/late-migration-wallet'; import './app/globals.css'; createRoot(document.getElementById('root')).render(<FixtureWallet><LateMigrationClaim intakeActivation={new URLSearchParams(window.location.search).get('disabled') === 'true' ? null : {sourceContractAddress:FIXTURE_CONTRACT}}/></FixtureWallet>);`,
+      contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {LateMigrationClaim} from './components/late-migration-claim'; import {FixtureWallet,FIXTURE_CONTRACT} from './tests/browser/fixtures/late-migration-wallet'; import './app/globals.css'; import './app/surfaces.css'; createRoot(document.getElementById('root')).render(<FixtureWallet><LateMigrationClaim intakeActivation={new URLSearchParams(window.location.search).get('disabled') === 'true' ? null : {sourceContractAddress:FIXTURE_CONTRACT}}/></FixtureWallet>);`,
       loader: "tsx", resolveDir: root,
     },
     bundle: true, format: "esm", platform: "browser", write: false,

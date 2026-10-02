@@ -100,7 +100,7 @@
 }
 
 .flowStep[data-state="current"] .flowNode {
-  background: var(--brand-ivory);
+  background: var(--panel-fill-action);
   border-color: var(--brand-ivory);
   color: #0b0b0d;
   box-shadow: 0 0 0 4px rgb(248 240 233 / 0.09);

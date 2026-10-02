@@ -6696,7 +6696,7 @@ html[data-theme="dark"] .theme-toggle-sun {
 }
 
 .launch-success-dialog {
-  background: rgb(24 24 24 / 0.98);
+  background: var(--panel-fill-dialog);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-card);
   box-shadow: 0 32px 96px rgb(0 0 0 / 0.58);
@@ -7736,30 +7736,18 @@ html[data-theme="dark"] .theme-toggle-sun {
    states. Keep focus as a separate outline so adjacent control edges do not
    visually merge when a listbox opens. */
 .launch-page[data-launch-model="classic-v3"] {
-  --classic-control-surface: rgba(255, 253, 249, 0.82);
-  --classic-control-surface-hover: rgba(255, 253, 249, 0.9);
-  --classic-control-surface-selected: rgba(255, 253, 249, 0.96);
+  --classic-control-surface: var(--panel-fill-control);
+  --classic-control-surface-hover: var(--panel-fill-hover);
+  --classic-control-surface-selected: var(--panel-fill-raised);
   --classic-control-border: rgba(16, 40, 64, 0.18);
   --classic-control-border-strong: rgba(16, 40, 64, 0.3);
-  --classic-popover-surface: rgba(255, 253, 249, 0.98);
+  --classic-popover-surface: var(--panel-fill-dialog);
 }
 
 html[data-theme="dark"] .launch-page[data-launch-model="classic-v3"] {
-  --classic-control-surface: color-mix(
-    in srgb,
-    var(--brand-ivory) 13%,
-    transparent
-  );
-  --classic-control-surface-hover: color-mix(
-    in srgb,
-    var(--brand-ivory) 18%,
-    transparent
-  );
-  --classic-control-surface-selected: color-mix(
-    in srgb,
-    var(--brand-ivory) 24%,
-    transparent
-  );
+  --classic-control-surface: var(--panel-fill-control);
+  --classic-control-surface-hover: var(--panel-fill-hover);
+  --classic-control-surface-selected: var(--panel-fill-raised);
   --classic-control-border: color-mix(
     in srgb,
     var(--brand-ivory) 19%,
@@ -7770,11 +7758,7 @@ html[data-theme="dark"] .launch-page[data-launch-model="classic-v3"] {
     var(--brand-ivory) 31%,
     transparent
   );
-  --classic-popover-surface: color-mix(
-    in srgb,
-    var(--brand-ivory) 24%,
-    rgb(1 1 3 / 0.86)
-  );
+  --classic-popover-surface: var(--panel-fill-dialog);
 }
 
 .launch-page[data-launch-model="classic-v3"] .classic-v3-fees,

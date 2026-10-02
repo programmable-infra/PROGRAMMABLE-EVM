@@ -4,13 +4,13 @@
 .setupSteps li[aria-current="step"] { color: #f5f3ef; }
 .setupSteps li[aria-current="step"] > span { border-color: #e786b2; color: #e786b2; }
 .setupSteps li[data-complete="true"] > span { border-color: #91b894; color: #91b894; }
-.promptWorkspace { --module-ink: #f5f3ef; --module-muted: #aaa9a5; --module-line: #30302e; --module-accent: #e786b2; background: #151515; border: 1px solid var(--module-line); border-radius: 16px; margin-bottom: 24px; min-width: 0; padding: 24px; }
+.promptWorkspace { --module-ink: #f5f3ef; --module-muted: #aaa9a5; --module-line: #30302e; --module-accent: #e786b2; background: var(--panel-fill); border: 1px solid var(--module-line); border-radius: 16px; margin-bottom: 24px; min-width: 0; padding: 24px; }
 .header h2 { color: var(--module-ink); font-size: 20px; font-weight: 500; letter-spacing: -0.02em; line-height: 28px; margin: 0; }
 .header p { color: var(--module-muted); font-size: 14px; line-height: 20px; margin: 8px 0 24px; max-width: 580px; overflow-wrap: anywhere; text-wrap: pretty; }
 .header strong { color: var(--module-ink); font-weight: 500; }
 .ideaField { display: grid; gap: 8px; }
 .ideaField > span { color: var(--module-ink); font-size: 14px; line-height: 20px; }
-.ideaField textarea { background: #181818; border: 1px solid #76716b; border-radius: 12px; color: var(--module-ink); font: inherit; font-size: 16px; line-height: 24px; min-height: 144px; padding: 12px 16px; resize: vertical; width: 100%; }
+.ideaField textarea { background: var(--panel-fill-control); border: 1px solid #76716b; border-radius: 12px; color: var(--module-ink); font: inherit; font-size: 16px; line-height: 24px; min-height: 144px; padding: 12px 16px; resize: vertical; width: 100%; }
 .ideaField textarea::placeholder { color: #888884; }
 .actions { display: grid; grid-template-columns: minmax(0, 1fr); margin-top: 16px; max-width: 200px; }
 .primaryAction { align-items: center; background: var(--module-accent); border: 1px solid var(--module-accent); border-radius: 12px; color: #1c1217; display: inline-flex; font: inherit; font-size: 14px; font-weight: 500; gap: 8px; justify-content: center; line-height: 20px; min-height: 48px; padding: 12px 16px; }
@@ -21,14 +21,14 @@
 .promptDetails summary { align-items: center; border-radius: 8px; color: var(--module-muted); cursor: pointer; display: inline-flex; font-size: 14px; gap: 8px; line-height: 20px; list-style: none; min-height: 44px; }
 .promptDetails summary::-webkit-details-marker { display: none; }
 .promptDetails[open]:not([data-disclosure-closing]) summary svg { transform: rotate(180deg); }
-.promptDetails pre { background: #000; border: 1px solid var(--module-line); border-radius: 12px; color: var(--module-muted); font: inherit; font-size: 14px; line-height: 24px; margin: 8px 0 16px; overflow-wrap: anywhere; padding: 16px; white-space: pre-wrap; }
+.promptDetails pre { background: var(--panel-fill-control); border: 1px solid var(--module-line); border-radius: 12px; color: var(--module-muted); font: inherit; font-size: 14px; line-height: 24px; margin: 8px 0 16px; overflow-wrap: anywhere; padding: 16px; white-space: pre-wrap; }
 .nextStep { border-top: 1px solid var(--module-line); margin-top: 20px; padding-top: 16px; }
 .nextStep p { color: var(--module-muted); font-size: 14px; line-height: 20px; margin: 0; max-width: 640px; text-wrap: pretty; }
 .nextStep a { align-items: center; border-radius: 8px; color: var(--module-ink); display: inline-flex; font-size: 14px; gap: 8px; line-height: 20px; margin-top: 4px; min-height: 44px; text-decoration: none; }
 .promptWorkspace :is(a, button, summary) { cursor: pointer; touch-action: manipulation; transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease; }
 .promptWorkspace :is(a, button, summary, textarea):focus-visible { outline: 2px solid var(--module-accent); outline-offset: 3px; }
 @media (hover: hover) and (pointer: fine) {
-  .primaryAction:hover { background: #ee9fc2; border-color: #ee9fc2; }
+  .primaryAction:hover { background: rgb(238 159 194 / 0.9); border-color: #ee9fc2; }
   .promptDetails summary:hover, .nextStep a:hover { color: var(--module-accent); }
 }
 @media (max-width: 600px) {

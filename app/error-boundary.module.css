@@ -82,13 +82,13 @@
 }
 
 .primaryAction {
-  background: var(--webde-ink, #fff);
+  background: var(--panel-fill-action, rgb(248 240 233 / 0.9));
   border-color: var(--webde-ink, #fff);
   color: var(--webde-canvas, #000);
 }
 
 .secondaryAction {
-  background: var(--webde-surface, #181818);
+  background: var(--panel-fill, rgb(16 18 22 / 0.78));
   color: var(--webde-ink, #fff);
 }
 
@@ -111,8 +111,8 @@
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .primaryAction:hover { background: #e5e5e5; }
-  .secondaryAction:hover { background: var(--webde-control, #242424); }
+  .primaryAction:hover { background: var(--panel-fill-action-hover); }
+  .secondaryAction:hover { background: var(--panel-fill-hover, rgb(38 42 49 / 0.76)); }
   .textAction:hover { color: var(--webde-ink, #fff); }
 }
 

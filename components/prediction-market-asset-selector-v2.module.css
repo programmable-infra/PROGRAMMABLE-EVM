@@ -60,7 +60,7 @@
 }
 
 .modeSwitch button[data-active="true"] {
-  background: var(--webde-ink);
+  background: var(--panel-fill-action);
   color: var(--webde-canvas);
 }
 

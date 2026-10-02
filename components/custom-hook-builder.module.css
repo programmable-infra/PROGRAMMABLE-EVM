@@ -1,6 +1,6 @@
 .page:global(.page-width) {
-  --webde-surface: #181818;
-  --webde-control: #20201f;
+  --webde-surface: var(--panel-fill);
+  --webde-control: var(--panel-fill-control);
   --webde-line: #383736;
   --webde-muted: #b4b1ad;
   --webde-ink: #f5f3ef;
@@ -11,7 +11,7 @@
 }
 
 .page .backLink {
-  background: #1c1c1c;
+  background: var(--panel-fill);
   border: 1px solid #64615f;
   border-radius: 24px;
   color: var(--webde-ink);
@@ -74,7 +74,7 @@
 
 .previewPanel {
   align-items: center;
-  background: #222221;
+  background: var(--panel-fill);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -82,8 +82,8 @@
   padding: 32px;
 }
 
-.hookCard { background: #191919; border: 1px solid #484643; border-radius: 20px; min-width: 0; padding: 24px; width: 100%; }
-.hookIcon { align-items: center; background: #30242b; border: 1px solid #775568; border-radius: 16px; color: #f0bfd6; display: flex; height: 64px; justify-content: center; margin-bottom: 16px; width: 64px; }
+.hookCard { background: var(--panel-fill); border: 1px solid #484643; border-radius: 20px; min-width: 0; padding: 24px; width: 100%; }
+.hookIcon { align-items: center; background: var(--panel-fill); border: 1px solid #775568; border-radius: 16px; color: #f0bfd6; display: flex; height: 64px; justify-content: center; margin-bottom: 16px; width: 64px; }
 .hookCard h2 { color: var(--webde-ink); font-size: 22px; font-weight: 500; letter-spacing: -.02em; line-height: 28px; margin: 0; }
 .hookCard > p { color: var(--webde-muted); font-size: 14px; line-height: 20px; margin: 8px 0 0; }
 .hookDetails { border-block: 1px solid #353330; display: grid; gap: 16px; margin: 24px 0 0; padding-block: 20px; }
@@ -97,7 +97,7 @@
 .page :is(button, a, summary) { touch-action: manipulation; }
 
 @media (hover: hover) and (pointer: fine) {
-  .page .backLink:hover { background: #292827; color: #fff; }
+  .page .backLink:hover { background: var(--panel-fill-hover); color: #fff; }
   .docsLink:hover { color: #f0bfd6; }
 }
 

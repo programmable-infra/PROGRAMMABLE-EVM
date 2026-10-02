@@ -83,7 +83,7 @@
 }
 
 .secondaryAction {
-  background: var(--brand-ivory);
+  background: var(--panel-fill-action);
   border: 1px solid var(--brand-ivory);
   color: #010103;
   min-width: 184px;

@@ -84,6 +84,7 @@ export async function createProfileLaunchPaginationServer() {
       import {FixtureProvider,useFixture} from 'fixture-state';
       import styles from './components/profile-experience.module.css';
       import './app/globals.css'; import './app/programmable-experience.css'; import './app/interface.css'; import './app/webde-final-ui.css';
+import './app/surfaces.css';
       function Fixture() {
         const state=useFixture(); const configure=window.__profileLaunchPaginationFixture.configure;
         return <main className={styles.page+' page-width'}><h1>Creator profile</h1>

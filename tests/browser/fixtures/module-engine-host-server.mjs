@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { resolve } from "node:path";
 export async function createEngineHostServer() {
   const root = process.cwd(), adapter = resolve(root, "tests/browser/fixtures/module-engine-host-state.tsx");
-  const bundled = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ModuleEngineHost} from './components/module-engine-host'; import {FixtureWallet} from './tests/browser/fixtures/module-engine-host-state'; import './app/globals.css'; import './app/interface.css'; createRoot(document.getElementById('root')).render(<FixtureWallet><ModuleEngineHost/></FixtureWallet>);`, loader: "tsx", resolveDir: root },
+  const bundled = await build({ stdin: { contents: `import React from 'react'; import {createRoot} from 'react-dom/client'; import {ModuleEngineHost} from './components/module-engine-host'; import {FixtureWallet} from './tests/browser/fixtures/module-engine-host-state'; import './app/globals.css'; import './app/interface.css'; import './app/surfaces.css'; createRoot(document.getElementById('root')).render(<FixtureWallet><ModuleEngineHost/></FixtureWallet>);`, loader: "tsx", resolveDir: root },
     bundle: true, format: "esm", platform: "browser", write: false, outdir: "/fixture", jsx: "automatic", define: { "process.env.NODE_ENV": '"production"' }, external: ["/brand/*", "/fonts/*"],
     plugins: [{ name: "bounded-host-test-adapters", setup(plugin) {
       plugin.onResolve({ filter: /^@\/components\/(wallet-provider|module-engine-builder|module-engine-console)$/ }, () => ({ path: adapter }));

@@ -814,7 +814,7 @@
 }
 
 .feeCompositionClaimed {
-  background: var(--brand-ivory);
+  background: var(--panel-fill-action);
   min-width: 0;
 }
 
@@ -2217,7 +2217,7 @@
 
 .bannerPositionFields {
   align-items: center;
-  background: #111;
+  background: var(--panel-fill-control);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-control);
   display: grid;
@@ -2276,7 +2276,7 @@
 .profileLinkFields input {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: #111;
+  background: var(--panel-fill-control);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-control);
   color: var(--webde-ink);
@@ -2328,13 +2328,13 @@
 }
 
 .launchRow {
-  background: #111;
+  background: var(--panel-fill);
   border-color: var(--webde-line);
   border-radius: 10px;
 }
 
 .launchListItem {
-  background: #111;
+  background: var(--panel-fill);
   border: 1px solid var(--webde-line);
   border-radius: 10px;
   min-width: 0;
@@ -2427,7 +2427,7 @@
 }
 
 .timeframeControls {
-  background: #111;
+  background: var(--panel-fill-control);
   border: 1px solid var(--webde-line);
   border-radius: 8px;
   box-shadow: none;
@@ -2487,13 +2487,13 @@
 }
 
 .claimDialogSurface {
-  background: #181818;
+  background: var(--panel-fill-dialog);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-card);
 }
 
 .claimDialogAction {
-  background: #111;
+  background: var(--panel-fill-dialog);
   border: 1px solid var(--webde-line);
   border-radius: 10px;
 }
@@ -2524,7 +2524,7 @@
   .claimButton:not(:disabled):hover,
   .connectButton:hover,
   .saveAction:hover {
-    background: #333;
+    background: var(--panel-fill-hover);
     border-color: #555;
     color: #fff;
   }
