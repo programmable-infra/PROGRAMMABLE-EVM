@@ -1,4 +1,5 @@
 import type { Address, Hex } from "viem";
+import { FOUNDATION_OWNER_PUBLICATION_V1, type FoundationOwnerReferenceV1 } from "./owner-publication";
 import { nativeCanonicalJson, nativeJson } from "@/lib/module-mode/native-catalog";
 import { moduleAddress, moduleHash, moduleInteger, moduleRecord } from "@/lib/module-mode/release";
 import {
@@ -10,10 +11,11 @@ import {
 export const FOUNDATION_CATALOG_SCHEMA_V1 = "programmable.module-foundation.catalog.v1" as const;
 
 /** An independently recorded accepted review. Merely copying these fields grants no authority. */
-export interface FoundationReviewReferenceV1 {
+export interface FoundationAdminReviewReferenceV1 {
   submissionId: string; requestDigest: Hex; sourceManifestHash: Hex; manifestHash: Hex;
   artifactDigest: Hex; decisionDigest: Hex; reviewer: Address; reviewerPolicyDigest: Hex;
 }
+export type FoundationReviewReferenceV1 = FoundationAdminReviewReferenceV1 | FoundationOwnerReferenceV1;
 /** Runtime code observed for this exact factory/module pair and separately admitted host release. */
 export interface FoundationReleaseReferenceV1 {
   chainId: number; hostAdapterId: string; releaseDigest: Hex; manifestHash: Hex;
@@ -49,6 +51,14 @@ function freeze<T>(value: T): T {
 }
 
 function bindReview(value: unknown, manifest: FoundationModuleManifestV1, manifestHash: Hex): FoundationReviewReferenceV1 {
+  if (value && typeof value === "object" && "schemaVersion" in value && value.schemaVersion === FOUNDATION_OWNER_PUBLICATION_V1) {
+    const r = moduleRecord(nativeJson(value), ["schemaVersion", "publicationDigest", "publisher", "requestDigest", "sourceManifestHash", "manifestHash"], "foundation.ownerPublication");
+    moduleAddress(r.publisher, "foundation.publisher"); moduleHash(r.publicationDigest, "foundation.publicationDigest");
+    foundationRequire(r.requestDigest === manifest.requestDigest && r.manifestHash === manifestHash
+      && r.sourceManifestHash === foundationDataDigest("programmable.modules.source-manifest.v1", manifest.sourceDescriptor),
+    "FOUNDATION_OWNER_SOURCE_MISMATCH", "Owner publication must bind this exact module source.");
+    return r as unknown as FoundationOwnerReferenceV1;
+  }
   const r = moduleRecord(nativeJson(value), ["submissionId", "requestDigest", "sourceManifestHash", "manifestHash", "artifactDigest", "decisionDigest", "reviewer", "reviewerPolicyDigest"], "foundation.review");
   foundationRequire(typeof r.submissionId === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(r.submissionId),
     "FOUNDATION_REVIEW_SUBMISSION", "Review must identify the source submission UUID.");

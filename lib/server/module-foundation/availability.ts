@@ -1,5 +1,6 @@
 import { parseFoundationAvailability } from "@/lib/module-foundation/availability";
 import { getAddress, type Address } from "viem";
+import { withFoundationOwnerCatalogV1 } from "./owner-catalog";
 
 export class FoundationAvailabilityInputError extends Error {}
 
@@ -36,10 +37,11 @@ export async function readFoundationAvailabilityResponse(fetcher: typeof fetch =
     }
   } finally { await reader.cancel().catch(() => undefined); }
   const value: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-  parseFoundationAvailability(value);
+  const parsed = parseFoundationAvailability(value);
   if (value === null || typeof value !== "object" || (token === undefined
     ? "token" in value : !("token" in value) || value.token !== token.toLowerCase())) {
     throw new Error("The returned launch version is not bound to this request.");
   }
-  return value;
+  const owner = await withFoundationOwnerCatalogV1(parsed);
+  return { ...value as Record<string, unknown>, catalog: owner.catalog };
 }
