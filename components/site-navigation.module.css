@@ -1,23 +1,17 @@
 .siteHeader.siteHeader,
 :global(body:has([data-docs-shell])) .siteHeader {
-  background-color: var(--panel-fill-header);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 0.07);
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   overflow: visible;
-}
-
-@supports ((backdrop-filter: blur(16px)) or (-webkit-backdrop-filter: blur(16px))) {
-  .siteHeader.siteHeader,
-  :global(body:has([data-docs-shell])) .siteHeader {
-    -webkit-backdrop-filter: blur(16px);
-    backdrop-filter: blur(16px);
-    background-color: var(--panel-fill-header);
-  }
 }
 
 .headerInner.headerInner {
   --navigation-inline-padding: 32px;
   grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
   position: relative;
+  height: 100%;
 }
 
 .headerActions.headerActions {
@@ -502,4 +496,8 @@
   .headerWalletButton:focus-visible {
     outline-color: Highlight;
   }
+}
+
+@media (min-width: 60.001rem) and (max-height: 760px) {
+  .siteHeader.siteHeader { height: 68px; min-height: 68px; }
 }

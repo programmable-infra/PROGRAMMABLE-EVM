@@ -205,8 +205,8 @@ type ConnectCallbacks = {
   onError: (code: string) => void;
 };
 type LinkCallbacks = {
-  onSuccess: (result: { user: FixtureUser; linkedAccount: { type: "wallet"; address: string } }) => void;
-  onError: (code: string) => void;
+  onSuccess: (result: { user: FixtureUser; linkedAccount: { type: "wallet"; address: string }; linkMethod: "siwe" }) => void;
+  onError: (code: string, details: { linkMethod: "siwe" }) => void;
 };
 let loginCallbacks: LoginCallbacks;
 let connectCallbacks: ConnectCallbacks;
@@ -334,6 +334,9 @@ export function FixtureControls() {
     <button onClick={() => update({ authenticated: true, user: alpha, wallets: [wallet(accountA)] })}>Restore SDK session</button>
     <button onClick={() => update({ authenticated: true, user: alpha, wallets: [wallet(accountA)], isOpen: false })}>Restore session without login callback</button>
     <button onClick={() => loginCallbacks.onError("unknown_auth_error")}>Report prior login failure</button>
+    <button onClick={() => loginCallbacks.onComplete({ user: alphaBoth, loginAccount: { type: "wallet", address: accountB } })}>Report prior login success</button>
+    <button onClick={() => linkCallbacks.onError("linked_to_another_user", { linkMethod: "siwe" })}>Report prior wallet link failure</button>
+    <button onClick={() => linkCallbacks.onSuccess({ user: alphaBoth, linkedAccount: { type: "wallet", address: accountB }, linkMethod: "siwe" })}>Report prior user wallet link success</button>
     <button onClick={() => update({ clipboardMode: "denied" })}>Disable clipboard</button>
     <button onClick={() => update({ clipboardMode: "delayed" })}>Delay clipboard</button>
     <button onClick={() => {
@@ -403,7 +406,7 @@ export function FixtureControls() {
       }}>Complete wallet B reconnect</button>
       <button onClick={() => {
         update({ isOpen: false });
-        linkCallbacks.onError("linked_to_another_user");
+        linkCallbacks.onError("linked_to_another_user", { linkMethod: "siwe" });
       }}>Reject linking foreign account</button>
       <button onClick={() => { update({ isOpen: false }); loginCallbacks.onError("exited_auth_flow"); }}>Cancel SDK login</button>
     </section> : null}

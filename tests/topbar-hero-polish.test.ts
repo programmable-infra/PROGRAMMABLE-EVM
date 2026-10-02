@@ -17,14 +17,14 @@ describe("topbar and Explore hero polish", () => {
     );
   });
 
-  it("keeps scrolling content readable below the shared translucent navigation", () => {
+  it("keeps navigation controls floating without an extra topbar", () => {
     const css = read("components/site-navigation.module.css");
 
     expect(css).toMatch(
-      /\.siteHeader\.siteHeader,[\s\S]*?\{[^}]*background-color:\s*var\(--panel-fill-header\);/s,
+      /\.siteHeader\.siteHeader,[\s\S]*?\{[^}]*background:\s*transparent;/s,
     );
-    expect(css).toContain("backdrop-filter: blur(16px)");
-    expect(read("app/surfaces.css")).toContain("--panel-fill-header: rgb(8 11 15 / 0.68)");
+    expect(css).toContain("backdrop-filter: none");
+    expect(css).not.toContain("background-color: var(--panel-fill-header)");
   });
 
   it("uses normal navigation text without an underline", () => {
