@@ -9,14 +9,14 @@
   align-items: center;
   display: flex;
   justify-content: center;
-  min-height: clamp(164px, 19svh, 196px);
-  padding: clamp(28px, 4svh, 42px) 0 28px;
+  min-height: clamp(96px, 12svh, 120px);
+  padding: 20px 0;
   text-align: center;
 }
 
 .heading :is(h1, h2) {
   color: var(--webde-ink);
-  font-size: clamp(48px, 4.7vw, 68px);
+  font-size: clamp(42px, 4.2vw, 58px);
   font-weight: 430;
   letter-spacing: -0.035em;
   line-height: 0.96;
@@ -35,7 +35,7 @@
   display: grid;
   gap: 8px;
   grid-template-columns: minmax(180px, 1fr) auto auto auto;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   min-width: 0;
 }
 
@@ -142,7 +142,7 @@
 
 .list {
   display: grid;
-  gap: 16px;
+  gap: 12px;
   grid-auto-rows: 1fr;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   list-style: none;
@@ -160,27 +160,30 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding: 8px;
+  padding: 6px;
   text-decoration: none;
   transition: background 160ms cubic-bezier(.2,.8,.2,1), border-color 160ms cubic-bezier(.2,.8,.2,1);
 }
 
-.artwork { border-radius: 8px; width: 100%; }
+.cardLink .artwork, .skeletonArtwork { aspect-ratio: auto; border-radius: 10px; height: clamp(100px, 14svh, 136px); width: 100%; flex-shrink: 0; }
+.cardLink .artwork img { object-fit: contain; }
 .cardLink { color: inherit; display: flex; flex: 1; flex-direction: column; min-width: 0; text-decoration: none; }
-.socials { margin-top: 4px; }
-.identity { min-width: 0; padding: 12px 4px 0; }
+.socials { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 0; max-width: 176px; }
+.socials a { width: 100%; }
+.identity { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 6px; min-width: 0; padding: 8px 4px 0; }
+.identity .nameRow { grid-column: 1 / -1; }
 .nameRow { align-items: center; display: flex; gap: 8px; min-width: 0; }
 .name, .symbol { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.name { font-size: 18px; font-weight: 550; line-height: 28px; }
-.symbol { color: var(--webde-muted); font-size: 14px; line-height: 20px; }
-.mode { color: var(--webde-muted); display: block; font-size: 12px; line-height: 20px; }
-.cardFooter { align-items: flex-end; display: flex; gap: 8px; justify-content: space-between; margin-top: 16px; padding: 0 4px 8px; }
-.marketCap { display: grid; gap: 4px; min-width: 0; }
-.marketCap > span { color: var(--webde-muted); font-size: 12px; line-height: 16px; }
-.marketCap strong { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 28px; }
-.launched { color: var(--webde-muted); flex-shrink: 0; font-size: 12px; line-height: 28px; }
+.name { font-size: 17px; font-weight: 550; line-height: 24px; }
+.symbol { color: var(--webde-muted); font-size: 13px; line-height: 18px; }
+.mode { color: var(--webde-muted); display: block; font-size: 11px; line-height: 16px; }
+.cardFooter { align-items: flex-end; display: flex; gap: 8px; justify-content: space-between; margin-top: 8px; padding: 0 4px 4px; }
+.marketCap { display: grid; gap: 2px; min-width: 0; }
+.marketCap > span { color: var(--webde-muted); font-size: 11px; line-height: 14px; }
+.marketCap strong { font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; line-height: 22px; }
+.launched { color: var(--webde-muted); flex-shrink: 0; font-size: 11px; line-height: 22px; }
 .emptySlot { visibility: hidden; }
-.skeletonArtwork { aspect-ratio: 1; background: var(--webde-surface-raised); }
+.skeletonArtwork { background: var(--webde-surface-raised); }
 .skeletonLine { background: var(--webde-surface-raised); border-radius: 4px; display: block; }
 .skeletonName { height: 20px; margin-block: 4px; width: 80%; }
 .skeletonSymbol { height: 12px; margin-block: 4px; width: 44%; }
@@ -263,10 +266,11 @@
 }
 
 @media (max-width: 1100px) {
-  .list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .list { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (max-width: 900px) {
+  .list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .toolbar {
     grid-template-columns: minmax(0, 1fr) auto auto;
   }
@@ -283,8 +287,8 @@
   }
 
   .heading {
-    min-height: 132px;
-    padding: 24px 0;
+    min-height: 90px;
+    padding: 18px 0;
   }
 
   .heading :is(h1, h2) {
@@ -300,13 +304,18 @@
     font-size: 16px;
   }
 
-  .list { gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .list { gap: 10px; }
   .name { font-size: 16px; line-height: 24px; }
   .skeletonName { height: 16px; }
-  .cardFooter { align-items: start; flex-direction: column; gap: 4px; margin-top: 12px; }
-  .launched { line-height: 20px; }
+  .cardFooter { gap: 4px; }
+  .launched { font-size: 10px; }
   .skeletonAge { margin-block: 4px; }
 
+}
+
+@media (max-width: 600px) {
+  .cardLink .artwork, .skeletonArtwork { height: 88px; }
+  .list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 480px) {
@@ -337,3 +346,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) { .row { transition: none; } }
+
+@media (min-width: 901px) and (max-height: 760px) {
+  .heading { min-height: 64px; padding: 10px 0; }
+  .heading :is(h1, h2) { font-size: 44px; }
+  .status { margin-bottom: 12px; }
+  .cardLink .artwork, .skeletonArtwork { height: 80px; }
+}

@@ -40,7 +40,7 @@
 .moduleCard[data-unavailable="true"] { opacity: .5; }
 .moduleName > span:last-child { overflow-wrap: anywhere; }
 .moduleName { display: flex; align-items: center; gap: 9px; padding: 0; background: transparent; border: 0; text-align: left; flex: 1; min-width: 0; font-size: 14px !important; line-height: 19px; font-weight: 500 !important; }
-.moduleArt { display: inline-block; width: 38px; height: 38px; flex-shrink: 0; background: url("/brand/modules/module-florals-v1.webp") 100% 100% / 300% 200% no-repeat; }
+.moduleArt { display: inline-block; width: 38px; height: 38px; aspect-ratio: 1; flex: 0 0 auto; background: url("/brand/modules/module-florals-v1.webp") 100% 100% / 300% 200% no-repeat; }
 .moduleArt[data-flower="quote"] { background-position: 0 0; }
 .moduleArt[data-flower="trading"] { background-position: 50% 0; }
 .moduleArt[data-flower="fees"] { background-position: 100% 0; }
@@ -139,7 +139,10 @@
 .pickerGroup { display: grid; gap: 8px; }
 .pickerGroup h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: 13px; font-weight: 500; color: #bfc5ce; }
 .pickerModule { width: 100%; display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel-fill-soft); text-align: left; font-size: 15px !important; }
-.pickerModule span { flex: 1; }
+.pickerModuleLabel { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pickerModule > svg { flex-shrink: 0; }
+.picker[open] { animation: reveal 140ms ease-out; }
+.pickerModule { transition: background 160ms ease-out, border-color 160ms ease-out; }
 .pickerModule:hover:enabled { border-color: #8cac97; background: var(--panel-fill-hover); }
 .error { color: #ffb2a9; font-size: 12px; line-height: 18px; }
 .mobileNavigation { display: none; }
@@ -152,6 +155,6 @@
 @media(max-width:380px) { .flowNode { width: 68px; grid-template-columns: minmax(0,1fr); padding: 8px; } .flowNode .nodeIcon { display: none; } .coinNode { width: 112px; } }
 @media(max-width:520px) { .flowNode { grid-template-columns: minmax(0,1fr); } .flowNode .nodeIcon { display: none; } .flowNode strong { -webkit-line-clamp: 3; } }
 @media(max-width:520px) { .previewTag { padding: 3px 5px; font-size: 9px; } }
-@media(max-height:760px) { .studio { padding-top: 10px; padding-bottom: 10px; gap: 8px; } .coinArtwork { max-height: 88px; margin-bottom: 0; } .coinArtwork img { height: 88px; } .coinNode { gap: 3px; } .panelHeading { min-height: 52px; padding-top: 12px; padding-bottom: 12px; } }
+@media(max-height:760px) { .studio { padding-top: 10px; padding-bottom: 10px; gap: 8px; } .coinArtwork { width: 88px; height: 88px; justify-self: center; margin-bottom: 0; } .coinNode { gap: 3px; } .panelHeading { min-height: 52px; padding-top: 12px; padding-bottom: 12px; } }
 
 @media(max-width:520px) { .title p { font-size: 12px; line-height: 18px; } .title { gap: 8px; padding-top: 25px; } .heading h1 { font-size: 28px; } .previewTag { top: 0; } .homeLogo { top: 0; } .moduleName .moduleArt { width: 34px; height: 34px; } }

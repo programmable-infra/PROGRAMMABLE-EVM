@@ -178,7 +178,11 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
         </div>
       </aside>
     </fieldset>
-    {pickerOpen ? <dialog ref={picker} className={styles.picker} aria-labelledby="studio-picker-title" onClose={() => setPickerOpen(false)} onCancel={event => { event.preventDefault(); closePicker(); }} onClick={event => { if (event.target === event.currentTarget) closePicker(); }}>
+    {pickerOpen ? <dialog ref={picker} className={styles.picker} aria-labelledby="studio-picker-title" onClose={() => setPickerOpen(false)} onCancel={event => { event.preventDefault(); closePicker(); }} onClick={event => {
+      if (event.target !== event.currentTarget) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closePicker();
+    }}>
       <div className={styles.pickerHeading}><h2 id="studio-picker-title">Add module</h2><button type="button" aria-label="Close module list" onClick={closePicker} autoFocus><X size={20} /></button></div>
       <div className={styles.pickerList}>{FOUNDATION_STUDIO_CATEGORIES.map(group => {
         const groupModules = foundationStudioModules(catalog, group);
@@ -186,8 +190,8 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
         if (!groupModules.length && !quote) return null;
         const Icon = categoryIcons[group];
         return <section key={group} className={styles.pickerGroup} aria-label={categoryLabels[group]}><h3><Icon size={16} aria-hidden="true" />{categoryLabels[group]}</h3>
-          {quote ? <button type="button" disabled={disabled} className={styles.pickerModule} onClick={() => { closePicker(); if (props.customQuote) focusPanel("quote"); else enableQuote(); }}><ModuleLogo quote /><span>Any Quote Pool</span>{props.customQuote ? <Check size={18} /> : <Plus size={18} />}</button> : null}
-          {groupModules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <button type="button" key={module.id} className={styles.pickerModule} disabled={disabled || Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => { closePicker(); if (enabled) focusPanel(module.id); else toggle(module); }}><ModuleLogo category={module.studio?.category ?? "other"} /><span>{module.name}</span>{enabled ? <Check size={18} /> : <Plus size={18} />}</button>; })}
+          {quote ? <button type="button" disabled={disabled} className={styles.pickerModule} onClick={() => { closePicker(); if (props.customQuote) focusPanel("quote"); else enableQuote(); }}><ModuleLogo quote /><span className={styles.pickerModuleLabel}>Any Quote Pool</span>{props.customQuote ? <Check size={18} /> : <Plus size={18} />}</button> : null}
+          {groupModules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <button type="button" key={module.id} className={styles.pickerModule} disabled={disabled || Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => { closePicker(); if (enabled) focusPanel(module.id); else toggle(module); }}><ModuleLogo category={module.studio?.category ?? "other"} /><span className={styles.pickerModuleLabel}>{module.name}</span>{enabled ? <Check size={18} /> : <Plus size={18} />}</button>; })}
         </section>;
       })}{!catalog.length && !props.canResolveQuote ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}</div>
     </dialog> : null}

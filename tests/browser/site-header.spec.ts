@@ -107,7 +107,7 @@ test("keyboard navigation opens instantly and returns focus without trapping the
   await expect(page.getByRole("button", { name: "Reject network switch", exact: true })).toBeFocused();
 });
 
-test("sticky navigation stays readable and opening its menu preserves the scroll position", async ({ page }) => {
+test("frameless navigation stays sticky and opening its menu preserves the scroll position", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.evaluate(() => {
     document.querySelector("main")!.style.minHeight = "2400px";
@@ -117,7 +117,8 @@ test("sticky navigation stays readable and opening its menu preserves the scroll
   await expect.poll(async () => (await header.boundingBox())?.y).toBe(0);
   expect(await header.evaluate((element) => {
     const color = getComputedStyle(element).backgroundColor;
-    return color !== "rgba(0, 0, 0, 0)" && color !== "transparent";
+    return (color === "rgba(0, 0, 0, 0)" || color === "transparent")
+      && getComputedStyle(element).backdropFilter === "none";
   })).toBe(true);
   const scrollBefore = await page.evaluate(() => window.scrollY);
   const triggerBox = await page.getByRole("button", { name: "Open menu", exact: true }).boundingBox();

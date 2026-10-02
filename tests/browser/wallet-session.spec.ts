@@ -760,3 +760,33 @@ for (const completion of ["Resolve network switch", "Reject network switch"]) {
     expect((await calls(page)).filter((call) => call.method === "switchChain")).toHaveLength(1);
   });
 }
+
+
+test("a late wallet-link error cannot cancel a new reconnect", async ({ page }) => {
+  await open(page);
+  await scenario(page, "linked-disconnected");
+  await inlineWallet(page).getByRole("button", { name: "Connect wallet", exact: true }).click();
+  await expectMethods(page, ["connectWallet"]);
+  await page.getByRole("button", { name: "Report prior wallet link failure", exact: true }).click();
+  await page.getByRole("button", { name: "Report prior login success", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText("none");
+  await expect(page.getByLabel("Wallet busy", { exact: true })).toHaveText("true");
+  await page.getByRole("button", { name: "Complete wallet A reconnect", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  await expect(page.getByLabel("Wallet busy", { exact: true })).toHaveText("false");
+  await expect(page.getByRole("dialog", { name: "Wallet", exact: true })).toBeHidden();
+});
+
+test("another user's late link success cannot settle the current user's link", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Change SDK user, same linked addresses", exact: true }).click();
+  await page.getByRole("button", { name: "Open account", exact: true }).click();
+  await page.getByRole("button", { name: "Add wallet", exact: true }).click();
+  await expectMethods(page, ["linkWallet"]);
+  await page.getByRole("button", { name: "Report prior user wallet link success", exact: true }).click();
+  await expect(page.getByLabel("Wallet busy", { exact: true })).toHaveText("true");
+  await expect(page.getByLabel("SDK user", { exact: true })).toHaveText("fixture-user-beta");
+  await expect(page.getByRole("dialog", { name: "SDK wallet dialog", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Reject linking foreign account", exact: true }).click();
+  await expect(page.getByLabel("Wallet busy", { exact: true })).toHaveText("false");
+});

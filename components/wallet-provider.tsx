@@ -1298,6 +1298,7 @@ function PrivyWalletBridge({
   }, [authenticated, disconnecting, ready, sessionSuppressed, user]);
   const walletLoginIntentRef = useRef<"login" | "connect" | "link" | null>(null);
   const walletConnectionAttemptRef = useRef<{ userId: string } | null>(null);
+  const githubLinkUserRef = useRef<string | null>(null);
   const walletAccountSelectionRequestedRef = useRef(false);
   const walletLoginAttemptGateRef = useRef(createWalletLoginAttemptGate());
   const walletLoginLeaseRef = useRef<BrowserWalletLoginLease | null>(null);
@@ -1311,6 +1312,11 @@ function PrivyWalletBridge({
   }, []);
   const loginCallbacks: NonNullable<Parameters<typeof useLogin>[0]> = {
     onComplete: ({ user: signedInUser, loginAccount }) => {
+      const session = sdkSessionRef.current;
+      if (walletLoginIntentRef.current === "connect" || walletLoginIntentRef.current === "link"
+        || githubLinkUserRef.current || session.disconnecting
+        || (session.sessionSuppressed && walletLoginIntentRef.current !== "login")
+        || (session.authenticated && session.userId && session.userId !== signedInUser.id)) return;
       settleWalletLoginAttempt();
       if (loginAccount?.type === "wallet" && isEthereumAddress(loginAccount.address)) {
         setSelectedWallet({ userId: signedInUser.id, address: loginAccount.address });
@@ -1406,8 +1412,16 @@ function PrivyWalletBridge({
     },
   });
   const { linkGithub, linkWallet } = useLinkAccount({
-    onSuccess: ({ user: linkedUser, linkedAccount }) => {
-      settleWalletLoginAttempt();
+    onSuccess: ({ user: linkedUser, linkedAccount, linkMethod }) => {
+      const session = sdkSessionRef.current;
+      const walletLink = linkMethod === "siwe";
+      const ownerId = walletLink && walletLoginIntentRef.current === "link"
+        ? walletConnectionAttemptRef.current?.userId
+        : linkMethod === "github" ? githubLinkUserRef.current : null;
+      if (!ownerId || linkedUser.id !== ownerId || session.userId !== ownerId
+        || !session.ready || !session.authenticated || session.sessionSuppressed || session.disconnecting) return;
+      if (walletLink) settleWalletLoginAttempt();
+      else githubLinkUserRef.current = null;
       applicantRefreshUserGate.invalidate();
       setWalletAccountMismatch(false);
       if (linkedAccount.type === "wallet" && isEthereumAddress(linkedAccount.address)) {
@@ -1416,16 +1430,33 @@ function PrivyWalletBridge({
       setError("");
       setDialogOpen(false);
     },
-    onError: (errorCode) => {
-      settleWalletLoginAttempt();
-      setWalletAccountMismatch(errorCode === "linked_to_another_user");
+    onError: (errorCode, details) => {
+      const session = sdkSessionRef.current;
+      const walletLink = details.linkMethod === "siwe";
+      const ownerId = walletLink && walletLoginIntentRef.current === "link"
+        ? walletConnectionAttemptRef.current?.userId
+        : details.linkMethod === "github" ? githubLinkUserRef.current : null;
+      if (!ownerId || session.userId !== ownerId || !session.ready || !session.authenticated
+        || session.sessionSuppressed || session.disconnecting) return;
+      if (walletLink) settleWalletLoginAttempt();
+      else githubLinkUserRef.current = null;
+      setWalletAccountMismatch(walletLink && errorCode === "linked_to_another_user");
       const message = getWalletLoginErrorMessage(errorCode);
       if (!message) return;
-
       setError(message);
       setDialogOpen(true);
     },
   });
+  useLayoutEffect(() => {
+    if (!ready) return;
+    const connection = walletConnectionAttemptRef.current;
+    if (connection && (!authenticated || user?.id !== connection.userId || sessionSuppressed || disconnecting)) {
+      settleWalletLoginAttempt();
+    }
+    if (!authenticated || githubLinkUserRef.current !== user?.id || sessionSuppressed || disconnecting) {
+      githubLinkUserRef.current = null;
+    }
+  }, [authenticated, disconnecting, ready, sessionSuppressed, settleWalletLoginAttempt, user?.id]);
 
   const activeAuthenticated = authenticated && !sessionSuppressed;
   // Logout may resolve before Privy's hooks publish the cleared user. Keep
@@ -1877,7 +1908,8 @@ function PrivyWalletBridge({
   }, []);
 
   const connectGithub = useCallback(() => {
-    if (sdkSessionRef.current.sessionSuppressed || sdkSessionRef.current.disconnecting) return;
+    if (sdkSessionRef.current.sessionSuppressed || sdkSessionRef.current.disconnecting
+      || privyModalOpen || walletLoginAttemptGateRef.current.isPending() || githubLinkUserRef.current) return;
     setError("");
     setDialogOpen(false);
 
@@ -1889,14 +1921,17 @@ function PrivyWalletBridge({
       return;
     }
     if (activeAuthenticated) {
-      if (!githubConnected) linkGithub();
+      if (!githubConnected && user) {
+        githubLinkUserRef.current = user.id;
+        linkGithub();
+      }
       return;
     }
     login({
       loginMethods: ["github"],
       walletChainType: "ethereum-only",
     });
-  }, [activeAuthenticated, authenticated, githubConnected, linkGithub, login, ready, user]);
+  }, [activeAuthenticated, authenticated, githubConnected, linkGithub, login, privyModalOpen, ready, user]);
 
   const connectAccountWallet = useCallback((link: boolean) => {
     if (!providerSettled || !activeAuthenticated || !user || privyModalOpen) return;
