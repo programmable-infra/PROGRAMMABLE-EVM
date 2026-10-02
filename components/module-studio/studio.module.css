@@ -30,7 +30,7 @@
 .library > .panelHeading h2 { font-size: 26px; line-height: 32px; text-align: center; }
 .panelHeading > svg { color: var(--muted); flex-shrink: 0; }
 .moduleList { min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 0 12px 12px; display: flex; flex-direction: column; gap: 9px; flex: 1; scrollbar-width: thin; }
-.moduleCard { display: flex; gap: 7px; border: 1px solid var(--line); border-radius: 11px; padding: 12px 10px; min-height: 64px; align-items: center; background: var(--panel-fill-soft); transition: border-color .2s,background .2s; }
+.moduleCard { display: flex; width: 100%; text-align: left; gap: 7px; border: 1px solid var(--line); border-radius: 11px; padding: 12px 10px; min-height: 64px; align-items: center; background: var(--panel-fill-soft); transition: border-color .2s,background .2s; }
 .moduleCard[data-active="true"] { border-color: #759981; background: var(--panel-fill-selected); }
 .moduleCard:focus-within { border-color: #a6c9b1; }
 .moduleCard:hover:not([data-unavailable="true"]) { border-color: #ffffff50; }

@@ -113,14 +113,14 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       <aside id="studio-module-library" tabIndex={-1} className={styles.library} aria-label="Module library">
         <div className={styles.panelHeading}><h2>Modules</h2></div>
         <div className={styles.moduleList}>
-          {props.canResolveQuote ? <div className={styles.moduleCard} data-active={props.customQuote}>
-            <button type="button" className={styles.moduleName} aria-pressed={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}><ModuleLogo quote /><span>Any Quote Pool</span></button>
-            <button type="button" className={styles.toggle} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}><span /></button>
-          </div> : null}
-          {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <div className={styles.moduleCard} key={`${module.id}:${module.version}`} data-active={enabled} data-unavailable={!module.available}>
-            <button type="button" className={styles.moduleName} aria-pressed={enabled} onClick={() => !enabled && blockedReason(module) ? focusPanel(module.id) : toggle(module)}><ModuleLogo category={module.studio?.category ?? "other"} /><span>{module.name}</span></button>
-            <button type="button" className={styles.toggle} role="switch" aria-label={module.name} aria-checked={enabled} disabled={!enabled && Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => toggle(module)}><span /></button>
-          </div>; })}
+          {props.canResolveQuote ? <button type="button" className={styles.moduleCard} data-active={props.customQuote} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}>
+            <span className={styles.moduleName}><ModuleLogo quote /><span>Any Quote Pool</span></span>
+            <span className={styles.toggle} data-checked={props.customQuote} aria-hidden="true"><span /></span>
+          </button> : null}
+          {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); const reason = !enabled ? blockedReason(module) : undefined; return <button type="button" className={styles.moduleCard} key={`${module.id}:${module.version}`} data-active={enabled} data-unavailable={!module.available} role="switch" aria-label={module.name} aria-checked={enabled} aria-disabled={Boolean(reason) || undefined} title={reason} onClick={() => reason ? focusPanel(module.id) : toggle(module)}>
+            <span className={styles.moduleName}><ModuleLogo category={module.studio?.category ?? "other"} /><span>{module.name}</span></span>
+            <span className={styles.toggle} data-checked={enabled} aria-hidden="true"><span /></span>
+          </button>; })}
           {!catalog.length ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}
         </div>
       </aside>
@@ -186,7 +186,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       <div className={styles.pickerHeading}><h2 id="studio-picker-title">Add module</h2><button type="button" aria-label="Close module list" onClick={closePicker} autoFocus><X size={20} /></button></div>
       <div className={styles.pickerList}>
         {props.canResolveQuote ? <button type="button" disabled={disabled} className={styles.pickerModule} onClick={() => { closePicker(); if (props.customQuote) focusPanel("quote"); else enableQuote(); }}><ModuleLogo quote /><span className={styles.pickerModuleLabel}>Any Quote Pool</span>{props.customQuote ? <Check size={18} /> : <Plus size={18} />}</button> : null}
-        {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <button type="button" key={module.id} className={styles.pickerModule} disabled={disabled || Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => { closePicker(); if (enabled) focusPanel(module.id); else toggle(module); }}><ModuleLogo category={module.studio?.category ?? "other"} /><span className={styles.pickerModuleLabel}>{module.name}</span>{enabled ? <Check size={18} /> : <Plus size={18} />}</button>; })}
+        {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <button type="button" key={module.id} className={styles.pickerModule} disabled={disabled || (!enabled && Boolean(blockedReason(module)))} title={blockedReason(module)} onClick={() => { closePicker(); if (enabled) focusPanel(module.id); else toggle(module); }}><ModuleLogo category={module.studio?.category ?? "other"} /><span className={styles.pickerModuleLabel}>{module.name}</span>{enabled ? <Check size={18} /> : <Plus size={18} />}</button>; })}
         {!catalog.length && !props.canResolveQuote ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}
       </div>
     </dialog> : null}

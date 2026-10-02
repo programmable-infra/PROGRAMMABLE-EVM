@@ -42,7 +42,13 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
   if (additions.length) {
     const next = { ...positions };
     for (const node of additions) {
-      const index = Object.keys(next).length - 1;
+      // Removed cards retain their positions without consuming new layout slots.
+      let index = 0;
+      while (nodes.some(item => {
+        const point = next[item.id];
+        return point && Math.abs(point.x - (index % 2 ? .8 : .2)) < .05
+          && Math.abs(point.y - (.16 + Math.floor(index / 2) * .17)) < .1;
+      })) index++;
       next[node.id] = { x: index % 2 ? .8 : .2, y: .16 + Math.floor(index / 2) * .17 };
     }
     setPositions(next);
