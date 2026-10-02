@@ -47,6 +47,8 @@ export interface FoundationConfigurationField {
 }
 
 export interface FoundationModuleDescriptor {
+  /** Inert presentation metadata; execution remains bound to the verified catalog. */
+  studio?: import("./studio").FoundationStudioPresentation;
   id: string;
   version: string;
   digest: Hex;
