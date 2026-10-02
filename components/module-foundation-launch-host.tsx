@@ -78,6 +78,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
   const prepared = useRef(new WeakMap<FoundationLaunchReview, Awaited<ReturnType<typeof prepareFoundationLaunch>>>());
   const launching = useRef(false);
   const [savedLaunchError, setSavedLaunchError] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState("");
   const [recoveryRetry, setRecoveryRetry] = useState(0);
   const catalog = useMemo(() => session.envelope ? presentFoundationCatalogV1({
     catalog: bindFoundationCatalogV1(session.envelope.catalog.document, session.envelope.catalog.authority),
@@ -224,6 +225,11 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     uploads.current.set(`${account.toLowerCase()}:${result.uri}`, input.image.sha256);
     return { url: result.uri, sha256: input.image.sha256 };
   }
+  if (layout === "studio" && !session.account) return <div className={studioStyles.launchPage}><section className={studioStyles.connectGate} aria-label="Module Mode">
+    <div className={studioStyles.connectCard}><button type="button" className={studioStyles.launch} disabled={session.walletAction?.busy} aria-busy={session.walletAction?.busy} onClick={() => { setConnectionError(""); try { session.walletContext.openWallet(); } catch { setConnectionError("Could not open your wallet. Try again."); } }}>Connect wallet</button>
+      {connectionError ? <p className={studioStyles.error} role="alert">{connectionError}</p> : null}
+    </div>
+  </section></div>;
   return <div className={layout === "studio" ? studioStyles.launchPage : undefined}><FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
     {savedLaunchError && savedLaunchError === session.resolution?.operationId ? <div className={`${styles.page} ${styles.sessionStatus}`}>
       <p role="alert">Your saved launch could not be opened yet.</p>
