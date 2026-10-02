@@ -19,6 +19,18 @@ test.beforeEach(async ({ page }) => { await page.goto(origin); });
 
 const menuName = /^(Open|Close) menu$/;
 
+test("Module Mode keeps navigation and the connected account inside its menu", async ({ page }) => {
+  await page.goto(`${origin}/launch/modules/foundation`);
+  const header = page.getByRole("banner");
+  await expect(header.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
+  await expect(header.getByRole("link", { name: "Launch a token", exact: true })).toHaveCount(0);
+  await expect(header.getByText("Connected wallet", { exact: true })).not.toBeVisible();
+  await expect(header.getByLabel("Connected wallet 0xaaaa…aaaa")).toHaveCount(0);
+  await header.getByRole("button", { name: "Open menu", exact: true }).click();
+  await expect(header.getByRole("group", { name: "Wallet actions", exact: true })).toContainText("Connected wallet");
+  await expect(header.getByRole("button", { name: "Disconnect", exact: true })).toBeVisible();
+});
+
 test("one navigation menu includes wallet actions; copy, Escape, outside click and focus work", async ({page,context}) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   const trigger = page.getByRole("button", {name:menuName});

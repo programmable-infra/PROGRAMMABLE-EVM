@@ -47,6 +47,10 @@ export interface FoundationStudioProps {
 
 type Panel = "coin" | "quote" | "fees" | string;
 
+const moduleDescriptions: Readonly<Record<string, string>> = {
+  "0x58c95276beac0d40a73b54505047ecdefaa684fed4b4b8157dcfe7a027eb7251": "For the time you choose, each wallet can buy only the percentage of the total supply you set below. All its buys count together, including the creator's first buy. Selling does not reset the limit. During this time, buys must use the official Uniswap router. Once the time ends, the limit stops.",
+};
+
 /** Presentation only. Wallet preparation, simulation, locking and receipt handling remain in the launch host. */
 export function FoundationStudio({ formRef, imageInput, ...props }: FoundationStudioProps) {
   const { draft, catalog, disabled, errors } = props;
@@ -135,21 +139,24 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
             </StudioDetails>
             <StudioDetails title="Description & links" forceOpen={Boolean(errors.description) || Object.keys(errors).some(key => key.startsWith("social-"))}>{field("description", "Description", "About your coin", 280)}{(["website", "twitter", "telegram", "discord", "github", "gitbook"] as const).map(key => <label key={key} className={styles.field}><span>{key === "twitter" ? "X" : key === "gitbook" ? "Docs" : key[0].toUpperCase() + key.slice(1)}</span><input id={`foundation-social-${key}`} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} placeholder={key === "twitter" ? "@username" : "https://"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} />{errors[`social-${key}`] ? <span className={styles.error}>{errors[`social-${key}`]}</span> : null}</label>)}</StudioDetails>
           </> : panel === "quote" ? <>
+            <p className={styles.moduleDescription}>Choose the asset people use to buy and sell your coin. Keep ETH or enter another token&apos;s contract address on Robinhood Chain.</p>
             <button type="button" className={styles.quoteChoice} aria-pressed={!props.customQuote} onClick={disableQuote}><Waves size={22} /><strong>ETH</strong>{!props.customQuote ? <Check size={18} /> : null}</button>
             <label className={styles.field}><span>Any Quote Pool</span><input id="foundation-quote" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></label>
             {props.quoteStatus || errors.quoteAsset ? <div className={errors.quoteAsset ? styles.error : styles.settingStatus} role="status">{errors.quoteAsset || props.quoteStatus}</div> : null}
           </> : panel === "fees" ? <>
+            <p className={styles.moduleDescription}>Set the percentage of each buy and sell that goes to the creator. The platform fee is charged separately.</p>
             <label className={styles.largeNumber}><span>Buy & sell</span><div><input id="foundation-creator-fee" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} /><span>%</span></div></label>
             <input aria-label="Creator fees" className={styles.range} type="range" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} />
             <div className={styles.presets}>{[0, 1, 3, 5].map(value => <button type="button" key={value} aria-pressed={draft.creatorFeeBps === value * 100} onClick={() => props.onUpdate("creatorFeeBps", value * 100)}>{value}%</button>)}</div>
             <div className={styles.settingStatus}>Platform fee <strong>0.3%</strong></div>{errors.creatorFeeBps ? <div className={styles.error}>{errors.creatorFeeBps}</div> : null}
           </> : panel === "modules" ? draft.modules.map(item => <button type="button" className={styles.summaryButton} key={item.id} onClick={() => focusPanel(item.id)}><ModuleLogo category={catalog.find(module => module.id === item.id)?.studio?.category ?? "other"} />{catalog.find(module => module.id === item.id)?.name ?? "Module"}</button>) : selected ? <>
+            <p className={styles.moduleDescription}>{moduleDescriptions[selected.id] ?? selected.description}</p>
             {selected.fields.map(configField => <div className={styles.settingCard} data-kind={configField.kind} key={configField.key}><ModuleFoundationConfigField compact field={configField} id={`foundation-module-${encodeURIComponent(selected.id)}-${encodeURIComponent(configField.key)}`} value={inspectedSelection!.configuration[configField.key]} showErrors={Boolean(errors.modules)} onChange={value => {
               const next = { ...inspectedSelection!, configuration: { ...inspectedSelection!.configuration, [configField.key]: value } };
               setSavedConfigurations(current => ({ ...current, [selected.id]: next.configuration }));
               if (selection && selected.available) props.onUpdate("modules", draft.modules.map(item => item.id === selected.id ? next : item));
             }} /></div>)}
-            <StudioDetails title="Details">{selected.description}{selected.fields.map(configField => configField.description ? <p key={configField.key}><strong>{configField.label}</strong><br />{configField.description}</p> : null)}</StudioDetails>
+            <StudioDetails title="Details">{selected.fields.map(configField => configField.description ? <p key={configField.key}><strong>{configField.label}</strong><br />{configField.description}</p> : null)}</StudioDetails>
             {blockedReason(selected) ? <div className={styles.error}>{blockedReason(selected)}</div> : null}{errors.modules ? <div className={styles.error}>{errors.modules}</div> : null}
           </> : null}
         </div>

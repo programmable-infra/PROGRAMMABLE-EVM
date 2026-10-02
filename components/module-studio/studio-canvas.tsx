@@ -11,13 +11,22 @@ const clamp = (value: number, min: number, max: number) => Math.max(min, Math.mi
 
 function anchor(card: Card, target: Point) {
   const dx = target.x - card.x, dy = target.y - card.y;
-  const horizontal = dx ? card.width / (2 * Math.abs(dx)) : Infinity;
-  const vertical = dy ? card.height / (2 * Math.abs(dy)) : Infinity;
-  const scale = Math.min(horizontal, vertical);
-  const axis = horizontal < vertical && dx ? "x" : "y";
-  const direction = Math.sign(axis === "x" ? dx : dy);
-  return { x: card.x + dx * scale + (axis === "x" ? direction * 7 : 0),
-    y: card.y + dy * scale + (axis === "y" ? direction * 7 : 0), axis, direction };
+  const radius = Math.min(12, card.width / 2, card.height / 2);
+  let low = 0, high = Math.min(dx ? card.width / (2 * Math.abs(dx)) : Infinity,
+    dy ? card.height / (2 * Math.abs(dy)) : Infinity);
+  // Follow the rounded boundary so the curve turns continuously around corners.
+  for (let step = 0; step < 18; step++) {
+    const scale = (low + high) / 2;
+    const distance = Math.hypot(Math.max(Math.abs(dx * scale) - card.width / 2 + radius, 0),
+      Math.max(Math.abs(dy * scale) - card.height / 2 + radius, 0));
+    if (distance > radius) high = scale; else low = scale;
+  }
+  const x = dx * low, y = dy * low;
+  const nx = Math.sign(x) * Math.max(Math.abs(x) - card.width / 2 + radius, 0);
+  const ny = Math.sign(y) * Math.max(Math.abs(y) - card.height / 2 + radius, 0);
+  const length = Math.hypot(nx, ny) || 1;
+  const normal = { x: nx / length, y: ny / length };
+  return { x: card.x + x + normal.x * 7, y: card.y + y + normal.y * 7, normal };
 }
 
 export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd }: {
@@ -31,8 +40,14 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
   const [dragging, setDragging] = useState<string>();
   const drag = useRef<{ id: string; pointerId: number; start: Point; point: Point; moved: boolean } | null>(null);
   const suppressedClick = useRef<string | null>(null);
+  const moveFrame = useRef<number | null>(null);
+  const pendingMove = useRef<{ id: string; point: Point } | null>(null);
   const gradient = useId(), instructions = useId();
   const signature = JSON.stringify(nodes.map(node => node.id));
+
+  useEffect(() => () => {
+    if (moveFrame.current !== null) cancelAnimationFrame(moveFrame.current);
+  }, []);
 
   useEffect(() => {
     const area = canvas.current;
@@ -73,6 +88,10 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
 
   function finish(event: PointerEvent<HTMLButtonElement>) {
     if (!drag.current || drag.current.pointerId !== event.pointerId) return;
+    if (moveFrame.current !== null) cancelAnimationFrame(moveFrame.current);
+    moveFrame.current = null;
+    if (pendingMove.current) place(pendingMove.current.id, pendingMove.current.point);
+    pendingMove.current = null;
     if (drag.current.moved) suppressedClick.current = drag.current.id;
     drag.current = null; setDragging(undefined);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -93,7 +112,12 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
         const dx = event.clientX - current.start.x, dy = event.clientY - current.start.y;
         if (!current.moved && Math.hypot(dx, dy) < 5) return;
         current.moved = true; setDragging(id);
-        place(id, { x: current.point.x + dx, y: current.point.y + dy });
+        pendingMove.current = { id, point: { x: current.point.x + dx, y: current.point.y + dy } };
+        if (moveFrame.current === null) moveFrame.current = requestAnimationFrame(() => {
+          moveFrame.current = null;
+          if (pendingMove.current) place(pendingMove.current.id, pendingMove.current.point);
+          pendingMove.current = null;
+        });
       },
       onPointerUp: finish, onPointerCancel: finish, onLostPointerCapture: finish,
       onClick: (event: { detail: number }) => {
@@ -120,10 +144,11 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
       {nodes.map((node, index) => {
         const target = card(node.id, index);
         if (!center.width || !target.width || Math.hypot(target.x - center.x, target.y - center.y) < 1) return null;
-        if (Math.abs(target.x - center.x) < (center.width + target.width) / 2 + 14 && Math.abs(target.y - center.y) < (center.height + target.height) / 2 + 14) return null;
+        const separation = Math.max(Math.abs(target.x - center.x) - (center.width + target.width) / 2,
+          Math.abs(target.y - center.y) - (center.height + target.height) / 2);
         const start = anchor(center, target), end = anchor(target, center), bend = Math.min(150, Math.hypot(end.x - start.x, end.y - start.y) * .38);
-        const path = `M ${start.x} ${start.y} C ${start.x + (start.axis === "x" ? start.direction * bend : 0)} ${start.y + (start.axis === "y" ? start.direction * bend : 0)}, ${end.x + (end.axis === "x" ? end.direction * bend : 0)} ${end.y + (end.axis === "y" ? end.direction * bend : 0)}, ${end.x} ${end.y}`;
-        return <g key={node.id} className={styles.connection} data-active={activeId === node.id}><path className={styles.connectionBase} d={path} stroke={`url(#${gradient})`} /><path className={styles.connectionPulse} d={path} pathLength={100} stroke={`url(#${gradient})`} style={{ animationDelay: `${-index * .9}s` }} /><circle className={styles.connectionPort} cx={start.x} cy={start.y} r={3} /><circle className={styles.connectionPort} cx={end.x} cy={end.y} r={3} /></g>;
+        const path = `M ${start.x} ${start.y} C ${start.x + start.normal.x * bend} ${start.y + start.normal.y * bend}, ${end.x + end.normal.x * bend} ${end.y + end.normal.y * bend}, ${end.x} ${end.y}`;
+        return <g key={node.id} className={styles.connection} data-active={activeId === node.id} opacity={clamp((separation - 14) / 24, 0, 1)}><path className={styles.connectionBase} d={path} stroke={`url(#${gradient})`} /><path className={styles.connectionPulse} d={path} pathLength={100} stroke={`url(#${gradient})`} style={{ animationDelay: `${-index * .9}s` }} /><circle className={styles.connectionPort} cx={start.x} cy={start.y} r={3} /><circle className={styles.connectionPort} cx={end.x} cy={end.y} r={3} /></g>;
       })}
     </svg> : null}
     {nodes.map((node, index) => <button {...handlers(node.id, index)} key={node.id} type="button" className={styles.flowNode} title={node.name} style={position(node.id, index)} data-dragging={dragging === node.id} aria-describedby={instructions} aria-pressed={activeId === node.id}><span className={styles.nodeIcon}>{node.icon}</span><span className={styles.nodeText}><strong>{node.name}</strong>{node.value ? <span className={styles.nodeValue}>{node.value}</span> : null}</span></button>)}

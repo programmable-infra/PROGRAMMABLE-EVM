@@ -108,7 +108,7 @@ function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function HeaderWalletButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
+function HeaderWalletButton({ onOpen, accountInMenu = false }: Readonly<{ onOpen: () => void; accountInMenu?: boolean }>) {
   const { wallet, hasSession, connecting, openingWallet, disconnecting, openWallet, preloadWallet } = useWallet();
   const label = disconnecting
     ? "Disconnecting"
@@ -117,6 +117,7 @@ function HeaderWalletButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
       : hasSession ? "Reconnect wallet" : "Connect wallet";
 
   if (wallet) {
+    if (accountInMenu) return null;
     return <span className={styles.headerWalletSummary} aria-label={`Connected wallet ${shortenAddress(wallet.account)}`}>
       {shortenAddress(wallet.account)}
     </span>;
@@ -264,6 +265,7 @@ function DesktopNavigation() {
 
 export function SiteHeader() {
   const pathname = usePathname() ?? "/";
+  const moduleMode = pathname === "/launch/modules" || pathname.startsWith("/launch/modules/");
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -354,19 +356,19 @@ export function SiteHeader() {
           </Link>
         </div>
 
-        <DesktopNavigation />
+        {moduleMode ? null : <DesktopNavigation />}
 
-        <Link
+        {moduleMode ? null : <Link
           className={styles.mobileLaunch}
           href="/launch"
           prefetch={false}
           aria-current={pathname.startsWith("/launch") ? "page" : undefined}
         >
           Launch a token
-        </Link>
+        </Link>}
 
         <div className={`header-actions ${styles.headerActions}`}>
-          <HeaderWalletButton onOpen={() => setMenuPath(null)} />
+          <HeaderWalletButton accountInMenu={moduleMode} onOpen={() => setMenuPath(null)} />
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
