@@ -2,13 +2,14 @@
 
 import Image from "next/image";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { ArrowRight, Check, ChevronDown, Coins, ImagePlus, Layers, LayoutGrid, Plus, Puzzle, SlidersHorizontal, Waves, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Coins, ImagePlus, Plus, Waves, X } from "lucide-react";
 import type { FoundationModuleDescriptor, FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
-import { FOUNDATION_STUDIO_CATEGORIES, foundationStudioModules, foundationStudioSelection, type FoundationStudioCategory, type FoundationStudioDraft } from "@/lib/module-foundation/studio";
+import { foundationStudioModules, foundationStudioSelection, type FoundationStudioCategory, type FoundationStudioDraft } from "@/lib/module-foundation/studio";
 import { FOUNDATION_DEFAULT_IMAGE } from "@/lib/module-foundation/default-image";
 import type { ModuleSocialKind } from "@/lib/module-mode/token-metadata";
 import { normalizeFoundationSocialInput } from "@/lib/module-foundation/social-input";
 import { ModuleFoundationConfigField } from "../module-foundation-config-field";
+import { StudioCanvas } from "./studio-canvas";
 import styles from "./studio.module.css";
 
 export interface FoundationStudioProps {
@@ -44,8 +45,6 @@ export interface FoundationStudioProps {
   onBack?: () => void;
 }
 
-const categoryLabels: Record<FoundationStudioCategory, string> = { trading: "Trading", fees: "Fees", supply: "Supply", liquidity: "Liquidity", other: "More" };
-const categoryIcons = { trading: SlidersHorizontal, fees: Coins, supply: Layers, liquidity: Waves, other: Puzzle };
 type Panel = "coin" | "quote" | "fees" | string;
 
 /** Presentation only. Wallet preparation, simulation, locking and receipt handling remain in the launch host. */
@@ -53,13 +52,11 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const { draft, catalog, disabled, errors } = props;
   const [chosenPanel, setPanel] = useState<Panel>("coin");
   const [handledErrors, setHandledErrors] = useState("");
-  const [category, setCategory] = useState<"all" | FoundationStudioCategory>("all");
   const [mobilePanel, setMobilePanel] = useState<"modules" | "canvas" | "settings">("canvas");
   const [savedConfigurations, setSavedConfigurations] = useState<Record<string, FoundationModuleSelection["configuration"]>>({});
   const [savedQuote, setSavedQuote] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
   const picker = useRef<HTMLDialogElement>(null);
-  const flowGradient = useId();
   useEffect(() => { if (pickerOpen && picker.current && !picker.current.open) picker.current.showModal(); }, [pickerOpen]);
   const errorSignature = Object.entries(errors).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).sort().join("|");
   const errorPanel = Object.keys(errors).some(key => ["name", "symbol", "description", "image", "initialBuy"].includes(key) || key.startsWith("social-")) ? "coin"
@@ -68,8 +65,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const selected = catalog.find(item => item.id === panel);
   const selection = draft.modules.find(item => item.id === panel);
   const inspectedSelection = selected ? selection ?? foundationStudioSelection(selected, savedConfigurations[selected.id]) : undefined;
-  const modules = foundationStudioModules(catalog, category);
-  const categories = FOUNDATION_STUDIO_CATEGORIES.filter(value => value === "liquidity" && props.canResolveQuote || catalog.some(item => (item.studio?.category ?? "other") === value));
+  const modules = foundationStudioModules(catalog, "all");
   const focusPanel = (id: Panel) => { setHandledErrors(errorSignature); setPanel(id); setMobilePanel("settings"); };
   const closePicker = () => { picker.current?.close(); setPickerOpen(false); };
   const disableQuote = () => { if (draft.quoteAsset) setSavedQuote(draft.quoteAsset); props.onDefaultQuote(); };
@@ -87,12 +83,11 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
     if (existing) { setSavedConfigurations(current => ({ ...current, [descriptor.id]: existing.configuration })); props.onUpdate("modules", draft.modules.filter(item => item.id !== descriptor.id)); }
     else if (!blockedReason(descriptor)) { props.onUpdate("modules", [...draft.modules, foundationStudioSelection(descriptor, savedConfigurations[descriptor.id])]); focusPanel(descriptor.id); }
   };
-  const moduleNodes = draft.modules.slice(0, 3).map(item => ({ id: item.id, name: catalog.find(module => module.id === item.id)?.name ?? "Module", value: undefined, icon: <ModuleLogo category={catalog.find(module => module.id === item.id)?.studio?.category ?? "other"} /> }));
+  const moduleNodes = draft.modules.map(item => ({ id: item.id, name: catalog.find(module => module.id === item.id)?.name ?? "Module", value: undefined, icon: <ModuleLogo category={catalog.find(module => module.id === item.id)?.studio?.category ?? "other"} /> }));
   const nodes = [
     { id: "quote", name: `${draft.symbol || "COIN"} / ${props.quoteSymbol}`, value: undefined, icon: <ModuleLogo quote /> },
     ...(draft.creatorFeeBps ? [{ id: "fees", name: "Creator fees", value: `${draft.creatorFeeBps / 100}%`, icon: <ModuleLogo category="fees" /> }] : []),
     ...moduleNodes,
-    ...(draft.modules.length > 3 ? [{ id: "modules", name: `${draft.modules.length - 3} more modules`, value: "View all", icon: <Layers size={20} /> }] : []),
   ];
   const updateSocial = (key: ModuleSocialKind, value: string) => props.onSocialChange
     ? props.onSocialChange(key, value) : props.onUpdate("socialLinks", { ...draft.socialLinks, [key]: value });
@@ -108,9 +103,8 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
     <fieldset className={styles.workspace} disabled={disabled} data-mobile-panel={errorPanel && errorSignature !== handledErrors ? "settings" : mobilePanel}>
       <aside id="studio-module-library" tabIndex={-1} className={styles.library} aria-label="Module library">
         <div className={styles.panelHeading}><h2>Modules</h2></div>
-        <div className={styles.categoryTabs} aria-label="Module categories"><button type="button" aria-label="All modules" title="All modules" aria-pressed={category === "all"} onClick={() => setCategory("all")}><LayoutGrid size={18} aria-hidden="true" /></button>{categories.map(value => { const Icon = categoryIcons[value]; return <button type="button" key={value} aria-label={categoryLabels[value]} title={categoryLabels[value]} aria-pressed={category === value} onClick={() => setCategory(value)}><Icon size={18} aria-hidden="true" /></button>; })}</div>
         <div className={styles.moduleList}>
-          {(category === "all" || category === "liquidity") && props.canResolveQuote ? <div className={styles.moduleCard} data-active={props.customQuote}>
+          {props.canResolveQuote ? <div className={styles.moduleCard} data-active={props.customQuote}>
             <button type="button" className={styles.moduleName} onClick={() => props.customQuote ? focusPanel("quote") : enableQuote()}><ModuleLogo quote /><span>Any Quote Pool</span></button>
             <button type="button" className={styles.toggle} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}><span /></button>
           </div> : null}
@@ -123,22 +117,9 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       </aside>
 
       <section className={styles.market} aria-label="Coin composition">
-        <div className={styles.canvas}>
-          <button type="button" className={styles.canvasAdd} aria-label="Add module" onClick={() => setPickerOpen(true)} />
-          <svg className={styles.connections} viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-            <defs><linearGradient id={flowGradient} x1="15" y1="15" x2="85" y2="75" gradientUnits="userSpaceOnUse"><stop stopColor="#ad95e9" /><stop offset=".5" stopColor="#d7b4d2" /><stop offset="1" stopColor="#ef8a91" /></linearGradient></defs>
-            {nodes.map((node, i) => {
-              const right = i % 2 === 1;
-              const y = 18 + Math.floor(i / 2) * (64 / Math.max(1, Math.ceil(nodes.length / 2) - 1));
-              const path = `M 50 50 C ${right ? 69 : 31} 50, ${right ? 69 : 31} ${y}, ${right ? 83 : 17} ${y}`;
-              return <g key={node.id} className={styles.connection} data-active={panel === node.id}><path className={styles.connectionBase} d={path} pathLength={100} stroke={`url(#${flowGradient})`} /><path className={styles.connectionPulse} d={path} pathLength={100} stroke={`url(#${flowGradient})`} style={{ animationDelay: `${-i * 1.7}s` }} /></g>;
-            })}
-          </svg>
-          {nodes.map((node, i) => <button key={node.id} type="button" className={styles.flowNode} title={node.name} style={{ left: i % 2 ? "auto" : 16, right: i % 2 ? 16 : "auto", top: `${18 + Math.floor(i / 2) * (64 / Math.max(1, Math.ceil(nodes.length / 2) - 1))}%` }} onClick={() => node.id === "modules" ? setPickerOpen(true) : focusPanel(node.id)} aria-pressed={panel === node.id}><span className={styles.nodeIcon}>{node.icon}</span><strong>{node.name}</strong>{node.value ? <span className={styles.nodeValue}>{node.value}</span> : null}</button>)}
-          <button type="button" className={styles.coinNode} onClick={() => focusPanel("coin")} aria-label="Edit coin details" aria-pressed={panel === "coin"}>
+        <StudioCanvas nodes={nodes} activeId={panel} disabled={disabled} onSelect={focusPanel} onAdd={() => setPickerOpen(true)} coin={<>
             <div className={styles.coinArtwork}><Image src={props.imageSource ?? FOUNDATION_DEFAULT_IMAGE.url} alt={`${draft.name || "Your coin"} artwork`} width={168} height={168} unoptimized onError={props.onImageError} /></div><strong>{draft.name || "Your coin"}</strong><span>${draft.symbol || "COIN"}</span><div className={styles.coinPair}>{draft.symbol || "COIN"} / {props.quoteSymbol}</div>
-          </button>
-        </div>
+        </>} />
       </section>
 
       <aside className={styles.inspector} aria-label="Settings">
@@ -184,16 +165,11 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closePicker();
     }}>
       <div className={styles.pickerHeading}><h2 id="studio-picker-title">Add module</h2><button type="button" aria-label="Close module list" onClick={closePicker} autoFocus><X size={20} /></button></div>
-      <div className={styles.pickerList}>{FOUNDATION_STUDIO_CATEGORIES.map(group => {
-        const groupModules = foundationStudioModules(catalog, group);
-        const quote = group === "liquidity" && props.canResolveQuote;
-        if (!groupModules.length && !quote) return null;
-        const Icon = categoryIcons[group];
-        return <section key={group} className={styles.pickerGroup} aria-label={categoryLabels[group]}><h3><Icon size={16} aria-hidden="true" />{categoryLabels[group]}</h3>
-          {quote ? <button type="button" disabled={disabled} className={styles.pickerModule} onClick={() => { closePicker(); if (props.customQuote) focusPanel("quote"); else enableQuote(); }}><ModuleLogo quote /><span className={styles.pickerModuleLabel}>Any Quote Pool</span>{props.customQuote ? <Check size={18} /> : <Plus size={18} />}</button> : null}
-          {groupModules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <button type="button" key={module.id} className={styles.pickerModule} disabled={disabled || Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => { closePicker(); if (enabled) focusPanel(module.id); else toggle(module); }}><ModuleLogo category={module.studio?.category ?? "other"} /><span className={styles.pickerModuleLabel}>{module.name}</span>{enabled ? <Check size={18} /> : <Plus size={18} />}</button>; })}
-        </section>;
-      })}{!catalog.length && !props.canResolveQuote ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}</div>
+      <div className={styles.pickerList}>
+        {props.canResolveQuote ? <button type="button" disabled={disabled} className={styles.pickerModule} onClick={() => { closePicker(); if (props.customQuote) focusPanel("quote"); else enableQuote(); }}><ModuleLogo quote /><span className={styles.pickerModuleLabel}>Any Quote Pool</span>{props.customQuote ? <Check size={18} /> : <Plus size={18} />}</button> : null}
+        {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <button type="button" key={module.id} className={styles.pickerModule} disabled={disabled || Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => { closePicker(); if (enabled) focusPanel(module.id); else toggle(module); }}><ModuleLogo category={module.studio?.category ?? "other"} /><span className={styles.pickerModuleLabel}>{module.name}</span>{enabled ? <Check size={18} /> : <Plus size={18} />}</button>; })}
+        {!catalog.length && !props.canResolveQuote ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}
+      </div>
     </dialog> : null}
   </form>;
 }
