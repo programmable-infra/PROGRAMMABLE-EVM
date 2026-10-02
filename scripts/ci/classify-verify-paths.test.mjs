@@ -210,6 +210,14 @@ test("routes ordinary website changes only to the interface lane", () => {
   });
 });
 
+test("checks the closed owner publisher surface without unrelated product lanes", () => {
+  const paths = ["main.ts", "journal.ts", "operator.mjs", "README.md"].map(name => `ops/module-owner-publication/${name}`);
+  assert.deepEqual(classifyVerifyPaths(paths), { ...none, interface: true });
+  for (const path of ["ops/module-owner-publication/unknown.ts", "config/module-foundation/owner-publishers.json", "package-lock.json"])
+    assert.deepEqual(classifyVerifyPaths([...paths, path]), classifyVerifyPaths([], { forceAll: true }));
+  assert.deepEqual(classifyVerifyPaths([...paths, "contracts/src/Router.sol"]), { ...none, interface: true, contracts: true });
+});
+
 test("classifies an explicit Custom V2 release against the current full tree", () => {
   assert.deepEqual(
     classifyVerifyPaths([], { customV2Release: true }),

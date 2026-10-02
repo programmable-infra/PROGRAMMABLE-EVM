@@ -27,14 +27,23 @@ libraries require resolved artifacts; they cannot be published as zero-filled by
 
 For an already deployed exact factory, pass `deploymentTransactionHash`. Otherwise the operator
 deploys it itself with 0 ETH value. `maximumGasCostWei` bounds deployment gas; its default is
-0.001 ETH. It records signed transaction bytes before sending. If a run stops after sending or
-publishing, inspect that journal and reconcile the hash before starting another run. Successful
-tests and deployment are recorded in `publication.json`; `complete.json` confirms storage readback.
+0.001 ETH. It records signed transaction bytes before sending. Repeat the exact command and output
+directory after an interruption. The operator reconciles that transaction's receipt or resends its
+identical signed bytes. It never allocates a replacement nonce during recovery.
 
-Repeat the same command and output directory to reconcile an existing signed publication without
-rerunning tests or sending another transaction. A stopped deployment without `publication.json`
-requires receipt reconciliation first.
+`tests-passed.json` checkpoints one successful module test command. Recovery reuses it while the
+working files, job, test environment, report and compiled artifacts still match. Changed inputs
+require fresh tests. `publication.json` checkpoints the signed release; a catalog/network failure
+after that point only repeats runtime verification and storage publication. `complete.json` confirms
+the exact signed record was read back. Keep credentials and journals outside the Git working files;
+run only one operator at a time for each run directory and publication wallet.
 
-New package versions are retained alongside previous versions. Existing launches keep their
+Independent RPC reads and up to four catalog modules are checked in parallel. Concurrent website
+requests share an in-flight catalog read; later requests read fresh data. Publication conflicts
+merge the latest catalog with up to three attempts without retesting or redeploying. Changes to
+these exact operator files use the Interface CI lane; Solidity, configuration, dependency and
+unknown operations changes retain their own required checks.
+
+New package versions have distinct package IDs. Existing launches keep their
 onchain module instances. The live host must still match the publication's protocol release digest.
 Publishing is an owner release, not an independent audit or a contributor review decision.
