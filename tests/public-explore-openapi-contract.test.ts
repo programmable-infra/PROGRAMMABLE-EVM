@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({ snapshot: vi.fn(),
   markets: vi.fn().mockResolvedValue(new Map()), presentations: vi.fn().mockResolvedValue([]),
+  codexMarkets: vi.fn().mockResolvedValue(new Map()),
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ unstable_cache: (read: () => unknown) => read }));
@@ -14,6 +15,7 @@ vi.mock("@/lib/server/robinhood-index/store", () => ({ indexStore: () => ({ read
 vi.mock("@/lib/server/robinhood-presentation", () => ({
   readRobinhoodMarkets: mocks.markets, readRobinhoodPresentations: mocks.presentations,
 }));
+vi.mock("@/lib/server/codex-market", () => ({ readCodexMarkets: mocks.codexMarkets }));
 
 import { programmablePublicOpenApi } from "../lib/public-openapi";
 import { readEthereumLaunches } from "../lib/server/ethereum-explore";
@@ -218,6 +220,22 @@ describe("public Explore OpenAPI contract", () => {
       expect(validate({ ...value, chainId: 4663 })).toBe(false);
       expect(validate({ ...value, status: "syncing" })).toBe(false);
     }
+  });
+
+  it("validates Codex observations returned for a verified Ethereum launch", async () => {
+    const validate = validator("EthereumExplorePage");
+    const updatedAt = "2026-10-02T00:00:00.000Z";
+    const market = { poolId: `0x${"ab".repeat(32)}`, priceUsd: 0.001, marketCapUsd: 1_000_000,
+      fdvUsd: 1_000_000, valuationKind: "market-cap", source: "codex",
+      liquidityUsd: 25_000, volume24hUsd: 250, change24hPercent: 5,
+      observedAt: updatedAt, sourceUrl: "https://codex.io" };
+    mocks.codexMarkets.mockResolvedValueOnce(new Map([[customGraphExploreEntry.tokenAddress.toLowerCase(), market]]));
+    const empty = async () => ({ status: "current" as const, generatedAt: updatedAt, entries: [] });
+    const custom = async () => ({ status: "current" as const, generatedAt: updatedAt, entries: [customGraphExploreEntry] });
+    const value = await readEthereumLaunches(1, "", { sort: "newest" }, 10, { classic: empty, custom });
+    expect(value.presentations[0].market).toEqual(market);
+    expect(validate(JSON.parse(JSON.stringify(value))), JSON.stringify(validate.errors)).toBe(true);
+    expect(validate({ ...value, presentations: [{ ...value.presentations[0], market: { ...market, source: "unknown" } }] })).toBe(false);
   });
 
   it("validates the actual Robinhood reader's saved-index statuses and source evidence", async () => {

@@ -118,7 +118,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
             <button type="button" className={styles.toggle} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}><span /></button>
           </div> : null}
           {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <div className={styles.moduleCard} key={`${module.id}:${module.version}`} data-active={enabled} data-unavailable={!module.available}>
-            <button type="button" className={styles.moduleName} aria-pressed={enabled} onClick={() => blockedReason(module) ? focusPanel(module.id) : toggle(module)}><ModuleLogo category={module.studio?.category ?? "other"} /><span>{module.name}</span></button>
+            <button type="button" className={styles.moduleName} aria-pressed={enabled} onClick={() => !enabled && blockedReason(module) ? focusPanel(module.id) : toggle(module)}><ModuleLogo category={module.studio?.category ?? "other"} /><span>{module.name}</span></button>
             <button type="button" className={styles.toggle} role="switch" aria-label={module.name} aria-checked={enabled} disabled={!enabled && Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => toggle(module)}><span /></button>
           </div>; })}
           {!catalog.length ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}

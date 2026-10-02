@@ -28,10 +28,13 @@ describe("profile selected public Robinhood API contract", () => {
   it("preserves the historical launch profile while website OpenAPI 1.16 adds Codex observations", async () => {
     const actual = await document("4.0.0");
     expect(actual.info.version).toBe("1.16.0");
-    const serialized = JSON.stringify({ ...actual, info: { ...actual.info, version: "1.15.0" } });
+    const previous = JSON.parse(JSON.stringify(actual));
+    previous.info.version = "1.15.0";
+    previous.components.schemas.EthereumExplorePage.properties.presentations.items.properties.market = { type: "null" };
+    const serialized = JSON.stringify(previous);
     const sources = '"enum":["codex","dexscreener","uniswap-v4"]';
     expect(serialized).toContain(sources);
-    // Only the website version and added market source may differ from the retained snapshot.
+    // Only the website version, Ethereum market observations and added source may differ.
     const historical = serialized.replace(sources, '"enum":["dexscreener","uniswap-v4"]');
     const expectedDigest = readFileSync(new URL("./fixtures/public-openapi-v40-website-v115.sha256", import.meta.url), "utf8").trim();
     expect(createHash("sha256").update(historical).digest("hex")).toBe(expectedDigest);

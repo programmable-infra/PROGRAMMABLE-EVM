@@ -12,7 +12,7 @@ import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 
 type Metadata = Pick<RobinhoodCoinPresentation, "imageUrl" | "description" | "links">;
 const MAX_RESPONSE_BYTES = 1_000_000;
-const labels = { website: "Website", x: "X", telegram: "Telegram", discord: "Discord", github: "GitHub", gitbook: "GitBook", other: "Project link" };
+const labels = { website: "Website", x: "X", telegram: "Telegram", discord: "Discord", github: "GitHub", gitbook: "GitBook", other: "Other link" };
 const metadataData = encodeFunctionData({ abi: uerc20ReadAbi, functionName: "metadata" });
 const creatorData = encodeFunctionData({ abi: uerc20ReadAbi, functionName: "creator" });
 const metadataHashData = encodeFunctionData({ abi: foundationTokenAbi, functionName: "metadataHash" });

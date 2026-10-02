@@ -82,7 +82,7 @@ export const chainExploreSchemas = {
   EthereumExplorePage: object({ chainId: { const: 1 }, status: { enum: ["ready", "partial", "stale", "unavailable"] },
     sources: object({ classic: sourceStatus, custom: sourceStatus }),
     sourceEvidence: object({ classic: ethereumSource, custom: ethereumSource }), updatedAt: nullable(timestamp),
-    items: { ...array(ethereumItem), maxItems: 50 }, presentations: { ...array(presentation({ type: "null" })), maxItems: 50 }, page }),
+    items: { ...array(ethereumItem), maxItems: 50 }, presentations: { ...array(presentation(market)), maxItems: 50 }, page }),
   RobinhoodExplorePage: object({ chainId: { const: 4663 }, status: { enum: ["ready", "syncing", "stale", "unavailable"] },
     updatedAt: nullable(timestamp), items: { ...array(robinhoodItem), maxItems: 50 }, page,
     sourceEvidence: nullable(object({ router: robinhoodSource, modules: array(moduleSource), launchProjections: launchProjectionSource })),
