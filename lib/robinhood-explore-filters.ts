@@ -19,7 +19,7 @@ export type RobinhoodExploreFilters = {
   mode?: typeof LAUNCH_MODE_OPTIONS[number]["value"] | "classic";
 };
 
-export const DEFAULT_EXPLORE_FILTERS: RobinhoodExploreFilters = { sort: "newest", mode: "all" };
+export const DEFAULT_EXPLORE_FILTERS: RobinhoodExploreFilters = { sort: "highest", mode: "all" };
 
 export function activeExploreFilterCount(filters: RobinhoodExploreFilters) {
   return Number((filters.mode ?? "all") !== "all");

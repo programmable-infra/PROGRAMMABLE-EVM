@@ -166,7 +166,7 @@
 }
 
 .cardLink .artwork, .skeletonArtwork { aspect-ratio: auto; border-radius: 10px; height: clamp(100px, 14svh, 136px); width: 100%; flex-shrink: 0; }
-.cardLink .artwork img { object-fit: contain; }
+.cardLink .artwork img { object-fit: cover; object-position: center; }
 .cardLink { color: inherit; display: flex; flex: 1; flex-direction: column; min-width: 0; text-decoration: none; }
 .socials { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); margin-top: 0; max-width: 176px; }
 .socials a { width: 100%; }

@@ -82,7 +82,7 @@ describe("topbar and Explore hero polish", () => {
     expect(navigation).not.toContain("warmedNavigationRoutes");
     for (const label of [
       "Explore",
-      "Launch a coin",
+      "Launch a token",
       "Launch options",
       "Docs",
       "API keys",
