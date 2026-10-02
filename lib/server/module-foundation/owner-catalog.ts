@@ -9,6 +9,17 @@ import type { FoundationAvailabilityEnvelope } from "@/lib/module-foundation/ava
 import { FOUNDATION_OWNER_CATALOG_PATH, FOUNDATION_OWNER_CATALOG_V1, foundationOwnerReferenceV1,
  } from "@/lib/module-foundation/owner-publication";
 
+// Share concurrent requests only. A later request always reads the current catalog/runtime.
+const pendingReads = new Map<string, Promise<unknown[]>>();
+let sharedClient: PublicClient | undefined;
+async function readCurrentCatalog(token: string): Promise<unknown[]> {
+  const existing = pendingReads.get(token);
+  if (existing) return existing;
+  const pending = readFoundationOwnerCatalogV1(token);
+  pendingReads.set(token, pending);
+  try { return await pending; } finally { if (pendingReads.get(token) === pending) pendingReads.delete(token); }
+}
+
 function ownerClient(): PublicClient {
   return createPublicClient({ chain: robinhoodChain, transport: fallback([
     http(ROBINHOOD_MAINNET_RPC_URL, { timeout: 15_000, retryCount: 0 }),
@@ -35,20 +46,29 @@ export async function withFoundationOwnerCatalogV1(availability: FoundationAvail
   const token = process.env.OPS_BLOB_READ_WRITE_TOKEN?.trim();
   if (!dependencies.read && !token) return availability;
   let values: unknown[];
-  try { values = await (dependencies.read?.() ?? readFoundationOwnerCatalogV1(token!)); } catch { return availability; }
+  try { values = await (dependencies.read?.() ?? readCurrentCatalog(token!)); } catch { return availability; }
+  if (!values.length) return availability;
+  const client = dependencies.client ?? (sharedClient ??= ownerClient());
+  const verified: Awaited<ReturnType<typeof verifyFoundationOwnerPublicationV1>>[] = [];
+  // Bound provider concurrency as the catalog grows, while preserving catalog order.
+  for (let offset = 0; offset < values.length; offset += 4) {
+    const batch = await Promise.allSettled(values.slice(offset, offset + 4).map(async value => {
+      const publication = await verifyFoundationOwnerPublicationV1(value, publishers.wallets);
+      if (publication.protocolReleaseDigest !== availability.binding!.releaseDigest) return null;
+      await verifyFoundationOwnerRuntimeV1(publication, client);
+      return publication;
+    }));
+    for (const result of batch) if (result.status === "fulfilled" && result.value) verified.push(result.value);
+  }
   const entries = [...availability.catalog.document.entries], admissions = [...availability.catalog.authority.admissions], releases = [...availability.catalog.authority.releases];
   const ids = new Set<string>();
-  for (const value of values) {
-    try {
-      const p = await verifyFoundationOwnerPublicationV1(value, publishers.wallets);
-      if (p.protocolReleaseDigest !== availability.binding.releaseDigest || ids.has(p.manifest.packageId)) continue;
-      await verifyFoundationOwnerRuntimeV1(p, dependencies.client ?? ownerClient());
-      ids.add(p.manifest.packageId);
-      const reference = foundationOwnerReferenceV1(p), entry = { manifest: p.manifest, review: reference, release: p.release };
-      const index = entries.findIndex(e => e.manifest.packageId === p.manifest.packageId);
-      if (index < 0) entries.push(entry); else entries[index] = entry;
-      admissions.push(reference); releases.push(p.release);
-    } catch { /* An invalid owner publication cannot change the active modules. */ }
+  for (const p of verified) {
+    if (ids.has(p.manifest.packageId)) continue;
+    ids.add(p.manifest.packageId);
+    const reference = foundationOwnerReferenceV1(p), entry = { manifest: p.manifest, review: reference, release: p.release };
+    const index = entries.findIndex(e => e.manifest.packageId === p.manifest.packageId);
+    if (index < 0) entries.push(entry); else entries[index] = entry;
+    admissions.push(reference); releases.push(p.release);
   }
   return { ...availability, catalog: { document: { ...availability.catalog.document, entries }, authority: { admissions, releases } } };
 }

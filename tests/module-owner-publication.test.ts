@@ -47,7 +47,10 @@ describe("direct owner module publication", () => {
       getTransactionReceipt: vi.fn(async () => ({ status: "success", contractAddress: p.release.factory, blockNumber: 100n, transactionHash: p.deployment.transactionHash, blockHash })),
       getTransaction: vi.fn(async () => ({ hash: p.deployment.transactionHash, to: null, value: 0n, input: "0x6000", blockHash })),
       getBlock: vi.fn(async () => ({ hash: blockHash })) };
-    await expect(verifyFoundationOwnerRuntimeV1(p, client as unknown as PublicClient)).resolves.toBeUndefined();
+    await expect(Promise.all([verifyFoundationOwnerRuntimeV1(p, client as unknown as PublicClient),
+      verifyFoundationOwnerRuntimeV1(p, client as unknown as PublicClient)])).resolves.toEqual([undefined, undefined]);
+    expect(client.getChainId).toHaveBeenCalledTimes(1);
+    expect(client.getCode).toHaveBeenCalledTimes(1);
     client.getCode.mockResolvedValueOnce("0x6001");
     await expect(verifyFoundationOwnerRuntimeV1(p, client as unknown as PublicClient)).rejects.toThrow();
     client.getBlock.mockResolvedValueOnce({ hash: hash("reorg") });

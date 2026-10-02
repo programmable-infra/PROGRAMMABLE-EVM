@@ -134,6 +134,15 @@ const CUSTOM_V2_EXACT_PATHS = new Set([
   "scripts/test/custom-v2-production-workflow-contract.test.mjs",
 ]);
 
+// This operator only publishes signed Foundation owner records. Its source and journal
+// regression tests run in Interface; it changes no Solidity, backend, DB or indexer.
+const OWNER_PUBLICATION_PATHS = new Set([
+  "ops/module-owner-publication/main.ts",
+  "ops/module-owner-publication/journal.ts",
+  "ops/module-owner-publication/operator.mjs",
+  "ops/module-owner-publication/README.md",
+]);
+
 function isCustomV2OnlyPath(path) {
   return CUSTOM_V2_EXACT_PATHS.has(path)
     || /^app\/api\/custom-launch\/(?:generic|registry)\/v2\//u.test(path)
@@ -233,6 +242,10 @@ export function classifyVerifyPaths(
     // market read-model gates.
     if (isCustomV2OnlyPath(path)) {
       scope.custom_v2 = true;
+      continue;
+    }
+    if (OWNER_PUBLICATION_PATHS.has(path)) {
+      scope.interface = true;
       continue;
     }
 
