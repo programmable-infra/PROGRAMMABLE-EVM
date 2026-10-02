@@ -97,3 +97,20 @@ int_types = "long"
 quote_style = "double"
 number_underscore = "thousands"
 wrap_comments = true
+
+# Staged automatic tax modules. This profile never changes a live release or catalog.
+[profile.tax-automation]
+skip = []
+src = "src/module-foundation/modules/tax-automation"
+test = "test/module-foundation/tax-automation"
+script = "script/module-foundation/modules/tax-automation"
+out = "out/tax-automation"
+cache_path = "cache/tax-automation"
+via_ir = true
+optimizer_runs = 200
+auto_detect_remappings = false
+
+fs_permissions = [{ access = "read", path = "./test/module-foundation/tax-automation/fixtures" }]
+
+[profile.tax-automation.fuzz]
+runs = 256
