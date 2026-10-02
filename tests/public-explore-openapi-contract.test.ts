@@ -251,9 +251,9 @@ describe("public Explore OpenAPI contract", () => {
       blockNumber: "1", blockHash: hash, logIndex: 0, launchedAt: updatedAt, name: "Coin", symbol: "COIN", decimals: 18 };
     mocks.snapshot.mockResolvedValue({ snapshot: { version: 1, chainId: 4663, routerAddress: address, binding: hash,
       startBlock: "1", cursor: { number: "3", hash }, finalizedBlock: "3", updatedAt, items: [token] } });
-    for (const source of ["uniswap-v4", "dexscreener"] as const) {
-      const market = { poolId: hash, priceUsd: 0.001, marketCapUsd: source === "dexscreener" ? 1_000_000 : null,
-        fdvUsd: 1_000_000, valuationKind: source === "dexscreener" ? "market-cap" : "fdv", source,
+    for (const source of ["uniswap-v4", "dexscreener", "codex"] as const) {
+      const market = { poolId: hash, priceUsd: 0.001, marketCapUsd: source === "uniswap-v4" ? null : 1_000_000,
+        fdvUsd: 1_000_000, valuationKind: source === "uniswap-v4" ? "fdv" : "market-cap", source,
         ...(source === "uniswap-v4" ? { blockNumber: "3", blockHash: hash } : {}),
         liquidityUsd: null, volume24hUsd: source === "dexscreener" ? 250 : null, change24hPercent: null,
         quoteAsset: { address: `0x${"00".repeat(20)}`, symbol: source === "dexscreener" ? "ETH" : null },
@@ -286,7 +286,7 @@ describe("public Explore OpenAPI contract", () => {
       launchProjections: { version: 1, sourceUrl: LAUNCH_PROJECTION_FEED_V1, updatedAt, nextCursor: null, items: [row] },
     } });
     const value = await readRobinhoodLaunches();
-    expect(value.items).toEqual([]);
+    expect(value.items).toEqual([row]);
     const detail = await readRobinhoodToken(row.tokenAddress);
     expect(detail.token).toEqual(row);
     expect(detail.token?.primaryAssetAddress).toBe(primaryComponentId ? row.tokenAddress : null);

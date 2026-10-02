@@ -23,7 +23,7 @@ const market = nullable(object({ poolId: text, priceUsd: nullable({ type: "numbe
   volume24hUsd: nullable({ type: "number" }), change24hPercent: nullable({ type: "number" }),
   observedAt: timestamp, sourceUrl: text,
   fdvUsd: nullable({ type: "number" }), valuationKind: { enum: ["market-cap", "fdv"] },
-  source: { enum: ["dexscreener", "uniswap-v4"] }, blockNumber: block, blockHash: hash,
+  source: { enum: ["codex", "dexscreener", "uniswap-v4"] }, blockNumber: block, blockHash: hash,
   quoteAsset: object({ address, symbol: nullable(text) }),
 }, ["poolId", "priceUsd", "marketCapUsd", "liquidityUsd", "volume24hUsd", "change24hPercent", "observedAt", "sourceUrl"]));
 const presentation = (marketSchema: Schema) => object({ tokenAddress: address,
