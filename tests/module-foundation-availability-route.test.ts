@@ -4,6 +4,8 @@ import { GET, maxDuration } from "@/app/api/module-foundation/route";
 import { FOUNDATION_AVAILABILITY_SCHEMA, unavailableFoundation } from "@/lib/module-foundation/availability";
 import { readFoundationAvailabilityResponse } from "@/lib/server/module-foundation/availability";
 
+vi.mock("server-only", () => ({}));
+
 function availableFixture() {
   const digest = `0x${"a".repeat(64)}`;
   return { ...unavailableFoundation(), schemaVersion: FOUNDATION_AVAILABILITY_SCHEMA, available: true, reason: null,
@@ -18,6 +20,7 @@ function availableFixture() {
 beforeEach(() => {
   vi.useFakeTimers();
   vi.stubEnv("PROGRAMMABLE_CUSTOM_LAUNCH_API_BASE_URL", "https://foundation-authority.example");
+  vi.stubEnv("OPS_BLOB_READ_WRITE_TOKEN", "");
   // Native AbortSignal.timeout does not use Vitest's clock. Only its scheduler is replaced;
   // the actual GET, helper, parser, abort event and fail-closed response run together.
   vi.spyOn(AbortSignal, "timeout").mockImplementation(milliseconds => {
