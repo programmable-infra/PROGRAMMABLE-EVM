@@ -9,7 +9,7 @@ export function RobinhoodProjectLinks({ links, name, className = "" }: {
   name: string;
   className?: string;
 }) {
-  const visibleLinks = links.filter((link) => link.label.toLowerCase() !== "github" && !isGitHubUrl(link.url));
+  const visibleLinks = links.filter((link) => link.label === "Other link" || (link.label.toLowerCase() !== "github" && !isGitHubUrl(link.url)));
   if (visibleLinks.length === 0) return null;
   return <nav className={`${styles.links} ${className}`} aria-label={`${name} links`}>
     {visibleLinks.map((link) => <a key={`${link.label}:${link.url}`} href={link.url}
