@@ -115,7 +115,7 @@ describe("Explore source filters and card pagination", () => {
 
 describe("Explore query compatibility", () => {
   it("defaults existing API requests to fifty and accepts six, eight or ten", () => {
-    expect(parseRobinhoodExploreQuery(new URLSearchParams())).toEqual({ page: 1, pageSize: 50, q: "", filters: { sort: "highest", mode: "all" } });
+    expect(parseRobinhoodExploreQuery(new URLSearchParams())).toEqual({ page: 1, pageSize: 50, q: "", filters: { sort: "newest", mode: "all" } });
     expect(parseRobinhoodExploreQuery(new URLSearchParams("sort=activity"))?.filters.sort).toBe("activity");
     expect(parseRobinhoodExploreQuery(new URLSearchParams("pageSize=6"))?.pageSize).toBe(6);
     expect(parseRobinhoodExploreQuery(new URLSearchParams("pageSize=8"))?.pageSize).toBe(8);

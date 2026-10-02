@@ -49,6 +49,7 @@ describe("Explore toolbar and loading structure", () => {
     expect(html).toContain(">Newest</button>");
     expect(html).toContain(">24h volume</button>");
     expect(html).toContain(">Market cap</button>");
+    expect(html).toMatch(/<button\b[^>]*aria-pressed="true"[^>]*>Market cap<\/button>/);
     expect(html).not.toContain("Page 1 of");
     expect(html).not.toContain(">Previous<");
     expect(html).not.toContain(">Next<");
