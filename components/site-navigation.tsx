@@ -27,7 +27,7 @@ import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
   { href: "/explore", label: "Explore" },
-  { href: "/launch", label: "Launch a coin", activePath: "/launch" },
+  { href: "/launch", label: "Launch a token", activePath: "/launch" },
 ];
 
 const menuNavItems = [
@@ -362,7 +362,7 @@ export function SiteHeader() {
           prefetch={false}
           aria-current={pathname.startsWith("/launch") ? "page" : undefined}
         >
-          Launch a coin
+          Launch a token
         </Link>
 
         <div className={`header-actions ${styles.headerActions}`}>

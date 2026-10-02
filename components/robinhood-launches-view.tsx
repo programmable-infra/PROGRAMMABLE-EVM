@@ -58,6 +58,7 @@ const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const HASH = /^0x[0-9a-f]{64}$/i;
 const REFRESH_MS = 30_000;
 const REQUEST_TIMEOUT_MS = 15_000;
+const ROBINHOOD_WEBSITE_FILTERS: RobinhoodExploreFilters = { ...DEFAULT_EXPLORE_FILTERS, sort: "highest" };
 
 // Public, browser-only navigation state. Nothing is written during server rendering.
 const rememberedSnapshots = new Map<ViewChainId, { value: Snapshot; savedAt: number }>();
@@ -134,7 +135,7 @@ export function RobinhoodLaunchesView({
 
 function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; enabled: boolean; chainId: ViewChainId }) {
   const chainName = chainId === 4663 ? "Robinhood" : "Ethereum";
-  const defaultFilters = chainId === 4663 ? DEFAULT_EXPLORE_FILTERS : ETHEREUM_EXPLORE_FILTERS;
+  const defaultFilters = chainId === 4663 ? ROBINHOOD_WEBSITE_FILTERS : ETHEREUM_EXPLORE_FILTERS;
   const headingId = useId();
   const searchId = useId();
   const statusId = useId();
