@@ -116,8 +116,10 @@ function HeaderWalletButton({ onOpen, accountInMenu = false }: Readonly<{ onOpen
       ? openingWallet ? "Opening wallet" : "Loading wallet"
       : hasSession ? "Reconnect wallet" : "Connect wallet";
 
+  // Module Mode keeps wallet actions in the menu and the launch action, including during session restoration.
+  if (accountInMenu) return null;
+
   if (wallet) {
-    if (accountInMenu) return null;
     return <span className={styles.headerWalletSummary} aria-label={`Connected wallet ${shortenAddress(wallet.account)}`}>
       {shortenAddress(wallet.account)}
     </span>;
