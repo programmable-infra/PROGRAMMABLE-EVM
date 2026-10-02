@@ -27,6 +27,15 @@ describe("Foundation social input", () => {
     expect(validateModuleSocialLinks(normalizeFoundationSocialInputs({ twitter: input })).ok).toBe(true);
   });
 
+  it.each(["example_user", "@example_user", " @ example_user ", "t.me/example_user", "telegram.me/example_user", "http://t.me/example_user", "https://t.me/example_user"])("accepts Telegram input %s", input => {
+    const links = normalizeFoundationSocialInputs({ telegram: input });
+    expect(links.telegram).toBe("https://t.me/example_user");
+    expect(validateModuleSocialLinks(links).ok).toBe(true);
+  });
+  it("normalizes added project links and spaced X handles", () => {
+    expect(normalizeFoundationSocialInputs({ twitter: "@ example", other: ["docs.example.com", "http://example.com/community"] })).toEqual({ twitter: "https://x.com/example", other: ["https://docs.example.com", "https://example.com/community"] });
+  });
+
   it.each([
     { website: "javascript:alert(1)" },
     { website: "http://user:password@programmable.market" },

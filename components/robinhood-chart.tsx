@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { coinDollars, ROBINHOOD_MARKET_MAX_AGE_MS, type RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
+import { CodexPriceChart } from "./codex-price-chart";
 import styles from "./robinhood-token-view.module.css";
 import liveStyles from "./robinhood-live-chart.module.css";
 
-type ChartMarket = RobinhoodCoinMarket & Readonly<{ source?: "dexscreener" | "uniswap-v4" }>;
-type ChartProps = Readonly<{ poolId: string; name: string; market?: ChartMarket | null; chainId?: 1 | 4663 }>;
+type ChartMarket = RobinhoodCoinMarket & Readonly<{ source?: "dexscreener" | "uniswap-v4" | "codex" }>;
+type ChartProps = Readonly<{ poolId: string; tokenAddress?: string; name: string; market?: ChartMarket | null; chainId?: 1 | 4663 }>;
 export type RobinhoodLivePrice = Readonly<{ time: number; price: number }>;
 
 const MAX_POINTS = 120;
@@ -147,6 +148,7 @@ export function TokenPoolChart(props: ChartProps) {
   if (!/^0x[0-9a-f]{64}$/i.test(props.poolId)) return <div className={styles.chart}>
     <div className={styles.chartState} role="status">Chart unavailable.</div>
   </div>;
+  if (props.tokenAddress && /^0x[\da-f]{40}$/i.test(props.tokenAddress)) return <div className={styles.chart}><CodexPriceChart key={`${props.chainId ?? 4663}:${props.tokenAddress.toLowerCase()}`} tokenAddress={props.tokenAddress} chainId={props.chainId ?? 4663} name={props.name} market={props.market} /></div>;
   return <PoolChart key={`${props.chainId ?? 4663}:${props.poolId.toLowerCase()}`} {...props} />;
 }
 

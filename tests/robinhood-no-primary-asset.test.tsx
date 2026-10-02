@@ -51,8 +51,8 @@ describe("launch pages without a primary asset", () => {
     const html = renderToStaticMarkup(<RobinhoodTokenView address={component} token={token} status="ready" />);
     expect(html).toContain("EXIST");
     expect(html).toContain("Market Cap");
-    expect(html).toContain('aria-label="Existing token live price"');
-    expect(html).toContain("Live price is unavailable.");
+    expect(html).toContain('aria-label="Existing token price chart"');
+    expect(html).toContain('aria-label="Loading price history"');
     expect(html).not.toContain("<iframe");
     expect(html).not.toContain("No primary asset is declared");
   });

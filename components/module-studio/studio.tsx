@@ -2,11 +2,11 @@
 
 import Image from "next/image";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { ArrowRight, Check, ChevronDown, Coins, ImagePlus, Plus, Waves, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, ImagePlus, Plus, Waves, X } from "lucide-react";
 import type { FoundationModuleDescriptor, FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
 import { foundationStudioModules, foundationStudioSelection, type FoundationStudioCategory, type FoundationStudioDraft } from "@/lib/module-foundation/studio";
 import { FOUNDATION_DEFAULT_IMAGE } from "@/lib/module-foundation/default-image";
-import type { ModuleSocialKind } from "@/lib/module-mode/token-metadata";
+import { MAX_OTHER_LINKS, type ModuleSocialKind } from "@/lib/module-mode/token-metadata";
 import { normalizeFoundationSocialInput } from "@/lib/module-foundation/social-input";
 import { ModuleFoundationConfigField } from "../module-foundation-config-field";
 import { StudioCanvas } from "./studio-canvas";
@@ -72,7 +72,8 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const modules = foundationStudioModules(catalog, "all");
   const focusPanel = (id: Panel) => { setHandledErrors(errorSignature); setPanel(id); setMobilePanel("settings"); };
   const closePicker = () => { picker.current?.close(); setPickerOpen(false); };
-  const disableQuote = () => { if (draft.quoteAsset) setSavedQuote(draft.quoteAsset); props.onDefaultQuote(); };
+  const nextPanel = (removed: string) => draft.modules.find(item => item.id !== removed)?.id ?? "coin";
+  const disableQuote = () => { if (draft.quoteAsset) setSavedQuote(draft.quoteAsset); props.onDefaultQuote(); if (panel === "quote") focusPanel(nextPanel("quote")); };
   const enableQuote = () => { if (savedQuote) props.onQuoteChange(savedQuote); else props.onEnableQuote(); focusPanel("quote"); };
   const blockedReason = (descriptor: FoundationModuleDescriptor) => {
     if (!descriptor.available) return descriptor.unavailableReason || "Module unavailable";
@@ -84,20 +85,24 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const toggle = (descriptor: FoundationModuleDescriptor) => {
     if (disabled) return;
     const existing = draft.modules.find(item => item.id === descriptor.id);
-    if (existing) { setSavedConfigurations(current => ({ ...current, [descriptor.id]: existing.configuration })); props.onUpdate("modules", draft.modules.filter(item => item.id !== descriptor.id)); }
+    if (existing) { setSavedConfigurations(current => ({ ...current, [descriptor.id]: existing.configuration })); props.onUpdate("modules", draft.modules.filter(item => item.id !== descriptor.id)); if (panel === descriptor.id) focusPanel(nextPanel(descriptor.id)); }
     else if (!blockedReason(descriptor)) { props.onUpdate("modules", [...draft.modules, foundationStudioSelection(descriptor, savedConfigurations[descriptor.id])]); focusPanel(descriptor.id); }
   };
   const moduleNodes = draft.modules.map(item => ({ id: item.id, name: catalog.find(module => module.id === item.id)?.name ?? "Module", value: undefined, icon: <ModuleLogo category={catalog.find(module => module.id === item.id)?.studio?.category ?? "other"} /> }));
   const nodes = [
-    { id: "quote", name: `${draft.symbol || "COIN"} / ${props.quoteSymbol}`, value: undefined, icon: <ModuleLogo quote /> },
+    { id: "quote", name: `$${draft.symbol || "COIN"} / ${props.quoteSymbol}`, value: undefined, icon: <ModuleLogo quote /> },
     ...(draft.creatorFeeBps ? [{ id: "fees", name: "Creator fees", value: `${draft.creatorFeeBps / 100}%`, icon: <ModuleLogo category="fees" /> }] : []),
     ...moduleNodes,
   ];
   const updateSocial = (key: ModuleSocialKind, value: string) => props.onSocialChange
     ? props.onSocialChange(key, value) : props.onUpdate("socialLinks", { ...draft.socialLinks, [key]: value });
+  // Legacy project links remain editable when opening an older saved draft.
+  const otherLinks = [...(["discord", "github", "gitbook"] as const).flatMap(key => draft.socialLinks[key] ? [draft.socialLinks[key]!] : []), ...(draft.socialLinks.other ?? [])];
+  const updateOtherLinks = (other: string[]) => { const links = { ...draft.socialLinks, other }; delete links.discord; delete links.github; delete links.gitbook; props.onUpdate("socialLinks", links); };
+  const settingsPanels = [{ id: "coin", name: "Coin details" }, ...(props.customQuote ? [{ id: "quote", name: "Pool pair" }] : []), ...moduleNodes.map(node => ({ id: node.id, name: node.name }))];
   const field = (key: "name" | "symbol" | "description", label: string, placeholder: string, maxLength: number) => <label className={styles.field}>
     <span>{label}</span>{key === "description" ? <textarea id={`foundation-${key}`} rows={2} maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} onChange={event => props.onUpdate(key, event.target.value)} />
-      : <input id={`foundation-${key}`} autoComplete="off" maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} onChange={event => props.onUpdate(key, key === "symbol" ? event.target.value.toUpperCase() : event.target.value)} />}
+      : <div className={key === "symbol" ? styles.cashtagInput : undefined}>{key === "symbol" ? <span aria-hidden="true">$</span> : null}<input id={`foundation-${key}`} autoComplete="off" maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} onChange={event => props.onUpdate(key, key === "symbol" ? event.target.value.replace(/^\$/, "").toUpperCase() : event.target.value)} /></div>}
     {errors[key] ? <span className={styles.error}>{errors[key]}</span> : null}
   </label>;
 
@@ -109,11 +114,11 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
         <div className={styles.panelHeading}><h2>Modules</h2></div>
         <div className={styles.moduleList}>
           {props.canResolveQuote ? <div className={styles.moduleCard} data-active={props.customQuote}>
-            <button type="button" className={styles.moduleName} onClick={() => props.customQuote ? focusPanel("quote") : enableQuote()}><ModuleLogo quote /><span>Any Quote Pool</span></button>
+            <button type="button" className={styles.moduleName} aria-pressed={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}><ModuleLogo quote /><span>Any Quote Pool</span></button>
             <button type="button" className={styles.toggle} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}><span /></button>
           </div> : null}
           {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <div className={styles.moduleCard} key={`${module.id}:${module.version}`} data-active={enabled} data-unavailable={!module.available}>
-            <button type="button" className={styles.moduleName} onClick={() => enabled || blockedReason(module) ? focusPanel(module.id) : toggle(module)}><ModuleLogo category={module.studio?.category ?? "other"} /><span>{module.name}</span></button>
+            <button type="button" className={styles.moduleName} aria-pressed={enabled} onClick={() => blockedReason(module) ? focusPanel(module.id) : toggle(module)}><ModuleLogo category={module.studio?.category ?? "other"} /><span>{module.name}</span></button>
             <button type="button" className={styles.toggle} role="switch" aria-label={module.name} aria-checked={enabled} disabled={!enabled && Boolean(blockedReason(module))} title={blockedReason(module)} onClick={() => toggle(module)}><span /></button>
           </div>; })}
           {!catalog.length ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}
@@ -122,22 +127,29 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
 
       <section className={styles.market} aria-label="Coin composition">
         <StudioCanvas nodes={nodes} activeId={panel} disabled={disabled} onSelect={focusPanel} onAdd={() => setPickerOpen(true)} coin={<>
-            <div className={styles.coinArtwork}><Image src={props.imageSource ?? FOUNDATION_DEFAULT_IMAGE.url} alt={`${draft.name || "Your coin"} artwork`} width={168} height={168} unoptimized onError={props.onImageError} /></div><strong>{draft.name || "Your coin"}</strong><span>${draft.symbol || "COIN"}</span><div className={styles.coinPair}>{draft.symbol || "COIN"} / {props.quoteSymbol}</div>
+            <div className={styles.coinArtwork}><Image src={props.imageSource ?? FOUNDATION_DEFAULT_IMAGE.url} alt={`${draft.name || "Your coin"} artwork`} width={168} height={168} unoptimized onError={props.onImageError} /></div><strong>{draft.name || "Your coin"}</strong><span>${draft.symbol || "COIN"}</span><div className={styles.coinPair}>${draft.symbol || "COIN"} / {props.quoteSymbol}</div>
         </>} />
       </section>
 
       <aside className={styles.inspector} aria-label="Settings">
+        <nav className={styles.settingsPanels} aria-label="Selected settings">{settingsPanels.map(item => <button key={item.id} type="button" aria-pressed={panel === item.id} onClick={() => focusPanel(item.id)}>{item.name}</button>)}</nav>
         <div className={styles.panelHeading}><h2>{panel === "coin" ? "Coin details" : panel === "quote" ? "Pool pair" : panel === "fees" ? "Creator fees" : panel === "modules" ? "Selected modules" : selected?.name ?? "Settings"}</h2><ModuleLogo quote={panel === "quote"} category={panel === "fees" ? "fees" : selected?.studio?.category ?? "other"} /></div>
         <div className={styles.inspectorContent} key={panel}>
           {panel === "coin" ? <>
             <div className={styles.imageControl}><button type="button" onClick={() => imageInput?.current?.click()}><ImagePlus size={20} />{props.imageSource ? "Change image" : "Add image"}</button>{props.imageSource ? <button type="button" aria-label="Remove coin image" onClick={props.onRemoveImage}><X size={18} /></button> : null}<input className={styles.hiddenInput} ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Coin image file" onChange={event => { props.onChooseImage(event.target.files?.[0]); event.target.value = ""; }} /></div>
             {errors.image ? <div className={styles.error}>{errors.image}</div> : null}
             {field("name", "Name", "Coin name", 48)}{field("symbol", "Ticker", "COIN", 12)}
-            <StudioDetails title="Launch settings" forceOpen={Boolean(errors.initialBuy)}>
+            <section className={styles.baseSection} aria-label="Launch settings"><h3>Launch settings</h3>
               <label className={styles.field}><span>First buy · ETH</span><input id="foundation-initial-buy" inputMode="decimal" value={props.initialBuy} aria-invalid={Boolean(errors.initialBuy) || undefined} placeholder="0" onChange={event => props.onUpdate("initialBuy", event.target.value)} />{errors.initialBuy ? <span className={styles.error}>{errors.initialBuy}</span> : null}</label>
-              <button type="button" className={styles.summaryButton} onClick={() => focusPanel("fees")}><Coins size={18} /><span>Creator fees</span><strong>{draft.creatorFeeBps / 100}%</strong></button>
-            </StudioDetails>
-            <StudioDetails title="Description & links" forceOpen={Boolean(errors.description) || Object.keys(errors).some(key => key.startsWith("social-"))}>{field("description", "Description", "About your coin", 280)}{(["website", "twitter", "telegram", "discord", "github", "gitbook"] as const).map(key => <label key={key} className={styles.field}><span>{key === "twitter" ? "X" : key === "gitbook" ? "Docs" : key[0].toUpperCase() + key.slice(1)}</span><input id={`foundation-social-${key}`} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} placeholder={key === "twitter" ? "@username" : "https://"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} />{errors[`social-${key}`] ? <span className={styles.error}>{errors[`social-${key}`]}</span> : null}</label>)}</StudioDetails>
+              <label className={styles.field}><span>Creator fees · %</span><input id="foundation-creator-fee-inline" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} />{errors.creatorFeeBps ? <span className={styles.error}>{errors.creatorFeeBps}</span> : null}</label>
+            </section>
+            {field("description", "Description", "About your coin", 280)}
+            <section className={styles.baseSection} aria-label="Links"><h3>Links</h3>{(["website", "twitter", "telegram"] as const).map(key => <label key={key} className={styles.field}><span>{key === "twitter" ? "X" : key === "website" ? "Website" : "Telegram"}</span><input id={`foundation-social-${key}`} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} placeholder={key === "website" ? "example.com" : "@username or link"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} />{errors[`social-${key}`] ? <span className={styles.error}>{errors[`social-${key}`]}</span> : null}</label>)}
+              <div className={styles.otherHeading}><h3>Other links</h3><button type="button" aria-label="Add other link" disabled={otherLinks.length >= MAX_OTHER_LINKS} onClick={() => updateOtherLinks([...otherLinks, ""])}><Plus size={17} /></button></div>
+              {otherLinks.map((link, index) => <div key={index} className={styles.otherLink}><label className={styles.field}><span className="sr-only">Other link {index + 1}</span><input value={link} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="https://" aria-invalid={Boolean(errors["social-other"]) || undefined} onChange={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? event.target.value : value))} onBlur={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? normalizeFoundationSocialInput("website", event.target.value) : value))} /></label><button type="button" aria-label={`Remove other link ${index + 1}`} onClick={() => updateOtherLinks(otherLinks.filter((_, i) => i !== index))}><X size={16} /></button></div>)}
+              {errors["social-socialLinks"] ? <span className={styles.error}>{errors["social-socialLinks"]}</span> : null}
+              {errors["social-other"] ? <span className={styles.error}>{errors["social-other"]}</span> : null}
+            </section>
           </> : panel === "quote" ? <>
             <p className={styles.moduleDescription}>Choose the asset people use to buy and sell your coin. Keep ETH or enter another token&apos;s contract address on Robinhood Chain.</p>
             <button type="button" className={styles.quoteChoice} aria-pressed={!props.customQuote} onClick={disableQuote}><Waves size={22} /><strong>ETH</strong>{!props.customQuote ? <Check size={18} /> : null}</button>

@@ -5,7 +5,7 @@ export type RobinhoodCoinMarket = Readonly<{
   /** Total-supply valuation is distinct from circulating market cap. */
   fdvUsd?: number | null;
   valuationKind?: "market-cap" | "fdv";
-  source?: "dexscreener" | "uniswap-v4";
+  source?: "dexscreener" | "uniswap-v4" | "codex";
   /** Quote asset from the identity-matched pool observation. */
   quoteAsset?: Readonly<{ address: string; symbol: string | null }>;
   blockNumber?: string;

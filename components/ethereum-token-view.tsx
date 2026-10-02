@@ -6,15 +6,16 @@ import { TokenPoolChart } from "@/components/robinhood-chart";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { RobinhoodProjectLinks } from "@/components/robinhood-project-links";
-import { coinTicker } from "@/lib/robinhood-presentation";
+import { coinDollars, coinTicker, coinValuation, type RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import styles from "./robinhood-token-view.module.css";
 
-export function EthereumTokenView({ address, token, status, updatedAt }: {
+export function EthereumTokenView({ address, token, status, updatedAt, market }: {
   address: string;
   token: CanonicalTokenExploreEntry | null;
   status: "ready" | "stale" | "partial" | "unavailable";
   updatedAt: string | null;
+  market?: RobinhoodCoinMarket | null;
 }) {
   const links = token?.links?.map(link => ({ label: link.kind, url: link.url })) ?? [];
   return <div className={`${styles.page} page-width`}>
@@ -51,8 +52,14 @@ export function EthereumTokenView({ address, token, status, updatedAt }: {
       {status !== "ready" ? <p className={styles.notice} role="status">{status === "partial" ? "This token is verified. Some Ethereum launches are temporarily unavailable." : "Showing this token from the last verified index."}
         {updatedAt ? <> Updated <time dateTime={updatedAt} title={new Date(updatedAt).toUTCString()}>{new Date(updatedAt).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" })} UTC</time>.</> : null}
       </p> : null}
+      <dl className={styles.metrics}>
+        <div><dt>Price</dt><dd>{coinDollars(market?.priceUsd, true)}</dd></div>
+        <div><dt title={coinValuation(market).title}>{coinValuation(market).label}</dt><dd>{coinDollars(coinValuation(market).value)}</dd></div>
+        <div><dt>Liquidity</dt><dd>{coinDollars(market?.liquidityUsd)}</dd></div>
+        <div><dt>24h volume</dt><dd>{coinDollars(market?.volume24hUsd)}</dd></div>
+      </dl>
       <div className={styles.tradingLayout}>
-        <TokenPoolChart poolId={token.poolId} name={token.name || "Token"} chainId={1} />
+        <TokenPoolChart tokenAddress={address} poolId={token.poolId} name={token.name || "Token"} chainId={1} market={market} />
         <ResponsiveTradePanel symbol={token.symbol}><SwapPanel key={`1:${address.toLowerCase()}`} embedded initialAddress={address} initialChainId={1} tokenSymbol={token.symbol} /></ResponsiveTradePanel>
       </div>
     </article> : <section className={styles.empty}>

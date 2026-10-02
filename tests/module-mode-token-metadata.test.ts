@@ -45,6 +45,13 @@ describe("Module Mode social metadata", () => {
     expect(() => moduleTokenMetadata("", MODULE_DEFAULT_TOKEN_IMAGE, { github: `https://github.com/${"x".repeat(512)}` })).toThrow();
   });
 
+  it("stores and renders repeatable project links without dedicated platform fields", () => {
+    const metadata = moduleTokenMetadata("", MODULE_DEFAULT_TOKEN_IMAGE, { other: ["https://example.com/docs", "", "https://example.com/chat"] });
+    expect(buildTokenLinks("", metadata.extraData)).toEqual([{ kind: "other", url: "https://example.com/docs" }, { kind: "other", url: "https://example.com/chat" }]);
+    const getter = Object.defineProperty([], "0", { enumerable: true, get() { throw new Error("Must not execute"); } });
+    for (const other of [["javascript:alert(1)"], new Array(2), getter, Array(7).fill("https://example.com")]) expect(validateModuleSocialLinks({ other }).ok).toBe(false);
+  });
+
   it("rejects unknown keys, nonstring values and accessors without running them", () => {
     expect(validateModuleSocialLinks({ youtube: "https://youtube.com/example" }).ok).toBe(false);
     expect(validateModuleSocialLinks({ twitter: 1 }).ok).toBe(false);

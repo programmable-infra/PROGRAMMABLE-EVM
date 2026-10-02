@@ -26,7 +26,7 @@ export async function readRobinhoodLaunches(page = 1, query = "", filters: Robin
       const value = market.volume24hUsd;
       return value === null || !Number.isFinite(value) || value < 0 ? [] : [[address, value] as const];
     }));
-    const eligibleTokens = new Set(Array.from(caps.keys()).filter(isDiscoverableRobinhoodToken));
+    const eligibleTokens = new Set(visible.map(token => token.tokenAddress.toLowerCase()).filter(isDiscoverableRobinhoodToken));
     const list = launchList(snapshot, page, query, Date.now(), filters, caps, pageSize, volumes, eligibleTokens);
     // Ranking and card values use the same full-catalog market observation.
     return { ...list, sourceEvidence: snapshot ? {

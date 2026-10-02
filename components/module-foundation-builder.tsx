@@ -134,7 +134,7 @@ export function ModuleFoundationBuilder({ layout = "form", availability, context
     if (key === "initialBuy") setBuyEdited(true);
     generation.current += 1;
     setDraft(current => ({ ...current, [key]: value }));
-    setErrors(current => { const next = { ...current }; delete next[key]; return next; });
+    setErrors(current => { const next = { ...current }; delete next[key]; if (key === "socialLinks") for (const name of Object.keys(next)) if (name.startsWith("social-")) delete next[name]; return next; });
     setError(""); setPhase("editing");
   }
 
