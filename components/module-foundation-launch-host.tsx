@@ -65,7 +65,7 @@ export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, sav
   return `/modules/${token}?transaction=${found.transactionHash}`;
 }
 
-export function ModuleFoundationLaunchHost() {
+export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form" | "studio" } = {}) {
   const router = useRouter(), session = useFoundationSession();
   const [completedDraft, setCompletedDraft] = useState<string | null>(null);
   const [suggestedInitialBuy, setSuggestedInitialBuy] = useState<string>();
@@ -227,7 +227,7 @@ export function ModuleFoundationLaunchHost() {
     {savedLaunchError && savedLaunchError === session.resolution?.operationId ? <div className={`${styles.page} ${styles.sessionStatus}`}>
       <p role="alert">Your saved launch could not be opened yet.</p>
       <button type="button" className={styles.secondaryButton} onClick={() => { setSavedLaunchError(null); setRecoveryRetry(value => value + 1); }}>Open coin</button>
-    </div> : null}<ModuleFoundationBuilder key={session.resultGeneration} availability={session.availability} contextKey={session.contextKey}
+    </div> : null}<ModuleFoundationBuilder key={session.resultGeneration} layout={layout} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
     onPrepareLaunch={prepare} onConfirmLaunch={async review => { const sequence = prepared.current.get(review);

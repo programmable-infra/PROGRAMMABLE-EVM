@@ -22,13 +22,16 @@ import { ModuleFoundationPairDialog } from "./module-foundation-pair-dialog";
 import { ModuleFoundationConfigField } from "./module-foundation-config-field";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/csr/PlugsConnected";
 import styles from "./module-foundation-ui.module.css";
+import { FoundationStudio } from "./module-studio/studio";
+import type { FoundationStudioDraft } from "@/lib/module-foundation/studio";
 
-type EditableDraft = Omit<FoundationLaunchDraft, "image" | "quoteAsset" | "creatorFeeBps" | "creatorBuyFeeBps" | "creatorSellFeeBps"> & { creatorFeeBps: number; quoteAsset: string; image: FoundationImage | null };
+type EditableDraft = FoundationStudioDraft;
 type LocalImage = { blob: Blob; preview: string; sha256: Hex };
 type Phase = "editing" | "uploading" | "preparing" | "signing" | "result";
 type Errors = Record<string, string>;
 
 export interface ModuleFoundationBuilderProps {
+  layout?: "form" | "studio";
   availability: FoundationAvailability;
   /** Custody of the currently verified launch factory; unknown while availability loads. */
   factoryVersion?: "v1" | "v2" | "v3";
@@ -78,7 +81,7 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
     initialBuy: initial?.initialBuy ?? "", additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
-export function ModuleFoundationBuilder({ availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
+export function ModuleFoundationBuilder({ layout = "form", availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
   const [draft, setDraft] = useState<EditableDraft>(() => initialForm(initialDraft, quoteAssets, availability.chainId));
   const [buyEdited, setBuyEdited] = useState(initialDraft?.initialBuy !== undefined);
   const initialBuy = buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
@@ -313,6 +316,15 @@ export function ModuleFoundationBuilder({ availability, contextKey, catalog, quo
   }
 
   const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" ? "Saving image…" : phase === "preparing" ? "Preparing launch…" : phase === "signing" ? launchProgress || "Opening coin…" : "Create Launch");
+  if (layout === "studio" && phase !== "result") return <FoundationStudio draft={draft} catalog={catalog} imageSource={imageSource}
+    quoteSymbol={quoteSymbol} quoteStatus={customQuote ? quote?.supported ? `${quote.name} · ${quote.symbol}` : quoteLookup?.message || "Checking token…" : undefined}
+    initialBuy={initialBuy} actionLabel={actionLabel} disabled={locked || imagePreparing} busy={busy || walletAction?.busy}
+    actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
+    error={error || submissionBlocked} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
+    customQuote={customQuote} canResolveQuote={canResolveQuote} formRef={form} imageInput={imageInput}
+    onUpdate={update} onChooseImage={file => void chooseImage(file)} onRemoveImage={() => { setLocalImage(null); update("image", null); setImageError(""); }}
+    onQuoteChange={address => { if (!customQuote) { quoteGeneration.current += 1; pendingQuote.current = null; setCustomQuote(true); setQuoteLookup(null); } update("quoteAsset", address); }}
+    onDefaultQuote={() => chooseMarket(false)} onSubmit={event => void prepare(event)} onBack={onBack} />;
   return <div className={`${styles.page} ${styles.builderPage}`}>
     <div className={styles.topline}>{onBack ? <button type="button" className={styles.backButton} disabled={busy} onClick={onBack}><ArrowLeftIcon size={16} aria-hidden="true" /> Home</button> : <span className={styles.eyebrow}>Module Mode</span>}<span className={styles.network}>{availability.chainName}</span></div>
     <header className={styles.pageHeading}><h1>Launch a Coin</h1></header>

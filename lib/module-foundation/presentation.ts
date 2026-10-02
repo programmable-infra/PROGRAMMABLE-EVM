@@ -1,4 +1,5 @@
 import { foundationCreatorFeeFields, type FoundationCreatorFees } from "./creator-fees";
+import { foundationStudioPresentation } from "./studio";
 import { FOUNDATION_PERCENT_BPS_UNIT_V1, foundationPercentFromBpsV1, foundationPercentToBpsV1 } from "./percentage";
 import { encodeFunctionData, getAddress, keccak256, parseAbi, type Address, type Hex } from "viem";
 import {
@@ -231,6 +232,7 @@ export function presentFoundationCatalogV1(input: Environment): readonly Foundat
       || (d.exclusiveGroup !== FOUNDATION_ZERO_HASH && d.exclusiveGroup === other.runtime.descriptor.exclusiveGroup))).map(other => other.manifest.packageId);
     return { id: entry.manifest.packageId, version: entry.manifest.sourceDescriptor.version, digest: entry.manifestHash,
       name: entry.manifest.sourceDescriptor.name, description: entry.manifest.sourceDescriptor.management.summary,
+      studio: foundationStudioPresentation(entry.manifest.sourceDescriptor.extensions, entry.manifest.sourceDescriptor.requiresHost),
       capabilities: entry.manifest.sourceDescriptor.requiresHost, fields, available: entry.status === "available" && errors.length === 0,
       ...(errors.length ? { unavailableReason: [...new Set(errors.map(issue => issue.message))].join(" ") } : {}),
       ...(conflictsWith.length ? { conflictsWith } : {}) };

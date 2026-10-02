@@ -99,6 +99,22 @@ The root wallet controller must simulate these exact bytes, display the observed
 
 Platform/creator fee payouts are separate ledger operations. The contracts expose permissionless claim triggers whose recipients remain fixed by the ledger. They should use the root's source-verified claim reader and wallet path, preserving fee credit, actual payment and pending settlement as separate states.
 
+## Coin Studio presentation
+
+`components/module-studio/studio.tsx` is the shared visual workspace. It receives the existing launch draft and verified catalog; it owns only panel selection, category filtering and retained settings for toggled-off modules. The builder remains responsible for image preparation, quote resolution, errors and the single launch operation. The launch host remains responsible for simulations, account/chain checks, signing and receipts. Use `layout="studio"` on the existing launch host to select this presentation. The default live form is unchanged until the Studio is published.
+
+`lib/module-foundation/studio.ts` defines the draft, category projection and default selection helpers. A new module may include display metadata in its signed source descriptor:
+
+```json
+"extensions": {
+  "programmable.module-studio@1": { "category": "fees" }
+}
+```
+
+Supported categories are `trading`, `fees`, `supply`, `liquidity` and `other`. Unknown or absent metadata falls back to Trading for declared swap callbacks, otherwise More. Category, name and icon grant no runtime authority and never change committed execution. Settings use the existing configuration schema and exact percentage conversion. Only catalog entries actually marked available can be enabled. Future buyback or burn implementations are not implied by category metadata.
+
+Desktop uses a fixed workspace with library, coin composition and settings inspector; changing a panel never covers the coin. Small screens use Modules, Your coin and Settings tabs. Long catalogs/settings can scroll within their panel. The preview fits the viewport without a vertical page scroll. Product adoption must also give the editor an application-shell mode without the global footer or floating mobile navigation below it. The canvas bounds visible node count and groups additional selections behind View all. Details stay inside expandable cards, and reduced-motion preferences are respected.
+
 ## Validation boundary
 
 The focused presentation suite verifies nested/fixed field projection, exact percent-to-bps conversion, stale identity rejection, bounded inert JSON and asset context, actual hook calldata, creator/custom/public role treatment, current source/code/configuration/composition binding and stale/serialized context rejection. Rendered UI, real RPC readbacks, simulations and wallet signatures remain root integration checks.
