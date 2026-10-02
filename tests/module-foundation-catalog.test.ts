@@ -11,7 +11,7 @@ import {
 import {
   FOUNDATION_CATALOG_SCHEMA_V1, bindFoundationCatalogV1, type FoundationCatalogDocumentV1,
   type FoundationCatalogEntryV1, type FoundationCatalogAuthorityV1, type FoundationReleaseReferenceV1,
-  type FoundationReviewReferenceV1,
+  type FoundationAdminReviewReferenceV1,
 } from "@/lib/module-foundation/catalog";
 import { composeFoundationModulesV1, hashFoundationCompositionV1 } from "@/lib/module-foundation/composition";
 
@@ -49,11 +49,11 @@ function source(id: string, overrides: Partial<FoundationModuleDescriptorV1> = {
     documentation: "README.md", extensions: { [FOUNDATION_PACKAGE_EXTENSION_V1]: extension },
   };
 }
-function fixture(id: string, overrides: Partial<FoundationModuleDescriptorV1> = {}, modify?: (pkg: OpenSourcePackage) => void): FoundationCatalogEntryV1 {
+function fixture(id: string, overrides: Partial<FoundationModuleDescriptorV1> = {}, modify?: (pkg: OpenSourcePackage) => void) {
   const pkg = source(id, overrides); modify?.(pkg);
   const manifest = createFoundationModuleManifestV1(pkg, hash(`request:${id}`));
   const manifestHash = hashFoundationModuleManifestV1(manifest), runtime = readFoundationPackageExtensionV1(manifest);
-  const review: FoundationReviewReferenceV1 = {
+  const review: FoundationAdminReviewReferenceV1 = {
     submissionId: "11111111-1111-4111-8111-111111111111", requestDigest: manifest.requestDigest,
     sourceManifestHash: foundationDataDigest("programmable.modules.source-manifest.v1", pkg), manifestHash,
     artifactDigest: hash(`artifact:${id}`), decisionDigest: hash(`decision:${id}`), reviewer: address(2), reviewerPolicyDigest: hash("review-policy"),
