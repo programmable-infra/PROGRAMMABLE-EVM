@@ -7,7 +7,7 @@
 :global(.app-frame):has(.launchPage) :global(.desktop-nav) { display: none; }
 :global(.app-frame):has(.launchPage) > :global(.site-header) { position: absolute; inset: 0 0 auto; height: 76px; background: transparent !important; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; pointer-events: none; }
 :global(.app-frame):has(.launchPage) :global(.header-inner) { max-width: none; padding-inline: 24px; }
-:global(.app-frame):has(.launchPage) :global(.header-brand),:global(.app-frame):has(.launchPage) :global(.header-actions) { pointer-events: auto; }
+:global(.app-frame):has(.launchPage) :global(.header-brand),:global(.app-frame):has(.launchPage) :global(.header-actions),:global(.app-frame):has(.launchPage) :global(.site-header) [aria-hidden="false"] { pointer-events: auto; }
 :global(.app-frame):has(.launchPage) :global(.header-inner) > a { display: none; }
 .studio { --surface: var(--panel-fill); --line: var(--panel-line); --muted: #a0a0a6; --accent: #a5e9bd; color: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "Inter", sans-serif; display: grid; grid-template-rows: 90px minmax(0,1fr); gap: 12px; height: 100svh; min-height: 520px; padding: 18px 24px 20px; background: transparent; box-sizing: border-box; }
 .studio * { box-sizing: border-box; }
@@ -62,10 +62,9 @@
 .connectionPulse { stroke-width: 3.5px; stroke-dasharray: 15 85; opacity: 1; filter: drop-shadow(0 0 5px #d5a7f8); animation: connectionFlow 3.8s linear infinite; }
 .connectionPort { fill: #ead2f8; stroke: #13151c; stroke-width: 1.5px; }
 @keyframes connectionFlow { from { stroke-dashoffset: 0; } to { stroke-dashoffset: -100; } }
-.coinNode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 172px; padding: 12px; border: 1px solid #5a625d; border-radius: 17px; background: #13151cf5; display: grid; gap: 6px; text-align: center; box-shadow: 0 18px 50px #0005; z-index: 2; transition: border-color .2s; touch-action: none; user-select: none; }
-.coinNode[aria-pressed="true"] { border-color: #a6c9b1; }
-.coinNode:hover,.flowNode:hover { border-color: #d4bcdd; }
-.coinArtwork { aspect-ratio: 1; overflow: hidden; border: 1px solid #35393d; border-radius: 10px; background: var(--panel-fill); margin-bottom: 6px; }
+.coinNode { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 172px; padding: 12px; border: 1px solid transparent; border-radius: 17px; background: #13151cf5; display: grid; gap: 6px; text-align: center; box-shadow: 0 18px 50px #0005; z-index: 2; transition: border-color .2s; touch-action: none; user-select: none; }
+.flowNode:hover { border-color: #d4bcdd; }
+.coinArtwork { aspect-ratio: 1; overflow: hidden; border: 0; border-radius: 10px; background: var(--panel-fill); margin-bottom: 6px; }
 .coinArtwork img { object-fit: cover; display: block; width: 100%; height: 100%; }
 .coinNode > strong { font-size: 21px; line-height: 25px; letter-spacing: -.04em; overflow-wrap: anywhere; }
 .coinNode > span { color: var(--muted); font-size: 12px; }
@@ -78,11 +77,13 @@
 .nodeText { display: grid; gap: 3px; min-width: 0; }
 .studio :is(.flowNode,.coinNode) { cursor: grab; }
 .studio :is(.flowNode,.coinNode)[data-dragging="true"] { cursor: grabbing; z-index: 4; border-color: #ddc4ef; box-shadow: 0 12px 36px #0009,0 0 0 1px #ddc4ef40; }
+.studio .coinNode[data-dragging="true"] { border-color: transparent; box-shadow: 0 12px 36px #0009; }
 .canvas[data-dragging="true"] .canvasAdd { cursor: grabbing; }
 .nodeValue { color: var(--muted); font-size: 11px; }
 .inspector { display: flex; flex-direction: column; }
 .inspector > .panelHeading { border-bottom: 1px solid var(--line); padding-bottom: 18px; }
 .inspectorContent { padding: 18px; overflow: auto; min-height: 0; flex: 1; overscroll-behavior: contain; scrollbar-width: thin; animation: reveal .22s cubic-bezier(.2,.8,.2,1); }
+.moduleDescription { margin: 0 0 14px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-fill-soft); color: #d8d4df; font-size: 14px; line-height: 21px; }
 .field { display: grid; gap: 6px; margin-bottom: 12px; }
 .field > span:first-child { font-size: 13px; font-weight: 500; }
 .field input,.field textarea { width: 100%; min-width: 0; border: 1px solid #3b3f46; border-radius: 9px; padding: 11px 12px; background: var(--panel-fill-control); color: #f4f4f5; font: inherit; font-size: 16px; line-height: 24px; resize: vertical; }
@@ -123,9 +124,9 @@
 .actionStatus > button { border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; background: transparent; flex-shrink: 0; }
 .launch { display: flex; align-items: center; justify-content: center; gap: 24px; height: 44px; padding: 0 20px; border: 0; border-radius: 9px; background: var(--panel-fill-action); color: #101215 !important; font-size: 14px !important; font-weight: 600 !important; white-space: nowrap; }
 .stars { position: absolute; inset: 0; z-index: 2; pointer-events: none; overflow: hidden; }
-.stars i { position: absolute; background: #f4f0ff; border-radius: 50%; opacity: .15; box-shadow: 0 0 5px #d9c4ff99; animation: starTwinkle 7s ease-in-out infinite; }
+.stars i { position: absolute; background: #f4f0ff; border-radius: 50%; opacity: .25; box-shadow: 0 0 7px #d9c4ffcc,0 0 12px #d9c4ff55; animation: starTwinkle 4s ease-in-out infinite; }
 .stars i:nth-child(3n) { background: #ffe7cf; }
-@keyframes starTwinkle { 0%,22%,52%,100% { opacity: .12; transform: scale(.8); } 34%,72% { opacity: .86; transform: scale(1.25); } 44%,85% { opacity: .25; transform: scale(1); } }
+@keyframes starTwinkle { 0%,22%,52%,100% { opacity: .18; transform: scale(.85); } 34%,72% { opacity: 1; transform: scale(1.65); } 44%,85% { opacity: .4; transform: scale(1); } }
 .connectGate { position: relative; z-index: 3; display: grid; place-items: center; flex: 1; min-height: 0; padding: 24px; }
 .connectCard { width: min(100%,340px); padding: 24px; border: 1px solid #ffffff38; border-radius: 20px; background: var(--panel-fill); -webkit-backdrop-filter: var(--panel-backdrop); backdrop-filter: var(--panel-backdrop); }
 .connectCard .launch { width: 100%; height: 52px; cursor: pointer; font: inherit; font-size: 18px !important; }
