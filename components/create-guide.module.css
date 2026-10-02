@@ -44,7 +44,7 @@
 }
 
 .dialog {
-  background: #151515;
+  background: var(--panel-fill-dialog);
   border: 1px solid #30302e;
   border-radius: 16px;
   color: #f5f3ef;
@@ -96,7 +96,7 @@
 
 .closeButton {
   align-items: center;
-  background: #181818;
+  background: var(--panel-fill-control);
   border: 1px solid #30302e;
   border-radius: 12px;
   color: var(--text-soft);
@@ -112,7 +112,7 @@
 }
 
 .closeButton:hover {
-  background: #272727;
+  background: var(--panel-fill-hover);
   color: var(--text);
 }
 

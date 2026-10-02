@@ -315,7 +315,7 @@
 }
 
 .ranges {
-  background: #111;
+  background: var(--panel-fill);
   border-color: var(--webde-line);
   border-radius: var(--webde-radius-control);
   box-shadow: none;

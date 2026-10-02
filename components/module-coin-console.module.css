@@ -42,7 +42,7 @@
   padding: 8px 12px;
   text-wrap: pretty;
 }
-.primaryButton { background: #f4f2e9; border-color: #f4f2e9; color: #161613; font-weight: 600; }
+.primaryButton { background: var(--panel-fill-action); border-color: #f4f2e9; color: #161613; font-weight: 600; }
 .secondaryButton { background: transparent; color: var(--mc-ink); }
 .quietButton { background: none; border-color: transparent; color: var(--mc-muted); font-size: 14px; min-height: 44px; }
 .console button:disabled { cursor: not-allowed; opacity: 0.5; }
@@ -73,7 +73,7 @@
 .details[open] summary { margin-bottom: 8px; }
 .details form { display: grid; gap: 12px; }
 .field { color: var(--mc-ink); display: grid; font-size: 14px; gap: 8px; line-height: 20px; margin: 8px 0; min-width: 0; }
-.field input { background: #272727; border: 1px solid #555; border-radius: 8px; color: #fff; font: inherit; font-size: 16px; line-height: 24px; min-height: 48px; min-width: 0; padding: 12px; width: 100%; }
+.field input { background: var(--panel-fill-control); border: 1px solid #555; border-radius: 8px; color: #fff; font: inherit; font-size: 16px; line-height: 24px; min-height: 48px; min-width: 0; padding: 12px; width: 100%; }
 .field input::placeholder { color: #b7b7b3; opacity: 1; }
 .field input[aria-invalid="true"] { border-color: #ffb7aa; }
 .small { color: var(--mc-muted); font-size: 12px; line-height: 20px; margin: 8px 0 16px; text-wrap: pretty; }
@@ -81,7 +81,7 @@
 .programAction { border-top: 1px solid var(--mc-line); margin-top: 24px; padding-top: 24px; }
 .programAction h4 { font-size: 16px; font-weight: 500; line-height: 24px; margin: 0; }
 .programAction > button { margin-top: 12px; }
-.notice { background: #272727; border: 1px solid #555; border-radius: 8px; color: #ddd; font-size: 14px; line-height: 20px; margin-bottom: 16px; padding: 16px; }
+.notice { background: var(--panel-fill); border: 1px solid #555; border-radius: 8px; color: #ddd; font-size: 14px; line-height: 20px; margin-bottom: 16px; padding: 16px; }
 .notice > p { margin: 0; }
 .notice summary { cursor: pointer; min-height: 44px; padding-block: 12px; }
 .notice details { color: var(--mc-muted); overflow-wrap: anywhere; }
@@ -101,7 +101,7 @@
 .plain, .empty { border: 1px solid var(--mc-line); border-radius: 16px; padding: 32px; }
 .plain h3 { font-size: 20px; font-weight: 500; margin: 0 0 8px; }
 .plain p, .empty p { color: var(--mc-muted); font-size: 16px; line-height: 24px; margin-bottom: 0; text-wrap: pretty; }
-.review { background: #272727; border: 1px solid #7b7b71; border-radius: 16px; margin-bottom: 32px; padding: 24px; scroll-margin-top: 112px; }
+.review { background: var(--panel-fill); border: 1px solid #7b7b71; border-radius: 16px; margin-bottom: 32px; padding: 24px; scroll-margin-top: 112px; }
 .review h2 { margin-top: 8px; }
 .review > p { font-size: 16px; line-height: 24px; overflow-wrap: anywhere; text-wrap: pretty; }
 .review .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }

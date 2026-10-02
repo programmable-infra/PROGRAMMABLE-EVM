@@ -79,7 +79,7 @@
 
 .modelArt {
   aspect-ratio: 1.54;
-  background: #d9dde1;
+  background: var(--panel-fill-action);
   border: 0;
   border-radius: 19px;
   box-shadow: none;
@@ -111,7 +111,7 @@
 }
 
 .classicArt {
-  background: #f8f0e9;
+  background: var(--panel-fill-action);
 }
 
 .customArt::before {
@@ -1312,7 +1312,7 @@
 }
 
 .modelCard.modelCard {
-  background: rgb(24 24 24 / 0.92);
+  background: var(--panel-fill);
   border-color: var(--webde-line);
   color: var(--webde-ink);
   transition:
@@ -1352,12 +1352,12 @@
 }
 
 .formPage.formPage[data-launch-model="classic-v3"] {
-  --classic-control-surface: rgb(17 17 17 / 0.86);
-  --classic-control-surface-hover: rgb(32 32 32 / 0.96);
-  --classic-control-surface-selected: #242424;
+  --classic-control-surface: var(--panel-fill-control);
+  --classic-control-surface-hover: var(--panel-fill-hover);
+  --classic-control-surface-selected: var(--panel-fill-raised);
   --classic-control-border: var(--webde-line);
   --classic-control-border-strong: #555;
-  --classic-popover-surface: rgb(24 24 24 / 0.98);
+  --classic-popover-surface: var(--panel-fill-dialog);
 }
 
 .formPage.formPage :global(.launch-model-back),
@@ -1392,12 +1392,12 @@
 }
 
 .formPage.formPage :global(.classic-launch-sheet) {
-  background: rgb(24 24 24 / 0.92);
+  background: var(--panel-fill);
   border-color: var(--webde-line);
 }
 
 .formPage.formPage :global(.classic-launch-footer) {
-  background: rgb(17 17 17 / 0.9);
+  background: var(--panel-fill);
   border-color: var(--webde-line);
 }
 
@@ -1411,7 +1411,7 @@
   :global(.classic-v3-initial-buy .meme-dev-buy),
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.classic-v3-custody) {
-  background: rgb(17 17 17 / 0.86);
+  background: var(--panel-fill);
   border: 1px solid var(--webde-line);
   box-shadow: none;
 }
@@ -1435,7 +1435,7 @@
   :global(.classic-v3-custody input),
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.classic-link-disclosure summary) {
-  background: rgb(17 17 17 / 0.86);
+  background: var(--panel-fill-control);
   border-color: var(--webde-line);
   box-shadow: none;
   color: var(--webde-ink);
@@ -1455,7 +1455,7 @@
 
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.classic-v3-reward-mode > div) {
-  background: #0a0a0a;
+  background: var(--panel-fill);
   border-color: var(--webde-line);
   box-shadow: none;
 }
@@ -1508,7 +1508,7 @@
 
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.launch-select-menu) {
-  background: rgb(24 24 24 / 0.98);
+  background: var(--panel-fill-control);
   border-color: var(--webde-line);
   box-shadow: 0 22px 58px rgb(0 0 0 / 0.55);
 }
@@ -1540,7 +1540,7 @@
 }
 
 .formPage.formPage :global(.classic-launch-button) {
-  background: #fff;
+  background: var(--panel-fill-action);
   border-color: #fff;
   box-shadow: none;
   color: #000;
@@ -1589,7 +1589,7 @@
   .formPage.formPage :global(.launch-model-back:hover),
   .formPage.formPage :global(.classic-v3-add-recipient:hover),
   .formPage.formPage :global(.classic-v3-split-row .icon-button:hover) {
-    background: #333;
+    background: var(--panel-fill-hover);
     border-color: #555;
     color: #fff;
   }
@@ -1610,7 +1610,7 @@
   }
 
   .formPage.formPage :global(.classic-launch-button:hover) {
-    background: #e7e7e7;
+    background: var(--panel-fill-action-hover);
     border-color: #e7e7e7;
     color: #000;
   }
@@ -1707,7 +1707,7 @@
 .formPage :global(.classic-link-disclosure summary) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: #111;
+  background: var(--panel-fill-control);
   border-color: var(--webde-line);
   border-radius: var(--webde-radius-control);
 }
@@ -1717,7 +1717,7 @@
 .formPage :global(.classic-v3-reward-mode),
 .formPage :global(.classic-v3-initial-buy .meme-dev-buy),
 .formPage :global(.classic-v3-custody) {
-  background: #111;
+  background: var(--panel-fill);
   border: 1px solid var(--webde-line);
   border-radius: 12px;
 }
@@ -1725,7 +1725,7 @@
 .formPage :global(.classic-v3-reward-mode > div) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: #0a0a0a;
+  background: var(--panel-fill);
   border-color: var(--webde-line);
   border-radius: var(--webde-radius-control);
   box-shadow: none;
@@ -1742,14 +1742,14 @@
 }
 
 .formPage :global(.classic-launch-footer) {
-  background: #111;
+  background: var(--panel-fill);
   border-top: 1px solid var(--webde-line);
 }
 
 .formPage :global(.classic-launch-button) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
-  background: #fff;
+  background: var(--panel-fill-action);
   border: 1px solid #fff;
   border-radius: var(--webde-radius-control);
   box-shadow: none;
@@ -1760,7 +1760,7 @@
 .formPage :global(.launch-select-menu) {
   -webkit-backdrop-filter: blur(18px);
   backdrop-filter: blur(18px);
-  background: rgb(24 24 24 / 0.98);
+  background: var(--panel-fill-control);
   border: 1px solid var(--webde-line);
   box-shadow: 0 22px 58px rgb(0 0 0 / 0.55);
 }
@@ -2083,7 +2083,7 @@
 
 .modelArt {
   aspect-ratio: 2.05 / 1;
-  background: #050505;
+  background: var(--panel-fill);
   border-bottom: 1px solid var(--webde-line);
   border-radius: 0;
   min-height: 0;
@@ -2237,7 +2237,7 @@
 }
 
 .predictionArt {
-  background: #0b1012;
+  background: var(--panel-fill);
 }
 
 .predictionRail {
@@ -2283,7 +2283,7 @@
 
 .predictionCondition {
   align-content: center;
-  background: #f4eee7;
+  background: var(--panel-fill-action);
   border: 1px solid rgb(0 0 0 / 0.18);
   border-radius: 14px;
   color: #111;
@@ -2323,7 +2323,7 @@
 .predictionCard .modelAction {
   align-items: center;
   align-self: start;
-  background: var(--webde-ink);
+  background: var(--panel-fill-action);
   border-radius: var(--webde-radius-control);
   color: var(--webde-canvas);
   display: inline-flex;
@@ -2412,7 +2412,7 @@
 }
 
 .modelCard .modelAction {
-  background: #272524;
+  background: var(--panel-fill-control);
   border: 1px solid #77716a;
   border-radius: var(--webde-radius-control);
   color: #f5f1eb;

@@ -80,7 +80,7 @@
 
 .openingDialog {
   align-items: center;
-  background: #0b0b0f;
+  background: var(--panel-fill-dialog);
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 1rem;
   box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
@@ -123,7 +123,7 @@
 
 .openingArt {
   align-items: center;
-  background: #17171c;
+  background: var(--panel-fill);
   border-radius: 0.7rem;
   display: flex;
   flex: none;
@@ -577,7 +577,7 @@
 }
 
 .receiverDialog {
-  background: #0b0b0f;
+  background: var(--panel-fill-dialog);
   border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 1rem;
   box-shadow: 0 30px 90px rgb(0 0 0 / 55%);

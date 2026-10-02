@@ -84,7 +84,7 @@
 .field input::placeholder,
 .field textarea::placeholder { color: #a4a4a1; opacity: 1; }
 .field select { appearance: auto; cursor: pointer; padding-right: 8px; }
-.field select option { background: #242424; color: #fff; }
+.field select option { background: var(--panel-fill-control); color: #fff; }
 .field textarea { min-height: 80px; resize: vertical; }
 .inputWithUnit { display: flex; min-width: 0; position: relative; }
 .inputWithUnit > input { padding-right: 12px; }
@@ -123,8 +123,8 @@
 .textButton { align-items: center; border-radius: 8px; cursor: pointer; display: inline-flex; font: inherit; font-size: 14px; gap: 8px; justify-content: center; line-height: 20px; min-height: 44px; padding: 8px 12px; }
 .addButton,
 .addedButton { background: transparent; border: 1px solid #555; color: var(--mm-ink); flex: 0 0 auto; }
-.addedButton { background: #30302e; border-color: #73736c; }
-.moduleConfiguration { background: #202020; border: 1px solid #454545; border-radius: 8px; margin-top: 16px; min-width: 0; padding: 16px; }
+.addedButton { background: var(--panel-fill-control); border-color: #73736c; }
+.moduleConfiguration { background: var(--panel-fill); border: 1px solid #454545; border-radius: 8px; margin-top: 16px; min-width: 0; padding: 16px; }
 .moduleConfigurationHeading { gap: 16px; justify-content: space-between; margin-bottom: 4px; }
 .moduleConfigurationHeading h3 { font-size: 16px; font-weight: 500; line-height: 24px; margin: 0; }
 .iconButton { background: transparent; border: 0; color: var(--mm-muted); flex: 0 0 44px; height: 44px; padding: 12px; width: 44px; }
@@ -152,26 +152,26 @@
 .unavailableModule strong { font-weight: 500; }
 .formFooter { justify-content: flex-end; border-top: 1px solid var(--mm-line); flex-wrap: wrap; gap: 16px; margin-top: 24px; padding-top: 24px; }
 .formFooter p { color: var(--mm-muted); flex: 1 1 150px; font-size: 12px; line-height: 20px; margin: 0; }
-.primaryButton { background: #f4f2e9; border: 1px solid #f4f2e9; color: #161613; font-size: 16px; font-weight: 600; min-height: 48px; padding: 12px 16px; text-decoration: none; }
+.primaryButton { background: var(--panel-fill-action); border: 1px solid #f4f2e9; color: #161613; font-size: 16px; font-weight: 600; min-height: 48px; padding: 12px 16px; text-decoration: none; }
 .secondaryButton { background: none; border: 1px solid #555; color: #fff; font-size: 16px; min-height: 48px; padding: 12px 16px; }
-.errorSummary { background: #302421; border: 1px solid #936d63; border-radius: 8px; color: #ffcabf; font-size: 14px; line-height: 20px; margin-top: 24px; padding: 16px; }
+.errorSummary { background: var(--panel-fill); border: 1px solid #936d63; border-radius: 8px; color: #ffcabf; font-size: 14px; line-height: 20px; margin-top: 24px; padding: 16px; }
 .errorSummary strong { color: #ffe2db; font-weight: 500; }
 .errorSummary ul { display: grid; gap: 8px; margin: 12px 0 0; padding-left: 20px; }
 .previewPanel { min-width: 0; position: sticky; top: calc(var(--header-height, 88px) + 24px); }
-.coinCard { background: #181818; border: 1px solid var(--mm-line); border-radius: 16px; min-width: 0; padding: 24px; }
+.coinCard { background: var(--panel-fill); border: 1px solid var(--mm-line); border-radius: 16px; min-width: 0; padding: 24px; }
 .coinCardHeading { align-items: center; display: flex; gap: 12px; min-width: 0; }
 .coinCardHeading > div:last-child { min-width: 0; }
-.coinAvatar { align-items: center; background: #272727; border: 1px solid #444; border-radius: 12px; color: #dbded4; display: flex; flex: 0 0 56px; font-size: 24px; height: 56px; justify-content: center; overflow: hidden; position: relative; width: 56px; }
+.coinAvatar { align-items: center; background: var(--panel-fill); border: 1px solid #444; border-radius: 12px; color: #dbded4; display: flex; flex: 0 0 56px; font-size: 24px; height: 56px; justify-content: center; overflow: hidden; position: relative; width: 56px; }
 .coinAvatar img { object-fit: cover; }
 .coinCard h2 { font-size: 18px; font-weight: 500; letter-spacing: -0.02em; line-height: 28px; margin: 0; overflow-wrap: anywhere; }
 .coinCardHeading p { color: var(--mm-muted); font-size: 14px; line-height: 20px; margin: 0; overflow-wrap: anywhere; }
 .coinAssembly { display: grid; gap: 8px; margin-top: 24px; }
-.baseBlock, .assemblyModule { align-items: center; background: #1f1f1f; border: 1px solid #3c3c3c; border-radius: 8px; display: flex; gap: 8px; min-height: 64px; min-width: 0; padding: 8px 12px; }
+.baseBlock, .assemblyModule { align-items: center; background: var(--panel-fill); border: 1px solid #3c3c3c; border-radius: 8px; display: flex; gap: 8px; min-height: 64px; min-width: 0; padding: 8px 12px; }
 .baseBlock > div { display: grid; flex: 1; gap: 4px; }
 .baseBlock strong { font-size: 14px; font-weight: 500; line-height: 20px; }
 .baseBlock div > span { color: var(--mm-muted); font-size: 12px; line-height: 16px; }
 .baseBlock > svg, .assemblyModule > svg { color: #c1d0b2; flex: 0 0 auto; }
-.baseDot { background: #b2bda5; border-radius: 50%; flex: 0 0 8px; height: 8px; margin: 0 8px; width: 8px; }
+.baseDot { background: var(--panel-fill-action); border-radius: 50%; flex: 0 0 8px; height: 8px; margin: 0 8px; width: 8px; }
 .assemblyModule > button, .assemblyModule > span:not(:first-child) { background: transparent; border: 0; color: #eee; cursor: pointer; flex: 1; font: inherit; font-size: 14px; line-height: 20px; min-height: 44px; min-width: 0; padding: 0; text-align: left; overflow-wrap: anywhere; }
 .assemblyModule > button:disabled { cursor: default; }
 .assemblyModule > span:first-child { height: 32px; width: 32px; }
@@ -201,7 +201,7 @@
 .reviewModule dl > div { display: grid; gap: 8px 16px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); }
 .reviewModule dt { color: var(--mm-muted); font-size: 14px; line-height: 20px; }
 .reviewModule dd { font-size: 14px; line-height: 20px; margin: 0; overflow-wrap: anywhere; text-align: right; }
-.previewNotice { background: #272725; border: 1px solid #4d4d47; border-radius: 8px; margin-top: 32px; padding: 16px; }
+.previewNotice { background: var(--panel-fill); border: 1px solid #4d4d47; border-radius: 8px; margin-top: 32px; padding: 16px; }
 .previewNotice strong { font-size: 14px; font-weight: 500; line-height: 20px; }
 .previewNotice p { color: #c9c9c1; font-size: 14px; line-height: 20px; margin: 8px 0 0; }
 .reviewActions { flex-wrap: wrap; gap: 12px; justify-content: space-between; margin-top: 24px; }
@@ -227,7 +227,7 @@
 .launchResult h2 { font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 32px; margin: 0; }
 .launchResult > p:not(.liveRegion) { color: var(--mm-muted); font-size: 14px; line-height: 20px; margin: 16px 0 24px; }
 .launchResult > .textButton { display: flex; }
-.successIcon { align-items: center; background: #272727; border: 1px solid #53604c; border-radius: 50%; color: #c1d0b2; display: flex; flex: 0 0 48px; height: 48px; justify-content: center; }
+.successIcon { align-items: center; background: var(--panel-fill); border: 1px solid #53604c; border-radius: 50%; color: #c1d0b2; display: flex; flex: 0 0 48px; height: 48px; justify-content: center; }
 .contractAddress { display: grid; gap: 8px; margin-block: 24px; }
 .contractAddress label { color: var(--mm-muted); font-size: 12px; line-height: 16px; }
 .contractAddress input { background: var(--mm-control); border: 1px solid #484848; border-radius: 8px; color: var(--mm-ink); font-family: monospace; font-size: 16px; line-height: 24px; min-height: 48px; min-width: 0; padding: 12px; width: 100%; }
@@ -241,9 +241,9 @@
   .backLink:hover { color: #fff; }
   .addButton:hover,
   .addedButton:hover,
-  .secondaryButton:hover { background: #363633; border-color: #82827c; }
-  .primaryButton:hover { background: #fff; border-color: #fff; }
-  .iconButton:hover { background: #333; color: #fff; }
+  .secondaryButton:hover { background: var(--panel-fill-hover); border-color: #82827c; }
+  .primaryButton:hover { background: var(--panel-fill-action-hover); border-color: #fff; }
+  .iconButton:hover { background: var(--panel-fill-hover); color: #fff; }
   .advancedToggle:hover .advancedTitle { color: #e9d8cf; }
 }
 
@@ -304,8 +304,8 @@
 
 /* Compact coin editor. Shared transaction and schema styles stay above. */
 .studio {
-  --mm-surface: #181818;
-  --mm-control: #20201f;
+  --mm-surface: var(--panel-fill);
+  --mm-control: var(--panel-fill-control);
   --mm-line: #383736;
   --mm-muted: #b4b1ad;
   --mm-ink: #f5f3ef;
@@ -314,7 +314,7 @@
   padding: 24px 20px 64px;
 }
 .studio .pageTop { margin-bottom: 16px; }
-.studio .backLink { background: #1c1c1c; border: 1px solid #64615f; border-radius: 24px; color: var(--mm-ink); font-size: 14px; padding-inline: 16px; }
+.studio .backLink { background: var(--panel-fill); border: 1px solid #64615f; border-radius: 24px; color: var(--mm-ink); font-size: 14px; padding-inline: 16px; }
 .studio .network { font-size: 13px; }
 .studio .layout { align-items: stretch; background: var(--mm-surface); border: 1px solid #353433; border-radius: 24px; gap: 0; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); overflow: clip; }
 .studio .formPanel { background: transparent; border: 0; border-radius: 0; padding: 32px; }
@@ -325,7 +325,7 @@
 .identityEditor { display: grid; gap: 0; grid-template-columns: minmax(0,1fr); }
 .studio .identityEditor .tokenFields { gap: 14px; grid-template-columns: repeat(2,minmax(0,1fr)); }
 .studio .identityEditor .imageField { margin: 0 0 12px; }
-.imagePicker.imagePickerRow { align-items: center; background: #20201f; border: 1px dashed #76716b; border-radius: 12px; display: flex; gap: 8px; margin-bottom: 0; padding: 8px; position: relative; }
+.imagePicker.imagePickerRow { align-items: center; background: var(--panel-fill); border: 1px dashed #76716b; border-radius: 12px; display: flex; gap: 8px; margin-bottom: 0; padding: 8px; position: relative; }
 .imageUploadRow { align-items: center; background: transparent; border: 0; border-radius: 8px; color: #e1ddd7; cursor: pointer; display: flex; flex: 1; font: inherit; font-size: 14px; gap: 14px; min-height: 60px; min-width: 0; padding: 4px; text-align: left; }
 .imageRowThumbnail { align-items: center; background: #2a2928; border-radius: 10px; color: #c5bfb9; display: inline-flex; flex: 0 0 48px; height: 48px; justify-content: center; overflow: hidden; position: relative; width: 48px; }
 .imageRowThumbnail img { object-fit: cover; }
@@ -343,7 +343,7 @@
 .studio .field input::placeholder, .studio .field textarea::placeholder { color: #a8a39d; }
 .studio .field input[aria-invalid="true"], .studio .field textarea[aria-invalid="true"], .studio .field select[aria-invalid="true"] { border-color: #ed9a8a; }
 .studio .field input:focus, .studio .field textarea:focus { border-color: var(--mm-pink); }
-.detailsToggle, .feesToggle { align-items: center; background: #20201f; border: 1px solid #76716b; border-radius: 12px; color: #ddd9d4; cursor: pointer; display: flex; font: inherit; font-size: 14px; gap: 12px; min-height: 48px; padding: 12px; text-align: left; width: 100%; }
+.detailsToggle, .feesToggle { align-items: center; background: var(--panel-fill); border: 1px solid #76716b; border-radius: 12px; color: #ddd9d4; cursor: pointer; display: flex; font: inherit; font-size: 14px; gap: 12px; min-height: 48px; padding: 12px; text-align: left; width: 100%; }
 .detailsToggle > svg:last-child { margin-left: auto; }
 .coinDetails, .feeSettings { padding-top: 20px; }
 .coinDetails[hidden], .feeSettings[hidden] { display: none; }
@@ -354,14 +354,14 @@
 .moduleSectionHeading h2 { font-size: 16px; font-weight: 500; line-height: 24px; margin: 0; }
 .moduleSectionHeading p { color: var(--mm-muted); font-size: 14px; line-height: 20px; margin: 2px 0 0; }
 .moduleSectionHeading > svg { color: var(--mm-pink); flex-shrink: 0; }
-.addModulesButton { align-items: center; background: #252024; border: 1px solid #b17b94; border-radius: 12px; color: #f0bfd6; cursor: pointer; display: flex; font: inherit; font-size: 14px; font-weight: 500; gap: 8px; justify-content: center; min-height: 48px; padding: 12px 16px; width: 100%; }
+.addModulesButton { align-items: center; background: var(--panel-fill-control); border: 1px solid #b17b94; border-radius: 12px; color: #f0bfd6; cursor: pointer; display: flex; font: inherit; font-size: 14px; font-weight: 500; gap: 8px; justify-content: center; min-height: 48px; padding: 12px 16px; width: 100%; }
 .selectedModules { display: grid; gap: 8px; list-style: none; margin: 0 0 12px; padding: 0; }
-.selectedModules > li { align-items: center; background: #211e20; border: 1px solid #69505d; border-radius: 12px; display: flex; gap: 8px; min-width: 0; padding: 4px 8px; }
+.selectedModules > li { align-items: center; background: var(--panel-fill-hover); border: 1px solid #69505d; border-radius: 12px; display: flex; gap: 8px; min-width: 0; padding: 4px 8px; }
 .selectedModules > li > span { background: transparent; color: #e9b0cd; height: 32px; width: 32px; }
 .configureModule { align-items: center; background: transparent; border: 0; color: #f0e6eb; cursor: pointer; display: flex; flex: 1; font: inherit; font-size: 14px; gap: 12px; min-height: 48px; min-width: 0; padding: 4px 0; text-align: left; }
 .configureModule > span { flex: 1; overflow-wrap: anywhere; }
 .configureModule > svg { color: #c8b4bf; flex-shrink: 0; }
-.removeModule { align-items: center; background: #30292d; border: 1px solid #886675; border-radius: 8px; color: #dec5d2; cursor: pointer; display: flex; flex: 0 0 44px; height: 44px; justify-content: center; padding: 0; }
+.removeModule { align-items: center; background: var(--panel-fill); border: 1px solid #886675; border-radius: 8px; color: #dec5d2; cursor: pointer; display: flex; flex: 0 0 44px; height: 44px; justify-content: center; padding: 0; }
 .setupDetails { color: var(--mm-muted); font-size: 13px; margin-top: 8px; }
 .setupDetails > summary { align-items: center; cursor: pointer; display: flex; gap: 8px; justify-content: space-between; list-style: none; min-height: 44px; }
 .setupDetails > summary::-webkit-details-marker { display: none; }
@@ -377,10 +377,10 @@
 .studio .primaryButton { background: var(--mm-pink); border-color: var(--mm-pink); border-radius: 12px; color: #21151b; font-size: 14px; min-height: 48px; padding-inline: 24px; }
 .studio .secondaryButton { border-radius: 12px; font-size: 14px; }
 .studio .availabilityNote { font-size: 13px; line-height: 20px; margin-top: 12px; }
-.studio .previewPanel { align-items: center; align-self: stretch; background: #222221; display: flex; flex-direction: column; justify-content: center; padding: 32px; position: static; }
-.studio .coinCard { background: #191919; border: 1px solid #484643; border-radius: 20px; padding: 24px; width: 100%; }
+.studio .previewPanel { align-items: center; align-self: stretch; background: var(--panel-fill); display: flex; flex-direction: column; justify-content: center; padding: 32px; position: static; }
+.studio .coinCard { background: var(--panel-fill); border: 1px solid #484643; border-radius: 20px; padding: 24px; width: 100%; }
 .studio .coinCardHeading { align-items: flex-start; flex-direction: column; gap: 16px; text-align: left; }
-.studio .coinAvatar { background: #30242b; border: 1px solid #775568; border-radius: 16px; color: #f0bfd6; flex-basis: 64px; height: 64px; width: 64px; }
+.studio .coinAvatar { background: var(--panel-fill); border: 1px solid #775568; border-radius: 16px; color: #f0bfd6; flex-basis: 64px; height: 64px; width: 64px; }
 .studio .coinAvatar > span { align-items: center; display: flex; justify-content: center; }
 .studio .coinCardHeading h2 { font-size: 22px; font-weight: 500; letter-spacing: -.02em; line-height: 28px; }
 .studio .coinCardHeading p { font-size: 13px; margin-top: 4px; }
@@ -403,13 +403,13 @@
 .studio :is(button,a,input,textarea,select,summary):focus-visible { outline: 2px solid var(--mm-pink); outline-offset: 3px; }
 .studio :is(button, a, summary) { touch-action: manipulation; }
 @media (hover: hover) and (pointer: fine) {
-  .studio .primaryButton:hover:not(:disabled) { background: #f19dc3; border-color: #f19dc3; }
-  .addModulesButton:hover { background: #362630; border-color: #e786b2; }
-  .detailsToggle:hover, .feesToggle:hover { background: #292827; }
+  .studio .primaryButton:hover:not(:disabled) { background: rgb(241 157 195 / 0.9); border-color: #f19dc3; }
+  .addModulesButton:hover { background: var(--panel-fill-hover); border-color: #e786b2; }
+  .detailsToggle:hover, .feesToggle:hover { background: var(--panel-fill-hover); }
   .configureModule:hover > span { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
-  .removeModule:hover { background: #44343d; }
+  .removeModule:hover { background: var(--panel-fill-hover); }
   .studio .buildModuleLink:hover { color: #f0bfd6; }
-  .imageUploadTile:hover:not(:disabled) { background: #2a2528; border-color: #e786b2; color: #f0bfd6; }
+  .imageUploadTile:hover:not(:disabled) { background: var(--panel-fill-hover); border-color: #e786b2; color: #f0bfd6; }
 }
 @media (max-width: 900px) { .studio .formPanel, .studio .previewPanel { padding: 24px; } }
 @media (max-width: 760px) {

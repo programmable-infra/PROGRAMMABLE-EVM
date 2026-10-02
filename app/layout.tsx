@@ -9,6 +9,7 @@ import "./globals.css";
 import "./programmable-experience.css";
 import "./interface.css";
 import "./webde-final-ui.css";
+import "./surfaces.css";
 
 const instrumentSans = Instrument_Sans({
   subsets: ["latin"],

@@ -116,7 +116,7 @@
 .copyIcon[data-copied="true"] { opacity: 1; }
 .secondaryButton, .checkButton, .copyFixButton { background: var(--webde-control); color: var(--webde-ink); }
 .secondaryButton { align-self: flex-start; margin-top: 16px; min-width: 152px; }
-.walletButton, .loadDetailsButton { background: #e786b2; border-color: #e786b2; color: #1c1217; }
+.walletButton, .loadDetailsButton { background: rgb(231 134 178 / 0.9); border-color: #e786b2; color: #1c1217; }
 .walletButton { flex: 1 1 260px; }
 .checkButton { flex: 1 1 184px; }
 .loadDetailsButton { margin-top: 12px; }
@@ -132,8 +132,8 @@
 .skeletonRow { display: block; min-height: 200px; }
 .visuallyHidden { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 @media (hover: hover) and (pointer: fine) {
-  .textButton:not(:disabled):hover, .secondaryButton:not(:disabled):hover, .checkButton:not(:disabled):hover, .copyFixButton:not(:disabled):hover, .projectLinks a:hover { background: #252524; border-color: #50504b; }
-  .walletButton:not(:disabled):hover, .loadDetailsButton:not(:disabled):hover { background: #ee9fc4; border-color: #ee9fc4; }
+  .textButton:not(:disabled):hover, .secondaryButton:not(:disabled):hover, .checkButton:not(:disabled):hover, .copyFixButton:not(:disabled):hover, .projectLinks a:hover { background: var(--panel-fill-hover); border-color: #50504b; }
+  .walletButton:not(:disabled):hover, .loadDetailsButton:not(:disabled):hover { background: rgb(238 159 196 / 0.9); border-color: #ee9fc4; }
   .launchReview > summary:hover, .detailDisclosure summary:hover, .transaction summary:hover { color: var(--webde-ink); }
 }
 @media (max-width: 600px) {

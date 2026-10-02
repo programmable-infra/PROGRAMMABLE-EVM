@@ -1,6 +1,6 @@
 .page, .marketScope {
   --mf-surface: var(--webde-surface, #181818);
-  --mf-control: #272727;
+  --mf-control: var(--panel-fill-control);
   --mf-line: var(--webde-line, #323232);
   --mf-ink: var(--webde-ink, #fff);
   --mf-muted: var(--webde-muted, #b7b7b3);
@@ -20,7 +20,7 @@
 .page p { text-wrap: pretty; }
 .builderPage { --mf-focus: #fff; max-width: 1080px; }
 .builderPage .pageHeading { margin: 16px 0 24px; }
-.launchStatus { align-items: center; background: #181818; border: 1px solid var(--mf-line); border-radius: 8px; color: var(--mf-muted); display: flex; flex-wrap: wrap; font-size: 14px; gap: 8px 24px; justify-content: space-between; line-height: 20px; margin-bottom: 24px; min-height: 48px; padding: 4px 16px; }
+.launchStatus { align-items: center; background: var(--panel-fill); border: 1px solid var(--mf-line); border-radius: 8px; color: var(--mf-muted); display: flex; flex-wrap: wrap; font-size: 14px; gap: 8px 24px; justify-content: space-between; line-height: 20px; margin-bottom: 24px; min-height: 48px; padding: 4px 16px; }
 .launchStatus .textButton { margin-left: auto; }
 .builderPage .layout { gap: 24px; grid-template-columns: minmax(0, 1fr) 304px; }
 .builderPage .form { padding: 24px; }
@@ -28,7 +28,7 @@
 .builderPage .imageRow { margin-bottom: 24px; }
 .builderPage .imageButton { border-radius: 16px; flex-basis: 80px; height: 80px; }
 .builderPage .imageCopy .secondaryButton { background: transparent; border-color: transparent; justify-content: flex-start; padding-left: 0; }
-.builderPage .field input, .builderPage .field textarea { background: #1f1f1f; }
+.builderPage .field input, .builderPage .field textarea { background: var(--panel-fill-control); }
 .builderPage .field :is(input, textarea, select):focus-visible { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; outline: none; }
 .builderPage .amountInput input { padding-right: 44px; }
 .builderPage .amountInput > span { right: 12px; }
@@ -41,31 +41,31 @@
 .addModuleButton { align-items: center; background: transparent; border: 0; border-radius: 8px; color: var(--mf-ink); cursor: pointer; display: inline-flex; font: inherit; font-size: 14px; font-weight: 500; gap: 8px; min-height: 44px; padding: 8px 0 8px 12px; }
 .classicPair { align-items: center; color: var(--mf-ink); display: flex; font-size: 14px; gap: 12px; line-height: 20px; margin-bottom: 24px; min-height: 48px; }
 .classicPair > svg { flex: 0 0 22px; }
-.attachedModule { align-items: center; background: #1f1f1f; border: 1px solid var(--mf-control-line); border-radius: 8px; display: flex; gap: 12px; margin-bottom: 24px; padding: 8px 8px 8px 16px; }
+.attachedModule { align-items: center; background: var(--panel-fill); border: 1px solid var(--mf-control-line); border-radius: 8px; display: flex; gap: 12px; margin-bottom: 24px; padding: 8px 8px 8px 16px; }
 .attachedModule > svg { flex: 0 0 24px; }
 .attachedModule .iconButton { flex: 0 0 44px; }
 .moduleEdit { background: transparent; border: 0; border-radius: 4px; color: var(--mf-ink); cursor: pointer; display: grid; flex: 1; font: inherit; gap: 4px; min-height: 48px; min-width: 0; padding: 4px 0; text-align: left; }
 .moduleEdit strong { font-size: 14px; font-weight: 500; line-height: 20px; }
 .moduleEdit span { color: var(--mf-muted); font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
-.moduleBadge { background: #272727; border-radius: 8px; color: var(--mf-ink); padding: 4px 8px; }
+.moduleBadge { background: var(--panel-fill); border-radius: 8px; color: var(--mf-ink); padding: 4px 8px; }
 .previewModules { color: var(--mf-muted); display: grid; font-size: 12px; gap: 8px; line-height: 16px; margin-top: 16px; }
 .previewModules:empty { display: none; }
 .previewModules > span { align-items: center; display: flex; gap: 8px; }
-.moduleOption { align-items: center; background: #1f1f1f; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-ink); cursor: pointer; display: flex; font: inherit; gap: 16px; padding: 16px; text-align: left; width: 100%; }
+.moduleOption { align-items: center; background: var(--panel-fill); border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-ink); cursor: pointer; display: flex; font: inherit; gap: 16px; padding: 16px; text-align: left; width: 100%; }
 .moduleOption > svg { flex-shrink: 0; }
 .moduleOption > span { display: grid; flex: 1; gap: 4px; min-width: 0; }
 .moduleOption strong { font-size: 16px; font-weight: 500; line-height: 24px; }
 .moduleOption small { color: var(--mf-muted); font-size: 14px; line-height: 20px; text-wrap: pretty; }
-.moduleOption[aria-pressed="true"] { background: #272727; border-color: #b7b7b3; }
+.moduleOption[aria-pressed="true"] { background: var(--panel-fill-hover); border-color: #b7b7b3; }
 .pairConfiguration .field { margin-bottom: 0; }
 .pairConfiguration input { font-family: inherit; font-size: 16px; }
 .pairConfiguration :is(.saved, .help, .error) { min-height: 40px; padding-top: 8px; }
 .moduleConfiguration { display: grid; gap: 24px; }
 .moduleConfiguration .field { margin-bottom: 0; }
-@media (hover: hover) { .moduleOption:hover { background: #272727; } .moduleEdit:hover strong, .addModuleButton:hover { text-decoration: underline; text-underline-offset: 4px; } }
+@media (hover: hover) { .moduleOption:hover { background: var(--panel-fill-hover); } .moduleEdit:hover strong, .addModuleButton:hover { text-decoration: underline; text-underline-offset: 4px; } }
 .pairChoices { display: flex; gap: 8px; margin-bottom: 24px; }
 .pairChoices > button { align-items: center; background: transparent; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-muted); cursor: pointer; display: flex; flex: 1; font: inherit; gap: 12px; min-height: 56px; min-width: 0; padding: 12px 16px; text-align: left; }
-.pairChoices > button[aria-pressed="true"] { background: #272727; border-color: #b7b7b3; color: var(--mf-ink); }
+.pairChoices > button[aria-pressed="true"] { background: var(--panel-fill-hover); border-color: #b7b7b3; color: var(--mf-ink); }
 .pairChoices > button > span { align-items: baseline; display: flex; flex: 1; flex-wrap: wrap; font-size: 16px; gap: 8px; line-height: 24px; }
 .pairChoices small { color: inherit; font: inherit; }
 .ethereumMark { color: #fff; }
@@ -77,7 +77,7 @@
 .catalog + .feesBuyRow { margin-top: 24px; }
 .feeFields { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .feeControls { display: flex; align-items: stretch; gap: 4px; }
-.feeControls > button { align-items: center; background: #1f1f1f; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-ink); cursor: pointer; display: flex; flex: 0 0 44px; justify-content: center; min-height: 48px; }
+.feeControls > button { align-items: center; background: var(--panel-fill-control); border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-ink); cursor: pointer; display: flex; flex: 0 0 44px; justify-content: center; min-height: 48px; }
 .feeControls > button:disabled { cursor: default; opacity: .45; }
 .feeControls > div { flex: 1; min-width: 0; position: relative; }
 .builderPage .feeControls input { appearance: textfield; padding-right: 32px; text-align: center; }
@@ -97,7 +97,7 @@
 .builderPage .previewMarket > strong { font-size: 14px; line-height: 20px; text-align: right; }
 .builderPage .previewFoot { flex-wrap: wrap; font-size: 12px; gap: 8px; margin-top: 16px; }
 @media (hover: hover) {
-  .pairChoices > button:not(:disabled):hover { background: #272727; color: var(--mf-ink); }
+  .pairChoices > button:not(:disabled):hover { background: var(--panel-fill-hover); color: var(--mf-ink); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .pairChoices > button, .builderPage .socialDetails > summary > svg { transition: background 180ms cubic-bezier(.32,.72,0,1), border-color 180ms cubic-bezier(.32,.72,0,1), transform 180ms cubic-bezier(.32,.72,0,1); }
@@ -189,9 +189,9 @@
 .imageRow > .iconButton { align-self: start; margin-left: auto; }
 .saved { align-items: center; color: #bbdfc5; display: flex; font-size: 12px; gap: 4px; line-height: 20px; margin: 0; }
 .primaryButton, .secondaryButton, .selectedButton, .textButton, .iconButton { align-items: center; border-radius: 8px; cursor: pointer; display: inline-flex; flex: 0 0 auto; font: inherit; font-size: 16px; font-weight: 500; gap: 8px; justify-content: center; line-height: 24px; min-height: 44px; padding: 8px 12px; text-decoration: none; }
-.primaryButton { background: #fff; border: 1px solid #fff; color: #181818; }
+.primaryButton { background: var(--panel-fill-action); border: 1px solid #fff; color: #181818; }
 .secondaryButton { background: transparent; border: 1px solid var(--mf-control-line); color: var(--mf-ink); }
-.selectedButton { background: #313131; border: 1px solid #707070; color: var(--mf-ink); }
+.selectedButton { background: var(--panel-fill-hover); border: 1px solid #707070; color: var(--mf-ink); }
 .textButton { background: transparent; border: 0; color: var(--mf-ink); font-size: 12px; font-weight: 400; justify-content: start; line-height: 20px; min-height: 44px; padding: 4px 0; text-align: start; text-decoration: underline; text-underline-offset: 4px; }
 .iconButton { background: transparent; border: 0; color: var(--mf-muted); min-height: 44px; padding: 8px; width: 44px; }
 .amountInput { align-items: center; display: flex; position: relative; }
@@ -209,7 +209,7 @@
 .checkLabel > span { display: grid; gap: 4px; min-width: 0; }
 .checkLabel strong { font-size: 14px; font-weight: 500; line-height: 20px; }
 .checkLabel small { color: var(--mf-muted); font-size: 12px; line-height: 20px; }
-.liquidityOption { background: #1f1f1f; border: 1px solid var(--mf-line); border-radius: 8px; margin-bottom: 16px; padding: 16px; }
+.liquidityOption { background: var(--panel-fill); border: 1px solid var(--mf-line); border-radius: 8px; margin-bottom: 16px; padding: 16px; }
 .liquidityOption > .field { margin: 16px 0 0; }
 .socialDetails { margin-top: -4px; }
 .socialDetails > summary, .details > summary { align-items: center; color: var(--mf-ink); cursor: pointer; font-size: 14px; line-height: 20px; min-height: 44px; padding: 12px 0; }
@@ -233,7 +233,7 @@
 .formFooter > .help { text-align: right; }
 .preview { background: var(--mf-surface); border: 1px solid var(--mf-line); border-radius: 16px; overflow: hidden; position: sticky; top: calc(var(--header-height, 88px) + 24px); }
 .previewHeading { align-items: center; color: var(--mf-muted); display: flex; font-size: 12px; justify-content: space-between; line-height: 20px; padding: 16px; }
-.previewArtwork { aspect-ratio: 4 / 3; background: #1f1f1f; overflow: hidden; }
+.previewArtwork { aspect-ratio: 4 / 3; background: var(--panel-fill); overflow: hidden; }
 .previewArtwork > img { display: block; height: 100%; object-fit: contain; width: 100%; }
 .artworkPlaceholder { align-items: center; color: #a6a6a2; display: flex; flex-direction: column; gap: 12px; height: 100%; justify-content: center; }
 .artworkPlaceholder > span { font-size: 14px; line-height: 20px; }
@@ -269,7 +269,7 @@
 .transactionSteps h3 { font-size: 16px; font-weight: 500; line-height: 24px; margin: 0 0 16px; }
 .transactionSteps ol { display: grid; gap: 24px; list-style: none; margin: 0 0 16px; padding: 0; }
 .transactionSteps li { align-items: start; display: flex; gap: 12px; }
-.stepNumber { align-items: center; background: #313131; border-radius: 50%; color: var(--mf-muted); display: flex; flex: 0 0 24px; font-size: 12px; height: 24px; justify-content: center; }
+.stepNumber { align-items: center; background: var(--panel-fill); border-radius: 50%; color: var(--mf-muted); display: flex; flex: 0 0 24px; font-size: 12px; height: 24px; justify-content: center; }
 .stepContent { min-width: 0; width: 100%; }
 .stepContent > strong { font-size: 14px; font-weight: 500; line-height: 24px; }
 .stepContent > p { color: var(--mf-muted); font-size: 14px; line-height: 20px; margin: 4px 0; }
@@ -297,7 +297,7 @@
 .marketMetrics dd { font-size: 24px; font-weight: 500; line-height: 32px; margin: 4px 0 0; }
 .marketAbout > p { color: var(--mf-muted); font-size: 16px; line-height: 24px; margin: 0 0 24px; max-width: 60ch; }
 .marketPage { --mf-focus: #fff; }
-.marketPage .tradePanel .field input { background: #1f1f1f; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 32px; min-height: 64px; }
+.marketPage .tradePanel .field input { background: var(--panel-fill-control); font-size: 24px; font-variant-numeric: tabular-nums; line-height: 32px; min-height: 64px; }
 .marketPage .tradePanel .field input:focus-visible { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; outline: none; }
 .tradeAmountLabel { align-items: center; display: flex; justify-content: space-between; margin-top: -8px; }
 .tradeAmountLabel > label { margin: 0; }
@@ -312,7 +312,7 @@
 .tradeSettings > summary > span { color: var(--mf-ink); font-variant-numeric: tabular-nums; }
 .tradeSlippage { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); padding: 0 0 8px; }
 .tradeSlippage > button { background: transparent; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-muted); cursor: pointer; font: inherit; min-height: 44px; }
-.tradeSlippage > button[aria-pressed="true"] { background: #fff; border-color: #fff; color: #181818; }
+.tradeSlippage > button[aria-pressed="true"] { background: var(--panel-fill-action); border-color: #fff; color: #181818; }
 .tradeMax:disabled, .tradeSlippage > button:disabled { cursor: default; opacity: .45; }
 .tradeResult { align-items: center; color: var(--mf-muted); display: flex; flex-wrap: wrap; font-size: 14px; gap: 0 8px; line-height: 20px; margin-top: 16px; }
 .tradeResult > a { align-items: center; display: inline-flex; justify-content: center; min-height: 44px; min-width: 44px; }
@@ -320,7 +320,7 @@
 .tradePanel { background: var(--mf-surface); border: 1px solid var(--mf-line); border-radius: 16px; min-width: 0; padding: 24px; }
 .sideButtons { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; margin-bottom: 24px; }
 .sideButtons button { background: transparent; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-muted); cursor: pointer; font: inherit; font-size: 16px; font-weight: 500; line-height: 24px; min-height: 48px; padding: 8px 12px; }
-.sideButtons button[aria-pressed="true"] { background: #fff; border-color: #fff; color: #181818; }
+.sideButtons button[aria-pressed="true"] { background: var(--panel-fill-action); border-color: #fff; color: #181818; }
 .tradePanel > form > .primaryButton { margin-top: 16px; width: 100%; }
 .tradeReview { display: grid; gap: 16px; }
 .tradeReview h2 { font-size: 20px; font-weight: 500; line-height: 28px; margin: 0; }
@@ -334,10 +334,10 @@
 .feeLedger > .help { margin-top: 16px; }
 .srOnly { clip: rect(0, 0, 0, 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
 @media (hover: hover) {
-  .primaryButton:not(:disabled):hover { background: #e7e7e4; border-color: #e7e7e4; }
-  .secondaryButton:not(:disabled):hover, .selectedButton:not(:disabled):hover, .iconButton:not(:disabled):hover { background: #313131; }
+  .primaryButton:not(:disabled):hover { background: var(--panel-fill-action-hover); border-color: #e7e7e4; }
+  .secondaryButton:not(:disabled):hover, .selectedButton:not(:disabled):hover, .iconButton:not(:disabled):hover { background: var(--panel-fill-hover); }
   .textButton:not(:disabled):hover, .backButton:not(:disabled):hover { color: #fff; }
-  .imageButton:not(:disabled):hover { background: #313131; border-color: #a4a4a1; }
+  .imageButton:not(:disabled):hover { background: var(--panel-fill-hover); border-color: #a4a4a1; }
   .socialDetails > summary:hover, .details > summary:hover, .transactionDetails > summary:hover { color: #fff; }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -415,7 +415,7 @@
 .coinLinks { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
 .coinLinks a { align-items: center; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-ink); display: inline-flex; font-size: 14px; gap: 8px; line-height: 20px; max-width: 100%; min-height: 44px; overflow-wrap: anywhere; padding: 8px 12px; text-decoration: none; }
 .coinLinks a > svg { flex: 0 0 16px; }
-@media (hover: hover) { .coinLinks a:hover { background: #313131; } }
+@media (hover: hover) { .coinLinks a:hover { background: var(--panel-fill-hover); } }
 @media (max-width: 420px) {
   .marketHeading > img { flex-basis: 56px; height: 56px; width: 56px; }
   .marketHeading p { font-size: 16px; line-height: 24px; }

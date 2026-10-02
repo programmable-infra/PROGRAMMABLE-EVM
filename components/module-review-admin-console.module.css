@@ -1,5 +1,5 @@
 .page { --review-line: var(--border); --review-panel: var(--surface-raised); --review-subtle: var(--surface); --review-ease: cubic-bezier(.2,.65,.3,1); color: var(--text); padding: 32px 24px 80px; }
-:global(html[data-theme="dark"]) .page { --review-panel: #181818; --review-subtle: #1f1f1f; --muted: #b8b3ae; --review-line: #363432; }
+:global(html[data-theme="dark"]) .page { --review-panel: var(--panel-fill); --review-subtle: var(--panel-fill-soft); --muted: #b8b3ae; --review-line: #363432; }
 .header { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .eyebrow { margin: 0 0 8px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
 .header h1 { margin: 0; font-size: 36px; line-height: 40px; font-weight: 550; letter-spacing: -.035em; }
@@ -66,7 +66,7 @@
 .detailTabs { display: flex; gap: 24px; border-bottom: 1px solid var(--review-line); margin-bottom: 24px; }
 .detailTabs button { position: relative; padding: 8px 0 16px; min-height: 48px; background: transparent; border: 0; font: inherit; font-size: 14px; line-height: 20px; color: var(--muted); cursor: pointer; }
 .detailTabs button[aria-pressed=true] { color: var(--text); font-weight: 550; }
-.detailTabs button[aria-pressed=true]::after { content: ""; position: absolute; inset: auto 0 -1px; height: 2px; background: var(--brand-pink); border-radius: 2px; }
+.detailTabs button[aria-pressed=true]::after { content: ""; position: absolute; inset: auto 0 -1px; height: 2px; background: var(--panel-fill-accent); border-radius: 2px; }
 .overview h3, .section h3 { font-size: 16px; line-height: 24px; font-weight: 550; margin: 0 0 12px; }
 .description { font-size: 16px; line-height: 24px; color: var(--text-soft); margin: 0; max-width: 65ch; text-wrap: pretty; }
 .identities { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 24px 0; }

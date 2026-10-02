@@ -340,7 +340,7 @@
 
 .runnerArt {
   aspect-ratio: 1;
-  background: #010103;
+  background: var(--panel-fill);
   border: 0;
   border-radius: 16px;
   box-shadow: none;
@@ -354,7 +354,7 @@
 
 .runnerImage {
   backface-visibility: hidden;
-  background: #010103;
+  background: var(--panel-fill);
   color: transparent;
   display: block;
   height: calc(100% + 4px) !important;
@@ -1012,7 +1012,7 @@
   .runnerCard,
   .messageState,
   .emptyState {
-    background: #1f1f1f;
+    background: var(--panel-fill-dialog);
   }
 }
 
@@ -1175,7 +1175,7 @@
 .filterMenu {
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
-  background: rgb(24 24 24 / 0.98);
+  background: var(--panel-fill-dialog);
   border: 1px solid var(--webde-line);
   border-radius: 12px;
   box-shadow: 0 24px 64px rgb(0 0 0 / 0.58);
@@ -1208,7 +1208,7 @@
 }
 
 .activeFilterCount {
-  background: #363636;
+  background: var(--panel-fill);
   border-radius: 50%;
 }
 
@@ -1243,7 +1243,7 @@
 }
 
 .runnerArtPreserved {
-  background: #321a2b;
+  background: var(--panel-fill);
 }
 
 .runnerImagePreserved {

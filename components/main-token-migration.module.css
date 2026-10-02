@@ -226,7 +226,7 @@
 }
 
 .migrationPanel {
-  background: #181818;
+  background: var(--panel-fill);
   border: 1px solid var(--webde-line);
   border-radius: 16px;
   box-shadow: 0 32px 80px rgb(0 0 0 / 0.32);
@@ -286,7 +286,7 @@
 
 .previewOptions > div {
   align-content: start;
-  background: #111;
+  background: var(--panel-fill);
   border: 1px solid var(--webde-line);
   border-radius: 10px;
   display: grid;
@@ -302,7 +302,7 @@
 
 .closedNotice {
   align-items: center;
-  background: #2b1717;
+  background: var(--panel-fill);
   border-bottom: 1px solid #593030;
   color: #ffd3d3;
   display: flex;
@@ -341,7 +341,7 @@
 }
 
 .destinationColumn {
-  background: #131313;
+  background: var(--panel-fill);
   border-inline-start: 1px solid var(--webde-line);
 }
 
@@ -378,7 +378,7 @@
 }
 
 .walletTypeStatus {
-  background: #111;
+  background: var(--panel-fill);
   border: 1px solid var(--webde-line);
   border-radius: 8px;
   display: grid;
@@ -402,7 +402,7 @@
 }
 
 .walletTypeStatus[data-status="eoa"] {
-  background: #152019;
+  background: var(--panel-fill);
   border-color: #2d4935;
 }
 
@@ -412,7 +412,7 @@
 
 .walletTypeStatus[data-status="contract"],
 .walletTypeStatus[data-status="unavailable"] {
-  background: #241c13;
+  background: var(--panel-fill);
   border-color: #49351f;
 }
 
@@ -449,7 +449,7 @@
 
 .amountControl {
   align-items: center;
-  background: #0f0f0f;
+  background: var(--panel-fill-control);
   border: 1px solid var(--webde-line);
   border-radius: 8px;
   display: grid;
@@ -488,7 +488,7 @@
 
 .amountControl button,
 .addressBlock button {
-  background: #272727;
+  background: var(--panel-fill-control);
   border: 1px solid #383838;
   border-radius: 8px;
   color: #fff;
@@ -544,7 +544,7 @@
 .acknowledgement input {
   appearance: none;
   accent-color: #fff;
-  background: #0f0f0f;
+  background: var(--panel-fill-control);
   border: 1px solid #666;
   border-radius: 4px;
   display: grid;
@@ -565,7 +565,7 @@
 }
 
 .acknowledgement input:checked {
-  background: #fff;
+  background: var(--panel-fill-action);
   border-color: #fff;
 }
 
@@ -584,7 +584,7 @@
 }
 
 .primaryAction {
-  background: #fff;
+  background: var(--panel-fill-action);
   border: 1px solid #fff;
   border-radius: 8px;
   color: #000;
@@ -602,7 +602,7 @@
 }
 
 .primaryAction:disabled {
-  background: #272727;
+  background: var(--panel-fill-control);
   border-color: #383838;
   color: var(--webde-dim);
   cursor: not-allowed;
@@ -640,7 +640,7 @@
 }
 
 .pendingStatus {
-  background: #211e16;
+  background: var(--panel-fill);
   border: 1px solid #4b4227;
 }
 
@@ -649,7 +649,7 @@
 }
 
 .confirmedStatus {
-  background: #1d2b21;
+  background: var(--panel-fill);
   border: 1px solid #304c37;
 }
 
@@ -662,7 +662,7 @@
 }
 
 .revertedStatus {
-  background: #2b1717;
+  background: var(--panel-fill);
   border: 1px solid #593030;
 }
 
@@ -683,7 +683,7 @@
 }
 
 .secondaryAction {
-  background: #fff;
+  background: var(--panel-fill-action);
   border: 1px solid #fff;
   border-radius: 8px;
   color: #000;
@@ -705,7 +705,7 @@
 }
 
 .confirmationIssue {
-  background: #241c13;
+  background: var(--panel-fill);
   border: 1px solid #49351f;
   border-radius: 8px;
   color: #ffe3bb;
@@ -717,7 +717,7 @@
 }
 
 .addressBlock {
-  background: #0c0c0c;
+  background: var(--panel-fill);
   border: 1px solid var(--webde-line);
   border-radius: 8px;
   margin-top: 24px;
@@ -786,11 +786,11 @@
 @media (hover: hover) and (pointer: fine) {
   .amountControl button:hover:not(:disabled),
   .addressBlock button:hover:not(:disabled) {
-    background: #313131;
+    background: var(--panel-fill-hover);
   }
 
   .primaryAction:hover:not(:disabled) {
-    background: #e9e9e9;
+    background: var(--panel-fill-action-hover);
   }
 
   .transactionStatus a:hover {
@@ -798,7 +798,7 @@
   }
 
   .secondaryAction:hover {
-    background: #e9e9e9;
+    background: var(--panel-fill-action-hover);
   }
 }
 

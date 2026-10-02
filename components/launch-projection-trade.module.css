@@ -7,8 +7,8 @@
 .fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .trade label { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .trade input, .trade select { background: var(--background, #111); border: 1px solid var(--border, #444); color: inherit; border-radius: 6px; font: inherit; padding: 10px 12px; width: 100%; min-width: 0; min-height: 44px; }
-.trade button { min-height: 44px; border: 1px solid transparent; border-radius: 6px; padding: 10px 16px; background: #e786b2; color: #1a0d14; font: inherit; font-weight: 600; cursor: pointer; }
-.trade button:hover { background: #f19ec4; }
+.trade button { min-height: 44px; border: 1px solid transparent; border-radius: 6px; padding: 10px 16px; background: rgb(231 134 178 / 0.9); color: #1a0d14; font: inherit; font-weight: 600; cursor: pointer; }
+.trade button:hover { background: rgb(241 158 196 / 0.9); }
 .trade button:disabled { opacity: .6; cursor: wait; }
 .trade .secondary { background: transparent; color: inherit; border-color: var(--border, #444); }
 .trade :is(button, input, select, summary, a):focus-visible { outline: 2px solid #e786b2; outline-offset: 4px; }

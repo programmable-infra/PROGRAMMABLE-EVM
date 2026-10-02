@@ -1,0 +1,132 @@
+/* Shared translucent surfaces. Apply alpha to the fill, never to its content. */
+:root {
+  --panel-fill: rgb(16 18 22 / 0.78);
+  --panel-fill-raised: rgb(24 27 32 / 0.8);
+  --panel-fill-soft: rgb(16 19 24 / 0.56);
+  --panel-fill-control: rgb(25 28 34 / 0.66);
+  --panel-fill-hover: rgb(38 42 49 / 0.76);
+  --panel-fill-selected: rgb(36 51 43 / 0.76);
+  --panel-fill-dialog: rgb(16 18 22 / 0.9);
+  --panel-fill-header: rgb(8 11 15 / 0.68);
+  --panel-fill-action: rgb(248 240 233 / 0.9);
+  --panel-fill-action-hover: rgb(255 249 242 / 0.94);
+  --panel-fill-accent: color-mix(in srgb, var(--brand-pink) 90%, transparent);
+  --panel-line: rgb(255 255 255 / 0.16);
+  --panel-line-strong: rgb(255 255 255 / 0.24);
+  --panel-backdrop: blur(12px) saturate(1.08);
+  --panel-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035),
+    0 12px 36px rgb(0 0 0 / 0.16);
+  --webde-surface: var(--panel-fill);
+  --webde-surface-raised: var(--panel-fill-raised);
+  --webde-control: var(--panel-fill-control);
+  --webde-panel: var(--panel-fill);
+  --webde-line: var(--panel-line);
+  --liquid-glass-surface-background: var(--panel-fill);
+  --liquid-glass-surface-background-strong: var(--panel-fill-raised);
+  --liquid-glass-inner-background: var(--panel-fill-soft);
+  --liquid-glass-control-background: var(--panel-fill-control);
+  --liquid-glass-control-background-hover: var(--panel-fill-hover);
+  --liquid-glass-border: var(--panel-line);
+  --liquid-glass-border-strong: var(--panel-line-strong);
+  --liquid-glass-backdrop: var(--panel-backdrop);
+  --liquid-glass-shadow: var(--panel-shadow);
+  --liquid-glass-control-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025);
+  --liquid-glass-inner-shadow: inset 0 1px 0 rgb(255 255 255 / 0.02);
+  --navigation-glass-background: var(--panel-fill-header);
+  --navigation-glass-background-hover: var(--panel-fill-hover);
+  --navigation-glass-border: var(--panel-line);
+  --navigation-glass-backdrop: var(--panel-backdrop);
+  --navigation-glass-shadow: var(--panel-shadow);
+}
+
+html[data-theme="dark"] {
+  --surface: var(--panel-fill);
+  --surface-raised: var(--panel-fill-raised);
+  --surface-soft: var(--panel-fill-soft);
+  --surface-tint: var(--panel-fill-control);
+  --surface-tint-strong: var(--panel-fill-dialog);
+  --step-background: var(--panel-fill-control);
+  --header-background: var(--panel-fill-header);
+  --border: var(--panel-line);
+  --border-strong: var(--panel-line-strong);
+  --panel-border: var(--panel-line);
+  --panel-border-soft: rgb(255 255 255 / 0.1);
+  --panel-border-muted: rgb(255 255 255 / 0.12);
+  --control-border: var(--panel-line-strong);
+  --popover-border: var(--panel-line-strong);
+  --glass-70: var(--panel-fill-soft);
+  --glass-72: var(--panel-fill-soft);
+  --glass-76: var(--panel-fill-control);
+  --glass-82: var(--panel-fill);
+  --glass-84: var(--panel-fill);
+  --glass-88: var(--panel-fill-raised);
+  --glass-90: var(--panel-fill-raised);
+  --glass-92: var(--panel-fill-raised);
+  --glass-94: var(--panel-fill-dialog);
+  --glass-96: var(--panel-fill-dialog);
+  --glass-98: var(--panel-fill-dialog);
+  --control-glass-background: var(--panel-fill-control);
+  --control-glass-background-strong: var(--panel-fill-raised);
+  --control-glass-background-hover: var(--panel-fill-hover);
+}
+
+html[data-theme="light"] {
+  --panel-fill: rgb(248 243 236 / 0.78);
+  --panel-fill-raised: rgb(255 253 249 / 0.82);
+  --panel-fill-soft: rgb(239 233 225 / 0.58);
+  --panel-fill-control: rgb(255 253 249 / 0.68);
+  --panel-fill-hover: rgb(255 253 249 / 0.84);
+  --panel-fill-selected: rgb(224 238 228 / 0.8);
+  --panel-fill-dialog: rgb(255 253 249 / 0.92);
+  --panel-fill-header: rgb(248 243 236 / 0.72);
+  --panel-line: rgb(16 40 64 / 0.16);
+  --panel-line-strong: rgb(16 40 64 / 0.24);
+  --surface: var(--panel-fill);
+  --surface-raised: var(--panel-fill-raised);
+  --surface-soft: var(--panel-fill-soft);
+}
+
+/* Keep floating layers readable over the page without filling every card
+ * with blur: large scrolling lists use only the inexpensive translucent fill. */
+.wallet-dialog,
+.wallet-menu,
+.launch-success-dialog,
+.token-filter-menu,
+.launch-select-menu,
+.launch-select-popup {
+  background: var(--panel-fill-dialog);
+  -webkit-backdrop-filter: var(--panel-backdrop);
+  backdrop-filter: var(--panel-backdrop);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --panel-fill: rgb(16 18 22 / 0.95);
+    --panel-fill-raised: rgb(24 27 32 / 0.96);
+    --panel-fill-soft: rgb(16 19 24 / 0.92);
+    --panel-fill-control: rgb(25 28 34 / 0.94);
+    --panel-fill-dialog: rgb(16 18 22 / 0.98);
+    --panel-line: rgb(255 255 255 / 0.4);
+  }
+}
+
+@media (forced-colors: active) {
+  :root,
+  html[data-theme="dark"],
+  html[data-theme="light"] {
+    --panel-fill: Canvas;
+    --panel-fill-raised: Canvas;
+    --panel-fill-soft: Canvas;
+    --panel-fill-control: Canvas;
+    --panel-fill-hover: Canvas;
+    --panel-fill-selected: Canvas;
+    --panel-fill-dialog: Canvas;
+    --panel-fill-header: Canvas;
+    --panel-fill-action: ButtonFace;
+    --panel-fill-action-hover: ButtonFace;
+    --panel-fill-accent: ButtonFace;
+    --panel-line: CanvasText;
+    --panel-line-strong: CanvasText;
+    --panel-backdrop: none;
+  }
+}

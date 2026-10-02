@@ -126,7 +126,7 @@
 }
 
 .primaryButton {
-  background: var(--webde-ink);
+  background: var(--panel-fill-action);
   border: 1px solid var(--webde-ink);
   color: var(--webde-canvas);
   cursor: pointer;
@@ -520,7 +520,7 @@
 }
 
 .segment[data-active="true"] {
-  background: var(--webde-ink);
+  background: var(--panel-fill-action);
   color: var(--webde-canvas);
 }
 
@@ -681,7 +681,7 @@
 
 @media (hover: hover) and (pointer: fine) {
   .primaryButton:not(:disabled):hover {
-    background: #e7e7e4;
+    background: var(--panel-fill-action-hover);
     border-color: #e7e7e4;
   }
 

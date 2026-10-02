@@ -1155,7 +1155,7 @@ body:has([data-docs-shell]) .site-header::before {
 }
 
 .desktop-nav a::after {
-  background: var(--brand-ivory);
+  background: var(--panel-fill-action);
   border-radius: 999px;
   bottom: 4px;
   content: "";
@@ -2114,7 +2114,7 @@ body:has([data-docs-shell]) .site-header::before {
   (-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))
 ) {
   .liquid-glass-surface {
-    background: #24211f;
+    background: var(--panel-fill);
   }
 
   .wallet-button,
@@ -2124,6 +2124,6 @@ body:has([data-docs-shell]) .site-header::before {
   .token-pagination,
   .wallet-menu,
   .token-filter-menu {
-    background: #2e2a27;
+    background: var(--panel-fill-dialog);
   }
 }

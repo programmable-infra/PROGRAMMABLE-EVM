@@ -27,7 +27,7 @@
 
 .art {
   aspect-ratio: 2.42 / 1;
-  background: #090909;
+  background: var(--panel-fill);
   border-bottom: 1px solid var(--webde-line, rgb(255 255 255 / 11%));
   contain: paint;
   line-height: 0;
@@ -37,7 +37,7 @@
 }
 
 .image {
-  background: #090909;
+  background: var(--panel-fill);
   display: block;
   height: 100%;
   object-fit: cover;
