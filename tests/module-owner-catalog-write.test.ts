@@ -15,7 +15,7 @@ it("merges concurrent publications after an ETag conflict without losing another
     .mockResolvedValueOnce(catalog([a, b], "after"))
     .mockResolvedValueOnce(catalog([a, b, c], "written"));
   storage.put.mockRejectedValueOnce(new storage.Conflict()).mockResolvedValueOnce({});
-  const save = vi.fn(async () => {}), log = vi.spyOn(console, "log").mockImplementation(() => {});
+  const save = vi.fn<(name: string, value: unknown) => Promise<void>>().mockResolvedValue(undefined), log = vi.spyOn(console, "log").mockImplementation(() => {});
   try {
     await publishCatalog(c, "test-storage-token", save);
     expect(storage.put).toHaveBeenCalledTimes(2);
