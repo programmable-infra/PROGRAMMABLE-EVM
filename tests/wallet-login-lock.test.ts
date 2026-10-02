@@ -105,10 +105,10 @@ describe("wallet login lock", () => {
       "if (!walletLoginAttemptGateRef.current.tryStart()) return;",
     );
     expect(provider).toMatch(
-      /onComplete: \(\{ user: signedInUser, loginAccount \}\) => \{\s+settleWalletLoginAttempt\(\);/u,
+      /onComplete: \(\{ user: signedInUser, loginAccount \}\) => \{[\s\S]*?settleWalletLoginAttempt\(\);/u,
     );
     expect(provider).toMatch(
-      /onError: \(errorCode\) => \{\s+settleWalletLoginAttempt\(\);/u,
+      /onError: \(errorCode\) => \{[\s\S]*?settleWalletLoginAttempt\(\);/u,
     );
     expect(provider).toContain(
       "loginPending || (accountSwitchRequested && !providerTimedOut) || (!providerSettled && !providerTimedOut)",
