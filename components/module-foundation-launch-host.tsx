@@ -32,6 +32,7 @@ import type { FoundationStartPrice } from "@/lib/module-foundation/start-price";
 import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, type FoundationImage,
   type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationQuoteAsset, type FoundationTransactionResult } from "@/lib/module-foundation/ui-types";
 import styles from "./module-foundation-ui.module.css";
+import studioStyles from "./module-studio/studio.module.css";
 
 const openedLaunchKey = (account: Address) => `programmable:foundation-launch-opened:v1:${account.toLowerCase()}`;
 const openedLaunches = new Map<string, string>();
@@ -223,7 +224,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     uploads.current.set(`${account.toLowerCase()}:${result.uri}`, input.image.sha256);
     return { url: result.uri, sha256: input.image.sha256 };
   }
-  return <><FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
+  return <div className={layout === "studio" ? studioStyles.launchPage : undefined}><FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
     {savedLaunchError && savedLaunchError === session.resolution?.operationId ? <div className={`${styles.page} ${styles.sessionStatus}`}>
       <p role="alert">Your saved launch could not be opened yet.</p>
       <button type="button" className={styles.secondaryButton} onClick={() => { setSavedLaunchError(null); setRecoveryRetry(value => value + 1); }}>Open coin</button>
@@ -235,5 +236,5 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
       launching.current = true;
       try { const outcome = await session.execute(sequence); setCompletedDraft(draftKey); return await resultFrom(outcome); }
       finally { launching.current = false; } }} onRefreshResult={async result => resultFrom(await session.refreshResult(result))}
-    walletAction={session.walletAction} submissionBlocked={session.preparationBlocked} onBack={() => router.push("/")} onRetryAvailability={session.retryAvailability} /></>;
+    walletAction={session.walletAction} submissionBlocked={session.preparationBlocked} onBack={() => router.push(layout === "studio" ? "/launch" : "/")} onRetryAvailability={session.retryAvailability} /></div>;
 }

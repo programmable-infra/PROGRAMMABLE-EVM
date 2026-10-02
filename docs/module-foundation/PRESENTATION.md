@@ -101,7 +101,7 @@ Platform/creator fee payouts are separate ledger operations. The contracts expos
 
 ## Coin Studio presentation
 
-`components/module-studio/studio.tsx` is the shared visual workspace. It receives the existing launch draft and verified catalog; it owns only panel selection, category filtering and retained settings for toggled-off modules. The builder remains responsible for image preparation, quote resolution, errors and the single launch operation. The launch host remains responsible for simulations, account/chain checks, signing and receipts. Use `layout="studio"` on the existing launch host to select this presentation. The default live form is unchanged until the Studio is published.
+`components/module-studio/studio.tsx` is the shared visual workspace at `/launch/modules/foundation`. It receives the existing launch draft and verified catalog; it owns only panel selection, category filtering and retained settings for toggled-off modules and quote selection. The builder remains responsible for image preparation, quote resolution, errors and the single launch operation. The launch host remains responsible for simulations, account/chain checks, signing and receipts. The product route selects `layout="studio"` on that existing launch host; the form layout remains available for existing callers and the transaction result screen.
 
 `lib/module-foundation/studio.ts` defines the draft, category projection and default selection helpers. A new module may include display metadata in its signed source descriptor:
 
@@ -113,7 +113,7 @@ Platform/creator fee payouts are separate ledger operations. The contracts expos
 
 Supported categories are `trading`, `fees`, `supply`, `liquidity` and `other`. Unknown or absent metadata falls back to Trading for declared swap callbacks, otherwise More. Category, name and icon grant no runtime authority and never change committed execution. Settings use the existing configuration schema and exact percentage conversion. Only catalog entries actually marked available can be enabled. Future buyback or burn implementations are not implied by category metadata.
 
-Desktop uses a fixed workspace with library, coin composition and settings inspector; changing a panel never covers the coin. Small screens use Modules, Your coin and Settings tabs. Long catalogs/settings can scroll within their panel. The preview fits the viewport without a vertical page scroll. Product adoption must also give the editor an application-shell mode without the global footer or floating mobile navigation below it. The canvas bounds visible node count and groups additional selections behind View all. Details stay inside expandable cards, and reduced-motion preferences are respected.
+Desktop uses a fixed workspace with library, coin composition and settings inspector; changing a panel never covers the coin. Clicking an available module enables it and opens its configuration immediately. Creator fees and first buy share one row; the launch/wallet action stays central. Small screens use Modules, Your coin and Settings tabs. Long catalogs/settings can scroll within their panel. The Studio fits normal portrait and desktop viewports without a vertical page scroll; its application-shell mode removes the global footer. The canvas bounds visible node count and groups additional selections behind View all. Description, links and module details stay inside expandable cards, validation errors open the relevant settings, and reduced-motion preferences are respected.
 
 ## Validation boundary
 
