@@ -17,6 +17,7 @@ export async function createModuleLaunchSelectionServer() {
     import {fixture} from './tests/module-engine-fixture';
     import catalog from './config/module-mode/catalog.json';
     import './app/globals.css'; import './app/interface.css'; import './app/programmable-experience.css'; import './app/webde-final-ui.css';
+import './app/surfaces.css';
     const mode = new URLSearchParams(location.search).get('mode');
     const base = moduleEvidenceFixture().release;
     const identity = {...base, schemaVersion:'programmable.module-mode-source.v2', sourceVersion:'module-native-v2', economicsPolicyId:MODULE_MODE_ECONOMICS_POLICY_V2};

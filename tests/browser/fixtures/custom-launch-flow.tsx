@@ -13,6 +13,7 @@ import "../../../app/globals.css";
 import "../../../app/interface.css";
 import "../../../app/programmable-experience.css";
 import "../../../app/webde-final-ui.css";
+import "../../../app/surfaces.css";
 
 // Deliberately local browser fixtures. These exercise the product components and durable journal,
 // never production wallet authority or real onchain execution.

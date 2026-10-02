@@ -15,6 +15,7 @@ export async function createModuleEngineDiscoveryServer() {
     import {ProfileModules} from './components/profile-modules';
     import {TokenLaunchModules} from './components/token-launch-modules';
     import './app/globals.css'; import './app/interface.css'; import './app/programmable-experience.css'; import './app/webde-final-ui.css';
+import './app/surfaces.css';
     const f=fixture(), account='0x'+'a'.repeat(40), hash=n=>'0x'+n.toString(16).padStart(64,'0');
     const first=f.template; first.manifest.manifest.catalogDefinition.title='Quote escrow';
     first.manifest.manifest.catalogDefinition.summary='Deposit a quote asset and withdraw under fixed unlock rules.';

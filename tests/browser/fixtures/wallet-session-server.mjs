@@ -24,6 +24,7 @@ export async function createWalletSessionServer() {
         import './app/interface.css';
         import './app/programmable-experience.css';
         import './app/webde-final-ui.css';
+import './app/surfaces.css';
         function Consumer() {
           const value = useWallet();
           const view = useViewChain();
