@@ -123,6 +123,11 @@ export function ModuleFoundationBuilder({ layout = "form", availability, context
   const lookedUpQuote = quoteLookup?.address.toLowerCase() === quoteAddress.toLowerCase() && quoteLookup.status === "resolved" && quoteLookup.contextKey === contextKey ? quoteLookup.asset : undefined;
   const quote = knownQuote ?? lookedUpQuote;
   const quoteSymbol = !customQuote || quote?.supportsNativeEth ? "ETH" : quote?.symbol || "TOKEN";
+  const currentQuoteLookup = quoteLookup?.address.toLowerCase() === quoteAddress.toLowerCase()
+    && quoteLookup.contextKey === contextKey ? quoteLookup : undefined;
+  const quoteStatus = !customQuote ? undefined : quote
+    ? quote.supported ? `${quote.name} · ${quote.symbol}` : quote.reason || "This token is not supported for this launch."
+    : currentQuoteLookup?.status === "checking" ? "Checking token…" : currentQuoteLookup?.message;
   const imageSource = localImage?.preview ?? draft.image?.url;
   const modulesError = foundationSelectionErrors(draft.modules, catalog);
   const unavailable = availability.status !== "ready";
@@ -317,7 +322,7 @@ export function ModuleFoundationBuilder({ layout = "form", availability, context
 
   const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" ? "Saving image…" : phase === "preparing" ? "Preparing launch…" : phase === "signing" ? launchProgress || "Opening coin…" : "Create Launch");
   if (layout === "studio" && phase !== "result") return <FoundationStudio draft={draft} catalog={catalog} imageSource={imageSource}
-    quoteSymbol={quoteSymbol} quoteStatus={customQuote ? quote?.supported ? `${quote.name} · ${quote.symbol}` : quoteLookup?.message || "Checking token…" : undefined}
+    quoteSymbol={quoteSymbol} quoteStatus={quoteStatus}
     initialBuy={initialBuy} actionLabel={actionLabel} disabled={locked || imagePreparing} busy={busy || walletAction?.busy}
     actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
     error={error || submissionBlocked} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
