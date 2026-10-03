@@ -64,7 +64,9 @@ function fixture(options: { beneficiary?: "platform" | "creator"; credited?: big
       success(encodeFunctionResult({ abi: foundationLedgerAbi, functionName: beneficiary === "platform" ? "claimPlatform" : "claimCreator", result: returned })),
       balance(500n + received)] };
   });
-  const client = { getChainId: vi.fn(async () => 4663), getBlock: vi.fn(async () => ({ number: blockNumber, hash, timestamp: BigInt(Math.floor(Date.now() / 1000)) })),
+  const client = { getChainId: vi.fn(async () => 4663), getBlock: vi.fn(async (read: { blockNumber?: bigint }) => ({
+    number: read.blockNumber ?? blockNumber + 16n, hash, timestamp: BigInt(Math.floor(Date.now() / 1000)),
+  })),
     getCode: vi.fn(async () => "0x60006000"), readContract, simulateCalls } as unknown as PublicClient;
   return { client, readContract, simulateCalls, prepare: () => prepareFoundationClaim({ client, binding, account: caller, pool, beneficiary }) };
 }

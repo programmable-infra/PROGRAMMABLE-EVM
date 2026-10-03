@@ -57,6 +57,12 @@ function homeMarkdownResponse(): NextResponse {
 }
 
 export function proxy(request: NextRequest) {
+  // Keep this native guide out of the external GitBook catch-all rewrite.
+  if (request.nextUrl.pathname === "/docs/ethereum-direct-custom-hook") {
+    const destination = request.nextUrl.clone();
+    destination.pathname = "/developer-reference/ethereum-custom-hook";
+    return NextResponse.redirect(destination, 307);
+  }
   // Keep the conventional uppercase entry on the canonical public guide.
   // Check the actual pathname because matchers can be case insensitive.
   if (request.nextUrl.pathname.toLowerCase() === "/agents.md") {
@@ -109,5 +115,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/AGENTS.md", "/docs/developers", "/api/prediction/:path*"],
+  matcher: ["/", "/AGENTS.md", "/docs/developers", "/docs/ethereum-direct-custom-hook", "/api/prediction/:path*"],
 };

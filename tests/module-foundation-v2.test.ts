@@ -76,6 +76,25 @@ describe("versioned Foundation factory source binding", () => {
     expect(keccak256(v2Code)).toBe(f.binding.factory.runtimeCodeHash);
     await expect(assertFoundationInfrastructure(f.client, f.binding)).resolves.toEqual(f.checkpoint);
     expect(f.methods.getCode).toHaveBeenCalledTimes(8);
+    expect(f.methods.getBlock.mock.calls).toEqual([[{ blockTag: "latest" }], [{ blockNumber: 100n }]]);
+    expect(f.methods.getCode.mock.calls.every(([read]) => read.blockNumber === 100n)).toBe(true);
+    expect(f.methods.readContract.mock.calls.every(([read]) => read.blockNumber === 100n)).toBe(true);
+  });
+  it("keeps an explicit receipt checkpoint exact without reading the sequencer head", async () => {
+    const f = foundationV2Fixture();
+    await expect(assertFoundationInfrastructure(f.client, f.binding, 100n)).resolves.toEqual(f.checkpoint);
+    expect(f.methods.getBlock.mock.calls).toEqual([[{ blockNumber: 100n }]]);
+  });
+  it.each(["substituted", "stale", "before-source"])("rejects a %s checkpoint before any runtime read", async kind => {
+    const f = foundationV2Fixture();
+    f.methods.getBlock.mockImplementation(async read => ({
+      number: read.blockNumber === undefined ? 116n : kind === "substituted" ? 101n : 100n,
+      hash: f.checkpoint.blockHash,
+      timestamp: f.checkpoint.timestamp - (kind === "stale" ? 121n : 0n),
+    }));
+    await expect(assertFoundationInfrastructure(f.client, { ...f.binding, startBlock: kind === "before-source" ? 101n : 1n }))
+      .rejects.toThrow("source-bound chain state");
+    expect(f.methods.getCode).not.toHaveBeenCalled();
   });
   it.each([
     ["VERSION_ID", FOUNDATION_ABI_ID], ["MODULE_ABI_ID", v2Hash(99)], ["LP_CUSTODY_ID", v2Hash(99)],

@@ -32,6 +32,17 @@ const ORIGIN = "https://programmable.market";
 const CUSTOM_LAUNCH_API_ORIGIN = "https://api.programmable.market";
 
 describe("agent-readable public surface", () => {
+  it.each(["text/html", "text/markdown", "application/json"])("redirects the old Ethereum guide before GitBook and content negotiation for %s", accept => {
+    expect(proxyConfig.matcher).toContain("/docs/ethereum-direct-custom-hook");
+    for (const method of ["GET", "HEAD"]) {
+      const response = proxy(new NextRequest(`${ORIGIN}/docs/ethereum-direct-custom-hook?source=agent`, {
+        method, headers: { Accept: accept },
+      }));
+      expect(response.status).toBe(307);
+      expect(response.headers.get("location")).toBe(`${ORIGIN}/developer-reference/ethereum-custom-hook?source=agent`);
+      expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    }
+  });
   it("redirects the conventional uppercase agent guide without looping or negotiating away Markdown", () => {
     const alias = proxy(new NextRequest(`${ORIGIN}/AGENTS.md`, {
       headers: { Accept: "text/markdown" },
