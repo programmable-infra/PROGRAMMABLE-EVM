@@ -230,7 +230,7 @@ describe("interaction accessibility", () => {
     expect(source).not.toContain('href: "/swap"');
     expect(source).toContain('aria-label="Programmable on Discord"');
     expect(source).toContain('aria-label="Programmable on DEX Screener"');
-    expect(landing).toContain('href="/launch"');
+    expect(landing).toContain('href="/explore"');
   });
 
   it("keeps primary and secondary routes semantic in mobile navigation", () => {
@@ -256,7 +256,7 @@ describe("interaction accessibility", () => {
     });
 
     expect(source).toContain("const mobileNavItems = [desktopNavItems[0], ...menuNavItems];");
-    expect(source).toContain('{ href: "/profile", label: "Profile" },');
+    expect(source).toContain('<Link href="/profile" prefetch={false} onClick={onClose}>Profile</Link>');
     expect(source).not.toContain('{ href: "/migration", label: "Migrate" },');
     expect(source).not.toContain("/hookathon");
     expect(source).toContain(
