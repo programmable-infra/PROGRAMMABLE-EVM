@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 const root = process.cwd();
 
 describe("Explore UI contract", () => {
-  it("routes public Explore to Robinhood and keeps the legacy reset explicit", () => {
+  it("routes public Explore to the merged catalog and keeps the retired reset explicit", () => {
     const page = readFileSync(join(root, "app/explore/[chain]/page.tsx"), "utf8");
     const entry = readFileSync(join(root, "app/explore/page.tsx"), "utf8");
     const resetView = readFileSync(
@@ -17,11 +17,11 @@ describe("Explore UI contract", () => {
       "utf8",
     );
 
-    expect(entry).toContain("redirect(exploreChainPath(");
-    expect(page).toContain("<RobinhoodLaunchesView chainId={chainId} />");
+    expect(entry).toContain("<UnifiedLaunchesView />");
+    expect(page).toContain('redirect("/explore")');
     expect(page).toContain("exploreChainIdFromSlug");
     expect(readFileSync(join(root, "components/robinhood-launches-view.tsx"), "utf8")).not.toContain("ExploreIndexResetView");
-    expect(page).toContain("index: false");
+    expect(entry).toContain("index: false");
     expect(page).not.toContain("ExploreView");
     expect(page).not.toContain("@/app/api/explore/route");
     expect(page).not.toContain("websiteExploreIndexEnabledV1");
@@ -29,7 +29,7 @@ describe("Explore UI contract", () => {
     expect(resetView).toContain(
       "<Heading data-explore-heading>Explore</Heading>",
     );
-    expect(page).toContain("if (chainId === 1) redirect(exploreChainPath(4663))");
+    expect(entry).not.toContain("cookies()");
     expect(resetView).not.toContain("<ExploreChainSelector");
     expect(resetView.indexOf("<ExploreFilters disabled />")).toBeGreaterThan(
       resetView.indexOf("className={styles.disabledSearch}"),

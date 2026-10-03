@@ -23,6 +23,7 @@
 - [Verify a launch](developers/verify.md)
 - [API reference](developers/machine-readable.md)
   - [Launch stamps](launch-stamps.md)
+    - [Direct Ethereum Custom Hooks](ethereum-direct-custom-hook.md)
   - [Fees by contract version](reference/fee-versions.md)
     - [Classic on Ethereum](models/classic.md)
   - [Verification and risk](trust.md)

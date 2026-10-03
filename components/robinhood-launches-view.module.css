@@ -161,7 +161,8 @@
 .name, .symbol { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .name { font-size: 17px; font-weight: 550; line-height: 24px; }
 .symbol { color: var(--webde-muted); flex: none; font-size: 13px; line-height: 18px; white-space: nowrap; }
-.mode { color: var(--webde-muted); display: block; grid-column: 1 / -1; font-size: 11px; line-height: 16px; }
+.mode { align-items: center; color: var(--webde-muted); display: flex; gap: 6px; grid-column: 1 / -1; font-size: 11px; line-height: 18px; }
+.chainMark { color: var(--webde-ink); flex: none; object-fit: contain; }
 .cardFooter { align-items: flex-end; display: flex; gap: 8px; justify-content: space-between; margin-top: 8px; padding: 0 4px 4px; }
 .marketCap { display: grid; gap: 2px; min-width: 0; }
 .marketCap > span { color: var(--webde-muted); font-size: 11px; line-height: 14px; }

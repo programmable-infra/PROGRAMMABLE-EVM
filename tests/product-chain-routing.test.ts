@@ -16,18 +16,19 @@ vi.mock("next/navigation", () => ({
 }));
 vi.mock("../lib/server/robinhood-index/read", () => ({
   readRobinhoodToken: mocks.readToken,
+  readRobinhoodTokenPresentation: vi.fn(async () => ({ presentation: null })),
 }));
 vi.mock("../lib/server/ethereum-explore", () => ({
   readEthereumToken: mocks.readEthereumToken,
+  readEthereumTokenPresentation: vi.fn(async () => ({ presentation: null })),
 }));
 
 import ExplorePage from "../app/explore/page";
-import ExploreChainPage, { generateMetadata as exploreMetadata } from "../app/explore/[chain]/page";
+import ExploreChainPage from "../app/explore/[chain]/page";
 import TokenPage, { generateMetadata as tokenMetadata } from "../app/token/[address]/page";
 import { AppShell } from "../components/app-shell";
-import { exploreChainIdFromSlug, exploreChainPath } from "../lib/explore-chain";
+import { exploreChainIdFromSlug } from "../lib/explore-chain";
 import { resolveTokenPage } from "../lib/server/token-page";
-import { VIEW_CHAIN_COOKIE_NAME } from "../lib/view-chain";
 
 const address = "0x1111111111111111111111111111111111111111";
 const token = { tokenAddress: address, name: "Example token" };
@@ -44,36 +45,12 @@ describe("Explore chain routes", () => {
     expect(AppShell({ children: null, initialViewChainId: 1 }).props.initialViewChainId).toBe(1);
   });
 
-  it("normalizes legacy and current Ethereum preferences to Robinhood", async () => {
-    const cookieJar = new Map([["programmable-view-chain", "1"]]);
-    mocks.cookie.mockImplementation((name: string) => {
-      const value = cookieJar.get(name);
-      return value ? { value } : undefined;
-    });
-    await expect(ExplorePage({ searchParams: Promise.resolve({}) }))
-      .rejects.toThrow("REDIRECT:/explore/robinhood");
-    expect(mocks.cookie).toHaveBeenCalledWith("programmable-view-chain-v2");
-
-    cookieJar.set(VIEW_CHAIN_COOKIE_NAME, "1");
-    await expect(ExplorePage({ searchParams: Promise.resolve({}) }))
-      .rejects.toThrow("REDIRECT:/explore/robinhood");
-  });
-
-  it("opens Robinhood on both fresh and previously Ethereum visits", async () => {
-    await expect(ExplorePage({ searchParams: Promise.resolve({}) }))
-      .rejects.toThrow("REDIRECT:/explore/robinhood");
-    mocks.cookie.mockReturnValue({ value: "1" });
-    await expect(ExplorePage({ searchParams: Promise.resolve({}) }))
-      .rejects.toThrow("REDIRECT:/explore/robinhood");
-  });
-
-  it("redirects legacy Explore links to Robinhood independently of saved preferences", async () => {
-    mocks.cookie.mockReturnValue({ value: "1" });
-    await expect(ExplorePage({ searchParams: Promise.resolve({ chain: "4663" }) }))
-      .rejects.toThrow("REDIRECT:/explore/robinhood");
-    expect(mocks.cookie).not.toHaveBeenCalled();
-    await expect(ExplorePage({ searchParams: Promise.resolve({ chain: "1" }) }))
-      .rejects.toThrow("REDIRECT:/explore/robinhood");
+  it("opens one combined catalog independently of wallet preferences and legacy query values", async () => {
+    for (const query of [{}, { chain: "1" }, { chain: "4663" }]) {
+      mocks.cookie.mockReturnValue({ value: "1" });
+      expect((await ExplorePage({ searchParams: Promise.resolve(query) })).type.name).toBe("UnifiedLaunchesView");
+      expect(mocks.cookie).not.toHaveBeenCalled();
+    }
   });
 
   it("rejects unsupported and repeated legacy chain parameters", async () => {
@@ -83,22 +60,9 @@ describe("Explore chain routes", () => {
     }
   });
 
-  it.each([
-    ["robinhood", 4663, "Robinhood"],
-  ] as const)("binds %s page, title and canonical to the same chain", async (slug, chainId, name) => {
-    const props = { params: Promise.resolve({ chain: slug }) };
-    expect(exploreChainIdFromSlug(slug)).toBe(chainId);
-    expect((await ExploreChainPage(props)).props.chainId).toBe(chainId);
-    expect(await exploreMetadata(props)).toMatchObject({
-      title: `Explore ${name} · Programmable`,
-      alternates: { canonical: exploreChainPath(chainId) },
-    });
-  });
-
-  it("redirects the retired Ethereum Explore page and metadata to Robinhood", async () => {
-    const props = { params: Promise.resolve({ chain: "ethereum" }) };
-    await expect(ExploreChainPage(props)).rejects.toThrow("REDIRECT:/explore/robinhood");
-    await expect(exploreMetadata(props)).rejects.toThrow("REDIRECT:/explore/robinhood");
+  it.each(["robinhood", "ethereum"])("redirects the legacy %s bookmark to the same combined catalog", async chain => {
+    expect(exploreChainIdFromSlug(chain)).not.toBeNull();
+    await expect(ExploreChainPage({ params: Promise.resolve({ chain }) })).rejects.toThrow("REDIRECT:/explore");
   });
 
   it("does not interpret arbitrary path segments as a chain", async () => {

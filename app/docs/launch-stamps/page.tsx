@@ -23,6 +23,7 @@ export const metadata: Metadata = {
 
 const sections = [
   { id: "trust-root", label: "Scope" },
+  { id: "direct-custom-launch", label: "Direct Custom Hook launch" },
   { id: "integration", label: "Deployment record" },
   { id: "launch-kinds", label: "Launch kinds" },
   { id: "algorithm", label: "Token and pool identity" },
@@ -260,6 +261,21 @@ export default function LaunchStampDocsPage() {
           A valid record establishes Router provenance only. It does not
           establish safety, tradability, current liquidity or pool state, audit
           coverage, review status, or third-party terminal support.
+        </p>
+      </section>
+
+      <section id="direct-custom-launch">
+        <h2>Direct Custom Hook launch</h2>
+        <p>
+          You can prepare an Ethereum CustomGraph without the launch API. The canonical Router must still
+          execute and stamp the launch with authorization accepted by its EIP-1271 permit authority.
+          Separately deploying a token or initializing its pool does not allow a later Router stamp.
+        </p>
+        <p>
+          <a href="/developers/ethereum-custom-hook-indexing.zip" download>Download the Ethereum indexing bundle</a>
+          {" or "}<a href="/developers/ethereum-custom-hook-indexing.md">read the direct launch handoff</a>.
+          The bundle includes the exact ABI, tuple definitions, manifest snapshot, input template and
+          read-only stamp verifiers. Refresh the live manifest before execution.
         </p>
       </section>
 

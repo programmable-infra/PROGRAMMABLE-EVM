@@ -7,6 +7,7 @@ import { isPublicExploreIdentityV1 } from "@/lib/explore-public-visibility";
 import { readCodexMarkets } from "./codex-market";
 import { ETHEREUM_EXPLORE_FILTERS } from "@/lib/ethereum-explore";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
+import type { RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
 
 type SourceStatus = "current" | "last-known-good" | "unavailable";
 type SourceEvidence = {
@@ -36,6 +37,26 @@ const readers: Dependencies = {
       asOfBlockHash: catalog.asOfBlockHash, commitment: catalog.identityCommitment, generatedAt: catalog.generatedAt } };
   },
 };
+
+/** Unified discovery admits only the canonical Ethereum Custom Hook lane. */
+export async function readEthereumCustomExploreCatalog(dependencies: Pick<Dependencies, "custom"> = readers) {
+  try {
+    const catalog = await dependencies.custom();
+    const entries = publicExploreCatalogEntriesV1(catalog.entries.map(publicExplorePresentationEntryV1))
+      .filter((entry): entry is CanonicalTokenExploreEntry => entry.exploreKind === "token"
+        && entry.launchCategoryProvenance.category === "custom" && isPublicExploreIdentityV1(entry));
+    const identities = new Set<string>();
+    for (const entry of entries) {
+      const identity = entry.tokenAddress.toLowerCase();
+      if (identities.has(identity)) throw new Error("Conflicting Ethereum launch identities");
+      identities.add(identity);
+    }
+    return { status: catalog.status === "current" ? "ready" as const : "stale" as const,
+      updatedAt: catalog.generatedAt, entries, sourceEvidence: catalog.evidence ?? null };
+  } catch {
+    return { status: "unavailable" as const, updatedAt: null, entries: [], sourceEvidence: null };
+  }
+}
 
 /** Each source retains its existing release, provenance and finality checks. */
 export async function readEthereumExploreCatalog(dependencies: Dependencies = readers) {
@@ -109,4 +130,15 @@ export async function readEthereumToken(address: string, dependencies?: Dependen
   } catch {
     return { chainId: 1 as const, status: "unavailable" as const, updatedAt: null, token: null };
   }
+}
+
+export async function readEthereumTokenPresentation(address: string) {
+  const record = await readEthereumToken(address);
+  if (!record.token) return { ...record, presentation: null };
+  const entry = record.token;
+  const markets = await readCodexMarkets([entry], 1).catch(() => new Map<string, RobinhoodCoinMarket>());
+  return { ...record, presentation: { chainId: 1 as const, tokenAddress: entry.tokenAddress,
+    imageUrl: entry.imageUrl ?? null, description: entry.description ?? null,
+    links: (entry.links ?? []).map(link => ({ label: link.kind, url: link.url })),
+    market: markets.get(entry.tokenAddress.toLowerCase()) ?? null } };
 }

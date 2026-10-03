@@ -31,6 +31,15 @@ function presentation(): RobinhoodCoinPresentation {
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
 describe("Robinhood market navigation", () => {
+  it("stores both chains separately even when their token addresses match", () => {
+    const cache = createRobinhoodPresentationCache();
+    const rh = presentation(), eth = { ...presentation(), chainId: 1 as const, market: null };
+    cache.write(query, { items: [rh], delayed: false }, now, 4663);
+    cache.write(query, { items: [eth], delayed: false }, now, 1);
+    expect(cache.read(query, now, 4663)?.items).toEqual([rh]);
+    expect(cache.read(query, now, 1)?.items).toEqual([eth]);
+  });
+
   it("hands the list presentation to the exact token detail, including metadata", () => {
     vi.stubGlobal("window", {});
     vi.useFakeTimers();

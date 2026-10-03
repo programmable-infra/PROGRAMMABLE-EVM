@@ -7,7 +7,8 @@ vi.mock("@/components/view-chain", () => {
   return { useViewChain, useRouteViewChain: useViewChain };
 });
 vi.mock("next/navigation", () => ({ usePathname: () => "/explore/robinhood", useRouter: () => ({ push: vi.fn() }) }));
-import { RobinhoodLaunchesView } from "@/components/robinhood-launches-view";
+import { RobinhoodLaunchesView, UnifiedLaunchesView } from "@/components/robinhood-launches-view";
+import { ChainMark } from "@/components/chain-mark";
 
 describe("Explore request identity", () => {
   const request = { page: 2, q: "coin", sort: "newest" as const, mode: "module" as const };
@@ -30,6 +31,22 @@ describe("Explore request identity", () => {
 });
 
 describe("Explore toolbar and loading structure", () => {
+  it("renders one catalog without a chain selector, even when the wallet context starts on Robinhood", () => {
+    const html = renderToStaticMarkup(<UnifiedLaunchesView />);
+    expect(html).toContain("Search Programmable launches by name, symbol or address");
+    expect(html).toContain('aria-label="Programmable launches"');
+    expect(html).not.toContain("Explore chain:");
+    expect(html).not.toContain('role="listbox"');
+  });
+  it("renders only the chain logo, with an accessible chain name", () => {
+    const rh = renderToStaticMarkup(<ChainMark chainId={4663} />), eth = renderToStaticMarkup(<ChainMark chainId={1} />);
+    expect(rh).toContain('alt="Robinhood Chain"');
+    expect(rh).not.toContain(">Robinhood Chain<");
+    expect(eth).toContain('aria-label="Ethereum"');
+    expect(eth).toContain("<svg");
+    expect(eth).not.toContain("<span>Ethereum</span>");
+  });
+
   it("loads the explicit Ethereum chain with an enabled search and its own list", () => {
     const html = renderToStaticMarkup(<RobinhoodLaunchesView chainId={1} />);
     expect(html).toContain("Search Ethereum launches by name, symbol or address");

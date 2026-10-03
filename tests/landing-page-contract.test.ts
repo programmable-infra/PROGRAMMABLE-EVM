@@ -6,7 +6,7 @@ const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 describe("landing page contract", () => {
-  it("keeps the landing page at home and sends the header Explore link to the selected chain directory", () => {
+  it("keeps the landing page at home and opens unified Explore", () => {
     const homePage = read("app/page.tsx");
     const explorePage = read("app/explore/page.tsx");
     const chainPage = read("app/explore/[chain]/page.tsx");
@@ -14,11 +14,11 @@ describe("landing page contract", () => {
 
     expect(homePage).toContain("import { LandingPage }");
     expect(homePage).toContain("return <LandingPage />");
-    expect(explorePage).toContain("redirect(exploreChainPath(");
+    expect(explorePage).toContain("<UnifiedLaunchesView />");
     expect(explorePage).toContain('canonical: "/explore"');
-    expect(chainPage).toContain("import { RobinhoodLaunchesView }");
-    expect(chainPage).toContain("<RobinhoodLaunchesView chainId={chainId} />");
-    expect(chainPage).toContain("canonical: exploreChainPath(chainId)");
+    expect(chainPage).toContain('redirect("/explore")');
+    expect(explorePage).toContain("import { UnifiedLaunchesView }");
+    expect(explorePage).not.toContain("cookies()");
     expect(navigation).toContain('{ href: "/explore", label: "Explore" }');
     expect(navigation).toContain('href="/"');
     expect(homePage).toContain('"Launch a coin, choose its modules');
@@ -88,7 +88,7 @@ describe("landing page contract", () => {
     }
   });
 
-  it("renders the Robinhood list without loading the old Explore bundle", () => {
+  it("renders the unified list without loading the old Explore bundle", () => {
     const landing = read("components/landing-page.tsx");
     const gate = read("components/landing-explore-gate.tsx");
     const resetView = read("components/explore-index-reset-view.tsx");
@@ -96,7 +96,7 @@ describe("landing page contract", () => {
 
     expect(landing).not.toContain('from "@/components/explore-view"');
     expect(landing).toContain('from "@/components/landing-explore-gate"');
-    expect(gate).toContain("<RobinhoodLaunchesView embedded />");
+    expect(gate).toContain("<UnifiedLaunchesView embedded />");
     expect(gate).not.toContain('import("@/components/explore-view")');
     expect(gate).not.toContain("IntersectionObserver");
     expect(gate).not.toContain("Try again");
