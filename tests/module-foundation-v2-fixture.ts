@@ -95,7 +95,9 @@ export function foundationV2Fixture(optionalPosition = true, nativeQuote = false
   const mintLog = (id: bigint, from = v2Address(0), to = FOUNDATION_DEAD_ADDRESS) => ({ ...commonLog,
     address: FOUNDATION_INFRASTRUCTURE.positionManager.address, logIndex: Number(id), data: "0x" as Hex,
     topics: encodeEventTopics({ abi: foundationPositionAbi, eventName: "Transfer", args: { from, to, id } }) });
-  const getBlock = vi.fn(async () => ({ number: 100n, hash: checkpoint.blockHash, timestamp: checkpoint.timestamp }));
+  const getBlock = vi.fn(async (request: { blockNumber?: bigint; blockTag?: string }) => ({
+    number: request.blockNumber ?? 116n, hash: checkpoint.blockHash, timestamp: checkpoint.timestamp,
+  }));
   const getTransactionReceipt = vi.fn(async () => ({ status: "success", transactionHash, blockNumber: 100n, blockHash: checkpoint.blockHash,
     from: account, to: factory, transactionIndex: 2, logs: [launchLog(), ...specs.map(spec => mintLog(spec.id))] }));
   const getTransaction = vi.fn(async () => ({ hash: transactionHash, from: account, to: factory, input: transaction.data, value: 0n,
@@ -121,7 +123,7 @@ export function foundationV2Fixture(optionalPosition = true, nativeQuote = false
     }) };
   });
   const client = { getChainId: vi.fn(async () => state.chainId), readContract, getBlock, getTransactionReceipt, getTransaction,
-    getCode: vi.fn(async ({ address }: { address: Address }): Promise<Hex> => state.newToken && address === token ? "0x" : v2Code),
+    getCode: vi.fn(async ({ address }: { address: Address; blockNumber?: bigint }): Promise<Hex> => state.newToken && address === token ? "0x" : v2Code),
     call: vi.fn(async ({ to, data }: { to: Address; data: Hex }) => {
       if (to !== FOUNDATION_INFRASTRUCTURE.positionManager.address) throw new Error("Unexpected call target");
       return { data: nftData(data) };

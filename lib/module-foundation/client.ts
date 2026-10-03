@@ -45,6 +45,9 @@ export interface FoundationPreparedStep {
 export interface FoundationCheckpoint { blockNumber: bigint; blockHash: Hex; timestamp: bigint }
 export interface FoundationBalanceCheck { token: Address; account: Address; delta?: bigint; minimumDelta?: bigint; newToken?: boolean }
 
+// Public RPCs can expose the sequencer head before all of its state is readable.
+const FOUNDATION_CHECKPOINT_LAG = 16n;
+
 const preparedSequences = new WeakSet<object>();
 function sealFoundationSequence<T extends object>(value: T): T {
   const snapshot = structuredClone(value);
@@ -71,8 +74,16 @@ export async function prepareFoundationModuleAction(input: FoundationPrepareModu
 export async function assertFoundationInfrastructure(client: PublicClient, binding: FoundationDeploymentBinding, blockNumber?: bigint): Promise<FoundationCheckpoint> {
   const factoryVersion = foundationFactoryVersion(binding), factoryAbi = foundationFactoryAbiFor(binding);
   if (await client.getChainId() !== FOUNDATION_CHAIN_ID) throw new Error("The RPC is connected to a different network.");
-  const block = await client.getBlock(blockNumber === undefined ? { blockTag: "latest" } : { blockNumber });
-  if (block.number === null || !block.hash || block.number < binding.startBlock
+  let checkpointNumber = blockNumber;
+  if (checkpointNumber === undefined) {
+    const latest = await client.getBlock({ blockTag: "latest" });
+    if (latest.number === null || latest.number < FOUNDATION_CHECKPOINT_LAG) {
+      throw new Error("Current source-bound chain state is unavailable.");
+    }
+    checkpointNumber = latest.number - FOUNDATION_CHECKPOINT_LAG;
+  }
+  const block = await client.getBlock({ blockNumber: checkpointNumber });
+  if (block.number !== checkpointNumber || !block.hash || block.number < binding.startBlock
     || (blockNumber === undefined && Math.abs(Date.now() / 1_000 - Number(block.timestamp)) > 120)) {
     throw new Error("Current source-bound chain state is unavailable.");
   }

@@ -143,7 +143,9 @@ const nextConfig: NextConfig = {
           destination: "https://proxy.gitbook.site/sites/site_V93gQ",
         },
         {
-          source: "/docs/:match*",
+          // Vercel can evaluate external beforeFiles rewrites at its edge.
+          // Leave the native Ethereum guide alias to the redirect/Proxy route.
+          source: "/docs/:match((?!ethereum-direct-custom-hook$).*)",
           destination: "https://proxy.gitbook.site/sites/site_V93gQ/:match*",
         },
       ],

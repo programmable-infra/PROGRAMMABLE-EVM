@@ -140,7 +140,7 @@ function fixture() {
     expect(request.blockNumber).toBe(state.height); return codes.get(request.address.toLowerCase()) ?? "0x";
   });
   const getBlock = vi.fn(async (request: { blockNumber?: bigint; blockTag?: string }) => {
-    const number = request.blockNumber ?? state.height;
+    const number = request.blockNumber ?? state.height + 16n;
     return { number, hash: state.reorg && request.blockNumber !== undefined ? hash("changed-trade-block")
       : number === checkpoint.blockNumber ? checkpoint.blockHash : hash(`trade-block-${number}`),
     timestamp: checkpoint.timestamp + number - checkpoint.blockNumber };
