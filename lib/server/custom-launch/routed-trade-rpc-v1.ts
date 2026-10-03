@@ -96,8 +96,10 @@ export interface TradeTraceV1 { type: string; from: Address; to: Address | null;
 /** Provider-local gas accounting is not an execution effect. Keep the original
  * trace for evidence, compare the complete execution tree, and bound both gas
  * readings before using the larger one for transaction preparation. */
-export async function readAgreedTradeTraceV1(rpcs: readonly [TradeRpcV1, TradeRpcV1], transaction: Record<string, unknown>, tag: string) {
-  const traces = await Promise.all(rpcs.map(async read => tradeTraceV1(await read("debug_traceCall", [transaction, tag, { tracer: "callTracer", timeout: "10s" }]))));
+export async function readAgreedTradeTraceV1(rpcs: readonly [TradeRpcV1, TradeRpcV1], transaction: Record<string, unknown>, tag: string,
+  stateOverrides?: Record<string, Record<string, unknown>>) {
+  const traces = await Promise.all(rpcs.map(async read => tradeTraceV1(await read("debug_traceCall", [transaction, tag,
+    { tracer: "callTracer", timeout: "10s", ...(stateOverrides ? { stateOverrides } : {}) }]))));
   const execution = (trace: TradeTraceV1): unknown => {
     const { gasUsed, calls, ...effects } = trace;
     if (BigInt(gasUsed) > 30_000_000n) return pendingTradeV1("TRADE_GAS_PENDING");
@@ -106,6 +108,23 @@ export async function readAgreedTradeTraceV1(rpcs: readonly [TradeRpcV1, TradeRp
   if (canonicalBrowserJsonV2(execution(traces[0]!)) !== canonicalBrowserJsonV2(execution(traces[1]!))) return pendingTradeV1("TRADE_PROVIDER_DISAGREEMENT");
   const maximumGasUsed = traces.reduce((maximum, trace) => BigInt(trace.gasUsed) > maximum ? BigInt(trace.gasUsed) : maximum, 0n);
   return { trace: traces[0]!, maximumGasUsed };
+}
+
+const ARBOS_STORAGE = "0xa4b05fffffffffffffffffffffffffffffffffff";
+/** Nitro forbids replaying its own system account. Keep the complete agreed
+ * post-state as evidence and replay application accounts only for a read whose
+ * complete call tree proves it never depends on ArbOS or its precompiles. */
+export async function readTradePostStateCallV1(rpcs: readonly [TradeRpcV1, TradeRpcV1], transaction: {
+  from: Address; to: Address; data: Hex;
+}, tag: string, reference: { blockHash: Hex; requireCanonical: true }, post: Record<string, Record<string, unknown>>) {
+  if (!Object.hasOwn(post, ARBOS_STORAGE)) return agreedTradeRpcV1(rpcs)("eth_call", [transaction, reference, post], bytesV1);
+  const overrides = Object.fromEntries(Object.entries(post).filter(([address]) => address !== ARBOS_STORAGE));
+  const { trace, maximumGasUsed } = await readAgreedTradeTraceV1(rpcs, { ...transaction, value: "0x0", gas: "0x1e8480" }, tag, overrides);
+  const dependsOnSystem = (frame: TradeTraceV1): boolean => !!frame.to && (frame.to === ARBOS_STORAGE
+    || (BigInt(frame.to) >= 0x64n && BigInt(frame.to) <= 0xffn)) || frame.calls.some(dependsOnSystem);
+  if (maximumGasUsed > 2_000_000n || trace.failed || trace.type !== "CALL" || trace.from !== transaction.from.toLowerCase() || trace.to !== transaction.to.toLowerCase()
+    || trace.input !== transaction.data.toLowerCase() || trace.value !== "0" || dependsOnSystem(trace)) return pendingTradeV1("POST_STATE_READ_ADAPTER_PENDING");
+  return trace.output;
 }
 
 export async function readTradeGasEstimateV1(rpcs: readonly [TradeRpcV1, TradeRpcV1], transaction: Record<string, unknown>, tag: string) {

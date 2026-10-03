@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { toHex } from "viem";
-import { readAgreedTradeTraceV1, readTradeGasEstimateV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
+import { readAgreedTradeTraceV1, readTradeGasEstimateV1, readTradePostStateCallV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 
 const sender = "0x1111111111111111111111111111111111111111";
 const recipient = "0x2222222222222222222222222222222222222222";
@@ -37,5 +37,47 @@ describe("independent provider gas consensus", () => {
     const unavailable: TradeRpcV1 = async () => { throw Error("Unavailable"); };
     await expect(readAgreedTradeTraceV1([rpc(frame()), unavailable], transaction, "0x2a")).rejects.toThrow();
     await expect(readTradeGasEstimateV1([rpc("0xc350"), unavailable], transaction, "0x2a")).rejects.toThrow();
+  });
+});
+
+describe("Nitro post-state reads", () => {
+  const system = "0xa4b05fffffffffffffffffffffffffffffffffff";
+  const slot = `0x${"ab".repeat(32)}`;
+  const reference = { blockHash: `0x${"cd".repeat(32)}` as const, requireCanonical: true as const };
+  const call = { from: sender, to: recipient, data: "0x1234" } as const;
+  const post = { [system]: { stateDiff: { [slot]: toHex(42n, { size: 32 }) } },
+    [recipient]: { stateDiff: { [slot]: toHex(100n, { size: 32 }) } } };
+  const readFrame = { ...frame(), value: "0x0", output: toHex(100n, { size: 32 }) };
+
+  it("preserves the complete evidence while replaying application state with two bound, gas-limited read traces", async () => {
+    const original = structuredClone(post), primary = vi.fn(rpc(readFrame)), secondary = vi.fn(rpc({ ...readFrame, gasUsed: "0xc359" }));
+    expect(await readTradePostStateCallV1([primary, secondary], call, "0x2a", reference, post)).toBe(readFrame.output);
+    expect(post).toEqual(original);
+    for (const read of [primary, secondary]) expect(read).toHaveBeenCalledExactlyOnceWith("debug_traceCall", [
+      { ...call, value: "0x0", gas: "0x1e8480" }, "0x2a",
+      { tracer: "callTracer", timeout: "10s", stateOverrides: { [recipient]: post[recipient] } },
+    ]);
+  });
+
+  it.each([system, "0x000000000000000000000000000000000000006c"])("rejects even a caught nested read of protected system address %s", async to => {
+    const trace = { ...readFrame, calls: [{ ...readFrame, to, error: "execution reverted" }] };
+    await expect(readTradePostStateCallV1([rpc(trace), rpc(trace)], call, "0x2a", reference, post))
+      .rejects.toMatchObject({ code: "POST_STATE_READ_ADAPTER_PENDING", status: 503 });
+  });
+
+  it("rejects disagreed output and substituted root bindings", async () => {
+    await expect(readTradePostStateCallV1([rpc(readFrame), rpc({ ...readFrame, output: "0x" })], call, "0x2a", reference, post))
+      .rejects.toMatchObject({ code: "TRADE_PROVIDER_DISAGREEMENT" });
+    for (const patch of [{ from: recipient }, { to: sender }, { input: "0xabcd" }, { value: "0x1" }, { type: "STATICCALL" }, { error: "execution reverted" }, { gasUsed: toHex(2_000_001n) }]) {
+      const changed = { ...readFrame, ...patch };
+      await expect(readTradePostStateCallV1([rpc(changed), rpc(changed)], call, "0x2a", reference, post))
+        .rejects.toMatchObject({ code: "POST_STATE_READ_ADAPTER_PENDING" });
+    }
+  });
+
+  it("keeps ordinary post-state calls pinned to their canonical block hash", async () => {
+    const overrides = { [recipient]: post[recipient] }, primary = vi.fn(rpc(readFrame.output)), secondary = vi.fn(rpc(readFrame.output));
+    expect(await readTradePostStateCallV1([primary, secondary], call, "0x2a", reference, overrides)).toBe(readFrame.output);
+    for (const read of [primary, secondary]) expect(read).toHaveBeenCalledExactlyOnceWith("eth_call", [call, reference, overrides]);
   });
 });
