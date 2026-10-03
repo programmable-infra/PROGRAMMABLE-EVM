@@ -32,7 +32,7 @@ function launch(): RobinhoodLaunch { return { routerAddress: router, launchId: h
 function request(buy = true): CustomV4SwapRequest { return { token, owner, buy, amountIn: "100000", slippageBps: 50, deadline: (now + 600n).toString() }; }
 type Options = { buy?: boolean; tokenApproval?: boolean; permitApproval?: boolean; revert?: boolean; outputMismatch?: boolean;
   overspend?: boolean; poolOriginMissing?: boolean; runtimeChanged?: boolean; stampOwnerChanged?: boolean; finalityPending?: boolean; incorrectApproval?: boolean;
-  systemCounter?: bigint; hookCounter?: bigint; outputAmount?: bigint; traceGas?: bigint; estimateGas?: bigint };
+  systemCounter?: bigint; hookCounter?: bigint; outputAmount?: bigint; traceGas?: bigint; estimateGas?: bigint; nativeBalance?: bigint };
 function fixtureRpc(options: Options = {}): TradeRpcV1 {
   const output = options.outputAmount ?? 50000n;
   return async (method, params) => {
@@ -44,7 +44,7 @@ function fixtureRpc(options: Options = {}): TradeRpcV1 {
       data: encodeAbiParameters([{ type: "uint24" }, { type: "int24" }, { type: "address" }, { type: "uint160" }, { type: "int24" }], [3000, 60, hook, 1n << 96n, 0]),
     }] };
     if (method === "eth_getCode") return getAddress(String(params[0])) === owner ? "0x" : options.runtimeChanged && getAddress(String(params[0])) === hook ? "0x6002" : runtime;
-    if (method === "eth_getBalance") return toHex(10n ** 18n);
+    if (method === "eth_getBalance") return toHex(options.nativeBalance ?? 10n ** 18n);
     if (method === "eth_estimateGas") return toHex(options.estimateGas ?? 100000n);
     const tx = params[0] as { from: Address; to: Address; data: Hex; value: Hex };
     if (method === "eth_call") {
@@ -89,6 +89,20 @@ const prepared = (options: Options = {}) => prepareCustomV4Swap(request(options.
 const descriptor = () => readCustomV4SwapDescriptor(launch(), { rpcs: [fixtureRpc(), fixtureRpc()] });
 
 describe("historical V4 native swap adapter", () => {
+  it("reports insufficient ETH before requesting a quote or execution traces", async () => {
+    const methods: string[] = [];
+    const read = fixtureRpc({ nativeBalance: 99999n });
+    const recording: TradeRpcV1 = async (method, params) => {
+      methods.push(method);
+      return read(method, params);
+    };
+    await expect(prepareCustomV4Swap(request(), { loadLaunch: async () => launch(), rpcs: [recording, recording], now: () => now }))
+      .rejects.toMatchObject({ code: "INSUFFICIENT_INPUT_BALANCE", status: 400 });
+    expect(methods.filter(method => method === "eth_getBalance")).toHaveLength(2);
+    expect(methods).not.toContain("debug_traceCall");
+    expect(methods).not.toContain("eth_estimateGas");
+  });
+
   it("accepts matching execution with different provider gas accounting and covers the larger estimate", async () => {
     const value = await prepareCustomV4Swap(request(), { loadLaunch: async () => launch(),
       rpcs: [fixtureRpc({ traceGas: 100000n, estimateGas: 100000n }), fixtureRpc({ traceGas: 100009n, estimateGas: 110000n })], now: () => now });
