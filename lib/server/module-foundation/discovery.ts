@@ -6,6 +6,9 @@ import {
   FOUNDATION_DISCOVERY_MAX_BLOCKS, locateFoundationCreationTransaction, readFoundationLaunchIndex,
 } from "@/lib/module-foundation/discovery";
 import { readFoundationAvailabilityResponse } from "./availability";
+import { readRobinhoodToken } from "@/lib/server/robinhood-index/read";
+import { isRobinhoodFoundationLaunch } from "@/lib/robinhood-launches";
+import { foundationFactoryVersion } from "@/lib/module-foundation/protocol";
 
 export interface FoundationLocateResponse {
   transactionHash: Hex | null;
@@ -53,6 +56,22 @@ async function locate(query: LocateQuery, signal: AbortSignal): Promise<Foundati
   signal.throwIfAborted();
   if (query.range && query.range.fromBlock < binding.startBlock) {
     throw new FoundationLocateInputError("The requested window starts before this release.");
+  }
+  if (!query.range) {
+    try {
+      const { token: indexed } = await readRobinhoodToken(query.token);
+      signal.throwIfAborted();
+      if (isRobinhoodFoundationLaunch(indexed)
+        && indexed.tokenAddress.toLowerCase() === query.token.toLowerCase()
+        && indexed.sourceAddress.toLowerCase() === binding.factory.address.toLowerCase()
+        && indexed.sourceReleaseDigest.toLowerCase() === binding.releaseDigest.toLowerCase()
+        && indexed.factoryVersion === foundationFactoryVersion(binding)
+        && BigInt(indexed.blockNumber) >= binding.startBlock) {
+        // This is a candidate pointer. The client still verifies the complete
+        // receipt, factory, token, module sources and finalized chain state.
+        return { transactionHash: indexed.transactionHash as Hex };
+      }
+    } catch { signal.throwIfAborted(); }
   }
   const client = createFoundationClient();
   let latest: bigint;

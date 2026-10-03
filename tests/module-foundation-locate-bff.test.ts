@@ -3,12 +3,13 @@ import { getAddress, toHex } from "viem";
 import { GET } from "@/app/api/module-foundation/locate/route";
 import { FOUNDATION_AVAILABILITY_SCHEMA } from "@/lib/module-foundation/availability";
 
-const mocks = vi.hoisted(() => ({ availability: vi.fn(), locator: vi.fn(), index: vi.fn(), head: vi.fn(), client: vi.fn() }));
+const mocks = vi.hoisted(() => ({ availability: vi.fn(), locator: vi.fn(), index: vi.fn(), head: vi.fn(), client: vi.fn(), token: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/module-foundation/availability", () => ({ readFoundationAvailabilityResponse: mocks.availability }));
 vi.mock("@/lib/module-foundation/client", () => ({ createFoundationClient: mocks.client }));
 vi.mock("@/lib/module-foundation/discovery", () => ({ FOUNDATION_DISCOVERY_MAX_BLOCKS: 5_000n,
   locateFoundationCreationTransaction: mocks.locator, readFoundationLaunchIndex: mocks.index }));
+vi.mock("@/lib/server/robinhood-index/read", () => ({ readRobinhoodToken: mocks.token }));
 
 const token = getAddress("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
 const factory = getAddress("0x1000000000000000000000000000000000000000");
@@ -32,10 +33,53 @@ beforeEach(() => {
   mocks.client.mockReturnValue({ getBlockNumber: mocks.head });
   mocks.locator.mockResolvedValue(null);
   mocks.index.mockResolvedValue({ entries: [], nextCursor: null });
+  mocks.token.mockResolvedValue({ status: "ready", token: null });
 });
 afterEach(() => vi.useRealTimers());
 
 describe("foundation candidate BFF", () => {
+  function indexedLaunch() {
+    return { sourceKind: "module-foundation-v1", factoryVersion: "v1", routerAddress: null, stampHash: null,
+      sourceAddress: factory, sourceReleaseDigest: hash(1), tokenAddress: token, hookAddress: hookDeployer,
+      creator: factory, poolManager: factory, quoteAsset: hookDeployer, feeLedgerAddress: factory,
+      launchId: hash(30), poolId: hash(30), metadataHash: hash(31), compositionHash: hash(32),
+      transactionHash: candidate, blockHash: hash(33), blockNumber: "200", logIndex: 0,
+      decimals: 18, name: "Indexed token", symbol: "INDEX", launchedAt: null };
+  }
+
+  it("finds an older indexed launch without relying on the explorer or scanning recent blocks", async () => {
+    mocks.token.mockResolvedValue({ status: "stale", token: indexedLaunch() });
+    const response = await GET(request());
+    expect(await response.json()).toEqual({ transactionHash: candidate });
+    expect(mocks.token).toHaveBeenCalledWith(token);
+    expect(mocks.client).not.toHaveBeenCalled();
+    expect(mocks.locator).not.toHaveBeenCalled();
+    expect(mocks.index).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["tokenAddress", factory], ["sourceAddress", hookDeployer], ["sourceReleaseDigest", hash(2)],
+    ["factoryVersion", "v2"], ["blockNumber", "99"], ["transactionHash", hash(0)], ["sourceKind", "multi-role-v2"],
+  ])("does not use an indexed pointer with mismatched %s", async (field, value) => {
+    mocks.token.mockResolvedValue({ status: "ready", token: { ...indexedLaunch(), [field]: value } });
+    mocks.locator.mockResolvedValue(hash(51));
+    expect(await (await GET(request())).json()).toEqual({ transactionHash: hash(51) });
+    expect(mocks.locator).toHaveBeenCalledWith(token, { signal: expect.any(AbortSignal) });
+  });
+
+  it("preserves an explicitly requested block window even when an indexed pointer exists", async () => {
+    mocks.token.mockResolvedValue({ status: "ready", token: indexedLaunch() });
+    await GET(request("&fromBlock=500&toBlock=600"));
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(mocks.index).toHaveBeenCalledWith(expect.objectContaining({ fromBlock: 500n, toBlock: 600n }));
+  });
+
+  it("retains the bounded fallback if the canonical index cannot be read", async () => {
+    mocks.token.mockRejectedValue(new Error("index unavailable"));
+    mocks.locator.mockResolvedValue(candidate);
+    expect(await (await GET(request())).json()).toEqual({ transactionHash: candidate });
+  });
+
   it("returns an untrusted fixed-upstream candidate only after accepted backend release validation", async () => {
     mocks.locator.mockResolvedValue(candidate);
     const response = await GET(request());
@@ -57,6 +101,7 @@ describe("foundation candidate BFF", () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ transactionHash: null, reason: expect.stringContaining("release is being verified") });
     expect(mocks.client).not.toHaveBeenCalled();
+    expect(mocks.token).not.toHaveBeenCalled();
     expect(mocks.locator).not.toHaveBeenCalled();
     expect(mocks.index).not.toHaveBeenCalled();
   });

@@ -1,7 +1,7 @@
 import { readCodexMarkets } from "@/lib/server/codex-market";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getAddress, isAddress } from "viem";
+import { getAddress, isAddress, type Hex } from "viem";
 
 import { TokenIndexResetView } from "@/components/token-index-reset-view";
 import { RobinhoodTokenView } from "@/components/robinhood-token-view";
@@ -70,7 +70,7 @@ export default async function TokenPage({
     const initialPresentation = readRobinhoodTokenPresentation(address).then(result => result.presentation).catch(() => null);
     return <TokenRouteChainSync key={4663} chainId={4663}>
       {isRobinhoodFoundationLaunch(resolved.token)
-        ? <ModuleFoundationMarketHost token={getAddress(address)} initialLaunch={resolved.token} initialPresentation={initialPresentation} initialName={resolved.token.name?.trim() || "Unnamed token"} />
+        ? <ModuleFoundationMarketHost token={getAddress(address)} transactionHash={resolved.token.transactionHash as Hex} initialLaunch={resolved.token} initialPresentation={initialPresentation} initialName={resolved.token.name?.trim() || "Unnamed token"} />
         : <RobinhoodTokenView address={address} token={resolved.token} status={resolved.status} initialPresentation={initialPresentation} />}
     </TokenRouteChainSync>;
   }
