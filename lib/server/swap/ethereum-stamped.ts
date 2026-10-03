@@ -9,16 +9,19 @@ import { tradeActionRpcProviders } from "@/lib/server/action-rpc-quorum.server";
 import { agreedTradeRpcV1, bytesV1, quantityV1, readAgreedTradeTraceV1, readTradeGasEstimateV1, successfulTradeFramesV1, tradeBlockV1, tradePostStateV1, type TradeRpcV1, type TradeTraceV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 import { ETHEREUM_STAMPED_SWAP_PROTOCOL as protocol, ETHEREUM_PERMIT2_APPROVAL_GRACE_SECONDS, EthereumStampedSwapError, ethereumStampedApprovalTransaction, ethereumStampedPreparationDigest, ethereumStampedProbeTransaction, ethereumStampedRuntimeBindings, ethereumStampedRuntimeDigest, ethereumStampedSwapRoute, ethereumStampedSwapTransaction, parseEthereumStampedSwapRequest, type EthereumStampedSwapPreparation, type EthereumSwapRuntimeBinding } from "@/lib/swap/ethereum-stamped";
 import type { PreparedTradeTransaction } from "@/lib/prepared-transaction";
+import { EthereumRpcBudget, EthereumRpcBudgetBusy, EthereumRpcProviderRateLimit, ethereumRpcRateLimited } from "./ethereum-rpc-budget";
 
 const takeAbi = parseAbi(["function take(address currency,address to,uint256 amount)"]);
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const NATIVE = "0x0000000000000000000000000000000000000000";
 const activePreparations = new Map<string, Promise<EthereumStampedSwapPreparation>>();
 const transportClients = new Map<string, ReturnType<typeof createPublicClient>>();
+const providerBudgets = new Map<string, EthereumRpcBudget>();
 const unavailable = (code: string): never => { throw new EthereumStampedSwapError("This swap could not be checked. Please try again.", code); };
 
 async function boundedFetch(input: string | URL | Request, init?: RequestInit) {
-  const response = await fetch(input, init);
+  const response = await fetch(input, { ...init, cache: "no-store" });
+  if (response.status === 429) { await response.body?.cancel(); throw new EthereumRpcProviderRateLimit(); }
   if (!response.ok || !response.body || Number(response.headers.get("content-length") ?? 0) > 2_097_152) return unavailable("ETHEREUM_RPC_UNAVAILABLE");
   const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
   try { for (;;) { const part = await reader.read(); if (part.done) break; size += part.value.length;
@@ -38,11 +41,27 @@ export function productionEthereumSwapRpcs(): readonly [TradeRpcV1, TradeRpcV1] 
       if (transportClients.size >= 4) transportClients.delete(transportClients.keys().next().value!);
       transportClients.set(provider.identity, client);
     }
-    const selected = client; let reads = 0;
+    let budget = providerBudgets.get(provider.identity);
+    if (!budget) {
+      budget = new EthereumRpcBudget();
+      if (providerBudgets.size >= 4) providerBudgets.delete(providerBudgets.keys().next().value!);
+      providerBudgets.set(provider.identity, budget);
+    }
+    const selected = client, selectedBudget = budget; let reads = 0;
     return async (method: string, params: readonly unknown[]) => {
-      if (!methods.has(method) || ++reads > 96) return unavailable("ETHEREUM_RPC_REQUEST_LIMIT");
-      try { return await selected.request({ method, params } as never); }
-      catch { return unavailable("ETHEREUM_RPC_UNAVAILABLE"); }
+      if (!methods.has(method)) return unavailable("ETHEREUM_RPC_REQUEST_LIMIT");
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (++reads > 96) return unavailable("ETHEREUM_RPC_REQUEST_LIMIT");
+        try {
+          await selectedBudget.acquire();
+          return await selected.request({ method, params } as never);
+        } catch (error) {
+          if (error instanceof EthereumRpcBudgetBusy) throw new EthereumStampedSwapError("Swap checks are busy. Please try again shortly.", "ETHEREUM_SWAP_BUSY", 429);
+          if (attempt === 0 && ethereumRpcRateLimited(error)) { selectedBudget.pause(); continue; }
+          return unavailable("ETHEREUM_RPC_UNAVAILABLE");
+        }
+      }
+      return unavailable("ETHEREUM_RPC_UNAVAILABLE");
     };
   }) as unknown as readonly [TradeRpcV1, TradeRpcV1];
 }
@@ -59,7 +78,7 @@ export async function prepareEthereumStampedSwap(value: unknown, dependencies: E
   const key = canonicalBrowserSha256V2("programmable.ethereum-swap-inflight.v1", request);
   const existing = activePreparations.get(key);
   if (existing) return existing;
-  if (activePreparations.size >= 16) throw new EthereumStampedSwapError("Swap checks are busy. Please try again shortly.", "ETHEREUM_SWAP_BUSY", 429);
+  if (activePreparations.size >= 4) throw new EthereumStampedSwapError("Swap checks are busy. Please try again shortly.", "ETHEREUM_SWAP_BUSY", 429);
   const pending = prepare(request, dependencies).finally(() => activePreparations.delete(key));
   activePreparations.set(key, pending);
   return pending;
