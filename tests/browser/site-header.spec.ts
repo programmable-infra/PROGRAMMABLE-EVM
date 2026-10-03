@@ -94,6 +94,7 @@ test("anonymous Connect wallet closes navigation before opening login",async ({p
   await page.getByRole("group",{name:"Wallet actions",exact:true}).getByRole("button",{name:"Connect wallet",exact:true}).click();
   await expect(page.getByRole("dialog",{name:"Connect wallet fixture"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Open menu",exact:true})).toHaveAttribute("aria-expanded","false");
+  await expect(page.getByRole("button",{name:"Open menu",exact:true})).toBeFocused();
 });
 
 test("passive session hydration is labelled loading without claiming an SDK prompt is open", async ({ page }) => {

@@ -401,7 +401,10 @@ export function SiteHeader() {
               open={menuOpen}
               onNavigate={() => setMenuPath(null)}
             />
-            <MenuWalletButton onOpen={() => setMenuPath(null)} />
+            <MenuWalletButton onOpen={() => {
+              setMenuPath(null);
+              menuButtonRef.current?.focus();
+            }} />
             <HeaderWalletActions open={menuOpen} triggerRef={menuButtonRef} onClose={() => setMenuPath(null)} />
             <HeaderSocialLinks mobile />
           </div>
