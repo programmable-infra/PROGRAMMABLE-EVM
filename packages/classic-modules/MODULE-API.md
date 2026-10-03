@@ -1,4 +1,6 @@
-# Module contributions through the API
+# Historical Module contribution API
+
+The live product has retired new module API keys and source submissions. Read the [public retirement notice](https://programmable.market/developers/module-mode-api-v1.md) before using this client. This document retains the historical wire contract and source preparation workflow. A downloadable CLI does not activate intake.
 
 Use an API key and an idea to build and submit a reusable module. Start with authenticated context to establish the author, default reward wallet, required inputs and current limits before writing source. The API stores the complete source package as an immutable **unreviewed draft** and returns its identity.
 
