@@ -65,6 +65,10 @@ Use the exact topic0 values from the manifest and derive them again from the pin
 
 Programmable's Ethereum Custom source scans the canonical Router independently of API submissions. Explore combines those verified identities with the Robinhood catalog. Missing metadata, market data or API registration does not exclude a verified launch. An unusual hook can therefore be indexed once its valid stamp is finalized even when its trading adapter or market enrichment is unavailable.
 
+The website automatically derives a standard ETH/token swap route from a finalized CustomGraph stamp whose pool pairs native ETH with its primary token. No per-coin registration is needed for that route. It supports exact-input swaps with empty hook data and standard token transfers. Each preparation checks the canonical launch, current runtime code, actual wallet balances, approvals and complete swap execution through two independent private RPC providers. Proxy implementation changes are checked again before the wallet opens. Required approvals are limited to the requested token amount; the Permit2 approval also has a bounded expiry.
+
+Hooks that require signed hook data, another quote asset or a different settlement flow need a compatible trading adapter. Their verified launches can still be indexed. A launch stamp establishes origin; it does not establish an economic audit or guarantee that an arbitrary hook can trade through the standard route.
+
 A terminal already following this exact Ethereum stamp contract can recognize the same event and getter evidence. External providers control their own ingestion, labels and timing. Ordinary token/pool discovery alone does not establish that a provider implements the Programmable stamp contract.
 
 ## Bundle files

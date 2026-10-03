@@ -11,6 +11,7 @@ import type { LaunchPlanTradeWalletInputV1, LaunchPlanTradeWalletReviewV1 } from
 import type { PreparedModuleModeTransaction } from "@/components/module-mode-wallet-state";
 import type { CustomV4SwapWalletInput, CustomV4SwapWalletReview } from "./custom-v4";
 import { parseDiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/trade-capability-v1";
+import { parseEthereumStampedSwapRoute } from "./ethereum-stamped";
 import { SWAP_TOKEN_SCHEMA, SwapUnavailableError, type SwapChainId, type SwapReceipt, type SwapReview, type SwapSide, type SwapTokenDescriptor } from "./types";
 import { beginPendingSwap, clearPendingSwap, getPendingSwap, recordPendingSwapHash, subscribePendingSwap, type PendingSwap } from "./pending";
 
@@ -90,6 +91,10 @@ export function parseSwapTokenDescriptor(value: unknown, expected: { address: st
     requireValue(same(base.value, token.address) && quote.value === "0x0000000000000000000000000000000000000000"
       && capability.supportedSides.includes("base-to-quote") && capability.supportedSides.includes("quote-to-base"), "This market has no verified ETH swap route for this coin.");
     return { ...row, route: { ...route, capability } };
+  }
+  if (route.kind === "ethereum-stamped") {
+    requireValue(row.chainId === 1, "The Ethereum market is invalid.");
+    return { ...row, route: { kind: "ethereum-stamped", descriptor: parseEthereumStampedSwapRoute(route.descriptor, { token: token.address, decimals: token.decimals }) } };
   }
   requireValue(route.kind === "custom-v4" && row.chainId === 4663 && object(route.descriptor), "The swap adapter is unavailable.");
   return row;
@@ -261,6 +266,32 @@ export async function prepareSwap(input: PrepareSwapInput, wallet: SwapWalletAct
         const latest = await fetchPrepared();
         requireValue(latest.transaction.kind === tx.kind && latest.transaction.chainId === tx.chainId && same(latest.transaction.to, tx.to)
           && latest.transaction.data === tx.data && latest.transaction.value === tx.value, "The swap quote changed. Try again.");
+      },
+      submit: actions => actions.sendTransaction(tx),
+    });
+  }
+  if (route.kind === "ethereum-stamped") {
+    const descriptor = parseSwapTokenDescriptor(input.descriptor, { address: token, chainId: 1 });
+    requireValue(descriptor.status === "ready" && descriptor.route.kind === "ethereum-stamped", "The Ethereum market changed.");
+    requireValue(slippageBps <= 500, "Use slippage up to 5% for this Ethereum route.");
+    const api = await import("./ethereum-stamped"), selected = descriptor.route.descriptor;
+    const request = api.parseEthereumStampedSwapRequest({ schemaVersion: "programmable.ethereum-stamped-swap-request.v1", chainId: 1,
+      token, owner: account, side: input.side, amountIn: input.amountIn.toString(), slippageBps,
+      deadline: (now() + 240n).toString(), routeBindingHash: selected.routeBindingHash });
+    const fetchPrepared = async () => api.validateEthereumStampedPreparation(
+      await jsonResponse(await fetch("/api/swap/ethereum/prepare", { method: "POST", cache: "no-store", credentials: "same-origin", redirect: "error",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) })), selected, request, now());
+    const prepared = await fetchPrepared(), tx = prepared.transaction, swap = prepared.status === "ready";
+    return seal(display(input, { kind: swap ? "swap" : "approval", amountOut: swap ? BigInt(prepared.quote.amountOut) : null,
+      minimumOutput: swap ? BigInt(prepared.quote.amountOutMinimum) : null, expiresAt: BigInt(prepared.quote.validUntil),
+      gasEstimate: BigInt(tx.gasLimit!), ...(swap ? {} : { approvalLabel: `Approve ${input.descriptor.token.symbol}` }) }), {
+      transaction: { from: account, to: tx.to, data: tx.data, value: tx.value, preparedBlock: prepared.quote.blockNumber },
+      refresh: async () => {
+        const latest = await fetchPrepared();
+        requireValue(latest.transaction.kind === tx.kind && latest.transaction.chainId === tx.chainId && same(latest.transaction.to, tx.to)
+          && latest.transaction.data === tx.data && latest.transaction.value === tx.value
+          && BigInt(latest.transaction.gasLimit!) <= BigInt(tx.gasLimit!)
+          && latest.evidence.runtimeBindingHash === prepared.evidence.runtimeBindingHash, "The swap changed. Get a fresh quote.");
       },
       submit: actions => actions.sendTransaction(tx),
     });
