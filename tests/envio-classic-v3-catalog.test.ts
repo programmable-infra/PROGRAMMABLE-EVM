@@ -591,7 +591,7 @@ describe("Envio Classic V3 public catalog", () => {
       launchModelVersion: "classic-v2",
       totalSwapFeeBps: 100,
       description:
-        "The Programmable token for custom Uniswap v4 launches and onchain markets.",
+        "Infrastructure for creating and launching customizable tokens with Uniswap V4 hooks",
       imageUrl: "/brand/projects/programmable-main-token-v1.webp",
       links: [
         { kind: "website", url: "https://programmable.market/" },

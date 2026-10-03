@@ -214,7 +214,8 @@ describe("Module foundation UI financial and lifecycle boundaries", () => {
     expect(unsafeImage).not.toContain("data:image");
     expect(unsafeImage).toContain(FOUNDATION_DEFAULT_IMAGE.url);
     expect(unsafeImage).toContain("Copy address");
-    expect(html).toContain(`href="https://robinhoodchain.blockscout.com/token/${address}"`);
+    expect(html).toMatch(new RegExp(`<button[^>]*title="${address}"[^>]*>.*?Copy address</button>`));
+    expect(html).not.toContain(`href="https://robinhoodchain.blockscout.com/token/${address}"`);
     expect(html).toContain('href="/explore/robinhood"');
   });
 });
