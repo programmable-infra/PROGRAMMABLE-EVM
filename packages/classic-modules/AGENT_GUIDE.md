@@ -1,6 +1,12 @@
-# Build and submit a Module Mode contribution
+# Module Mode SDK and historical contributions
 
-Start with the [contribution guide](https://programmable.market/developer-reference/module-mode), [API reference](https://programmable.market/developers/module-mode-api-v1.md) and [agent discovery](https://programmable.market/api/agent). Use the current CLI manifest from `workflows.moduleContribution` and verify the download hash before running it. CLI `1.0.0-development.9` supports the authenticated `module-context` command. Keep the API key in the agent's private `PROGRAMMABLE_API_KEY` environment variable; `PROGRAMMABLE_MODULES_API_KEY` remains a compatible alias.
+The live product has retired new module contribution keys and source submissions. Read the [current Module Mode guide](https://programmable.market/developer-reference/module-mode), [public retirement notice](https://programmable.market/developers/module-mode-api-v1.md) and [agent discovery](https://programmable.market/api/agent) before using a network workflow. This SDK remains available for source preparation and historical compatibility.
+
+Download CLI `1.0.0-development.10` through its [versioned manifest](https://programmable.market/developers/module-mode-cli/v1.0.0-development.10/manifest.json) and verify the artifact hash before running it. The command set does not establish live API availability. Keep an existing API key in the private `PROGRAMMABLE_API_KEY` environment variable; `PROGRAMMABLE_MODULES_API_KEY` remains a compatible alias.
+
+## Historical upload workflow
+
+The following checks describe the retained client protocol. Stop before uploads when the target deployment does not accept source submissions.
 
 ## Check submission access
 

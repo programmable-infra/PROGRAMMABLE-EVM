@@ -32,7 +32,7 @@ function launch(): RobinhoodLaunch { return { routerAddress: router, launchId: h
 function request(buy = true): CustomV4SwapRequest { return { token, owner, buy, amountIn: "100000", slippageBps: 50, deadline: (now + 600n).toString() }; }
 type Options = { buy?: boolean; tokenApproval?: boolean; permitApproval?: boolean; revert?: boolean; outputMismatch?: boolean;
   overspend?: boolean; poolOriginMissing?: boolean; runtimeChanged?: boolean; stampOwnerChanged?: boolean; finalityPending?: boolean; incorrectApproval?: boolean;
-  systemCounter?: bigint; hookCounter?: bigint; outputAmount?: bigint };
+  systemCounter?: bigint; hookCounter?: bigint; outputAmount?: bigint; traceGas?: bigint; estimateGas?: bigint };
 function fixtureRpc(options: Options = {}): TradeRpcV1 {
   const output = options.outputAmount ?? 50000n;
   return async (method, params) => {
@@ -45,7 +45,7 @@ function fixtureRpc(options: Options = {}): TradeRpcV1 {
     }] };
     if (method === "eth_getCode") return getAddress(String(params[0])) === owner ? "0x" : options.runtimeChanged && getAddress(String(params[0])) === hook ? "0x6002" : runtime;
     if (method === "eth_getBalance") return toHex(10n ** 18n);
-    if (method === "eth_estimateGas") return "0x186a0";
+    if (method === "eth_estimateGas") return toHex(options.estimateGas ?? 100000n);
     const tx = params[0] as { from: Address; to: Address; data: Hex; value: Hex };
     if (method === "eth_call") {
       if (tx.to.toLowerCase() === router.toLowerCase()) {
@@ -77,7 +77,7 @@ function fixtureRpc(options: Options = {}): TradeRpcV1 {
           ...(options.systemCounter === undefined ? {} : { "0xa4b05fffffffffffffffffffffffffffffffffff": { storage: { [hash]: toHex(options.systemCounter, { size: 32 }) } } }),
           ...(options.hookCounter === undefined ? {} : { [hook.toLowerCase()]: { storage: { [hash]: toHex(options.hookCounter, { size: 32 }) } } }) } };
       const approval = options.tokenApproval || options.permitApproval;
-      return { type: "CALL", from: tx.from, to: tx.to, input: tx.data, value: tx.value, gasUsed: "0x186a0",
+      return { type: "CALL", from: tx.from, to: tx.to, input: tx.data, value: tx.value, gasUsed: toHex(options.traceGas ?? 100000n),
         output: options.tokenApproval ? toHex(1n, { size: 32 }) : "0x", ...(options.revert ? { error: "execution reverted" } : {}),
         calls: approval ? [] : [{ type: "CALL", from: infra.universalRouter.address, to: infra.poolManager.address, value: "0x0", gasUsed: "0x2710",
           input: encodeFunctionData({ abi: TAKE, functionName: "take", args: [options.buy === false ? CUSTOM_V4_NATIVE : token, owner, output] }), output: "0x" }] };
@@ -89,6 +89,16 @@ const prepared = (options: Options = {}) => prepareCustomV4Swap(request(options.
 const descriptor = () => readCustomV4SwapDescriptor(launch(), { rpcs: [fixtureRpc(), fixtureRpc()] });
 
 describe("historical V4 native swap adapter", () => {
+  it("accepts matching execution with different provider gas accounting and covers the larger estimate", async () => {
+    const value = await prepareCustomV4Swap(request(), { loadLaunch: async () => launch(),
+      rpcs: [fixtureRpc({ traceGas: 100000n, estimateGas: 100000n }), fixtureRpc({ traceGas: 100009n, estimateGas: 110000n })], now: () => now });
+    expect(value.transaction.gasLimit).toBe("132000");
+    expect(value.evidence.settlement?.outputBalanceIncrease).toBe("50000");
+    expect(validateCustomV4SwapPreparation(value, { descriptor: await descriptor(), request: request() }, now)).toBe(value);
+    await expect(prepareCustomV4Swap(request(), { loadLaunch: async () => launch(),
+      rpcs: [fixtureRpc({ traceGas: 100000n }), fixtureRpc({ traceGas: 100009n, outputAmount: 50001n })], now: () => now })).rejects.toThrow();
+  });
+
   it("retains real Router V1 provenance and reconstructs an ETH buy without a new route fee", async () => {
     const value = await prepared(), source = await descriptor();
     expect(source.source.kind).toBe("router_v1"); expect(source.launch).not.toHaveProperty("launchProjection");

@@ -93,6 +93,27 @@ export async function readTradeCheckpointV1(rpcs: readonly [TradeRpcV1, TradeRpc
   return block;
 }
 export interface TradeTraceV1 { type: string; from: Address; to: Address | null; input: Hex; output: Hex; value: string; gasUsed: string; failed: boolean; calls: readonly TradeTraceV1[] }
+/** Provider-local gas accounting is not an execution effect. Keep the original
+ * trace for evidence, compare the complete execution tree, and bound both gas
+ * readings before using the larger one for transaction preparation. */
+export async function readAgreedTradeTraceV1(rpcs: readonly [TradeRpcV1, TradeRpcV1], transaction: Record<string, unknown>, tag: string) {
+  const traces = await Promise.all(rpcs.map(async read => tradeTraceV1(await read("debug_traceCall", [transaction, tag, { tracer: "callTracer", timeout: "10s" }]))));
+  const execution = (trace: TradeTraceV1): unknown => {
+    const { gasUsed, calls, ...effects } = trace;
+    if (BigInt(gasUsed) > 30_000_000n) return pendingTradeV1("TRADE_GAS_PENDING");
+    return { ...effects, calls: calls.map(execution) };
+  };
+  if (canonicalBrowserJsonV2(execution(traces[0]!)) !== canonicalBrowserJsonV2(execution(traces[1]!))) return pendingTradeV1("TRADE_PROVIDER_DISAGREEMENT");
+  const maximumGasUsed = traces.reduce((maximum, trace) => BigInt(trace.gasUsed) > maximum ? BigInt(trace.gasUsed) : maximum, 0n);
+  return { trace: traces[0]!, maximumGasUsed };
+}
+
+export async function readTradeGasEstimateV1(rpcs: readonly [TradeRpcV1, TradeRpcV1], transaction: Record<string, unknown>, tag: string) {
+  const estimates = await Promise.all(rpcs.map(async read => quantityV1(await read("eth_estimateGas", [transaction, tag]))));
+  if (estimates.some(gas => gas === 0n || gas > 30_000_000n)) return pendingTradeV1("TRADE_GAS_PENDING");
+  return estimates.reduce((maximum, gas) => gas > maximum ? gas : maximum, 0n).toString();
+}
+
 export function tradeTraceV1(value: unknown): TradeTraceV1 {
   let count = 0;
   const parse = (v: unknown, depth: number): TradeTraceV1 => {

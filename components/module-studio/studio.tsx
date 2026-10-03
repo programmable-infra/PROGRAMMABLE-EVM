@@ -64,10 +64,17 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const picker = useRef<HTMLDialogElement>(null);
   useEffect(() => { if (pickerOpen && picker.current && !picker.current.open) picker.current.showModal(); }, [pickerOpen]);
   const errorSignature = Object.entries(errors).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).sort().join("|");
-  const errorPanel = Object.keys(errors).some(key => ["name", "symbol", "description", "image", "initialBuy"].includes(key) || key.startsWith("social-")) ? "coin"
-    : errors.quoteAsset ? "quote" : errors.creatorFeeBps ? "fees" : errors.modules ? draft.modules[0]?.id ?? "modules" : undefined;
+  const errorPanel = Object.keys(errors).some(key => ["name", "symbol", "description", "image", "initialBuy", "creatorFeeBps"].includes(key) || key.startsWith("social-")) ? "coin"
+    : errors.quoteAsset ? "quote" : errors.modules ? draft.modules[0]?.id ?? "modules" : undefined;
   const panel = errorPanel && errorSignature !== handledErrors ? errorPanel : chosenPanel;
   const activeMobilePanel = errorPanel && errorSignature !== handledErrors ? "settings" : mobilePanel;
+  // Keep the revealed panel when typing clears validation. Otherwise mobile
+  // returns to the canvas and a desktop inspector returns to the old module.
+  if (errorPanel && errorSignature !== handledErrors) {
+    setHandledErrors(errorSignature);
+    setPanel(errorPanel);
+    setMobilePanel("settings");
+  }
   const selected = catalog.find(item => item.id === panel);
   const selection = draft.modules.find(item => item.id === panel);
   const inspectedSelection = selected ? selection ?? foundationStudioSelection(selected, savedConfigurations[selected.id]) : undefined;
@@ -101,11 +108,10 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   // Legacy project links remain editable when opening an older saved draft.
   const otherLinks = [...(["discord", "github", "gitbook"] as const).flatMap(key => draft.socialLinks[key] ? [draft.socialLinks[key]!] : []), ...(draft.socialLinks.other ?? [])];
   const updateOtherLinks = (other: string[]) => { const links = { ...draft.socialLinks, other }; delete links.discord; delete links.github; delete links.gitbook; props.onUpdate("socialLinks", links); };
-  const field = (key: "name" | "symbol" | "description", label: string, placeholder: string, maxLength: number) => <label className={styles.field}>
-    <span>{label}</span>{key === "description" ? <textarea id={`foundation-${key}`} rows={2} maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} onChange={event => props.onUpdate(key, event.target.value)} />
-      : <div className={key === "symbol" ? styles.cashtagInput : undefined}>{key === "symbol" ? <span aria-hidden="true">$</span> : null}<input id={`foundation-${key}`} autoComplete="off" maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} onChange={event => props.onUpdate(key, key === "symbol" ? event.target.value.replace(/^\$/, "").toUpperCase() : event.target.value)} /></div>}
-    {errors[key] ? <span className={styles.error}>{errors[key]}</span> : null}
-  </label>;
+  const field = (key: "name" | "symbol" | "description", label: string, placeholder: string, maxLength: number) => <StudioField id={`foundation-${key}`} label={label} error={errors[key]}>
+    {key === "description" ? <textarea id={`foundation-${key}`} name={key} rows={2} maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} aria-describedby={errors[key] ? `foundation-${key}-error` : undefined} onChange={event => props.onUpdate(key, event.target.value)} />
+      : <div className={key === "symbol" ? styles.cashtagInput : undefined}>{key === "symbol" ? <span aria-hidden="true">$</span> : null}<input id={`foundation-${key}`} name={key} autoComplete="off" spellCheck={key === "symbol" ? false : undefined} maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} aria-describedby={errors[key] ? `foundation-${key}-error` : undefined} onChange={event => props.onUpdate(key, key === "symbol" ? event.target.value.replace(/^\$/, "").toUpperCase() : event.target.value)} /></div>}
+  </StudioField>;
 
   return <form className={styles.studio} ref={formRef} onSubmit={event => { setHandledErrors(""); props.onSubmit(event); }} noValidate>
     <header className={styles.heading}>{props.preview ? <a className={styles.homeLogo} href="https://programmable.market" aria-label="Programmable home"><Image src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png" alt="" width={42} height={52} unoptimized /></a> : null}<div className={styles.title}><h1>Module Mode</h1><p>Build your coin with the rules you choose</p></div>{props.preview ? <span className={styles.previewTag}>Preview</span> : null}</header>
@@ -138,27 +144,27 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
         <div className={styles.panelHeading}><h2>{panel === "coin" ? "Coin details" : panel === "quote" ? "Any Quote Pool" : panel === "fees" ? "Creator fees" : panel === "modules" ? "Selected modules" : selected?.name ?? "Settings"}</h2></div>
         <div className={styles.inspectorContent} key={panel}>
           {panel === "coin" ? <>
-            <div className={styles.imageControl}><button type="button" onClick={() => imageInput?.current?.click()}><ImagePlus size={20} />{props.imageSource ? "Change image" : "Add image"}</button>{props.imageSource ? <button type="button" aria-label="Remove coin image" onClick={props.onRemoveImage}><X size={18} /></button> : null}<input className={styles.hiddenInput} ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Coin image file" onChange={event => { props.onChooseImage(event.target.files?.[0]); event.target.value = ""; }} /></div>
-            {errors.image ? <div className={styles.error}>{errors.image}</div> : null}
+            <div className={styles.imageControl}><button type="button" data-invalid={Boolean(errors.image) || undefined} aria-describedby={errors.image ? "foundation-image-error" : undefined} onClick={() => imageInput?.current?.click()}><ImagePlus size={20} />{props.imageSource ? "Change image" : "Add image"}</button>{props.imageSource ? <button type="button" aria-label="Remove coin image" onClick={props.onRemoveImage}><X size={18} /></button> : null}<input className={styles.hiddenInput} ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Coin image file" onChange={event => { props.onChooseImage(event.target.files?.[0]); event.target.value = ""; }} /></div>
+            {errors.image ? <div id="foundation-image-error" className={styles.error}>{errors.image}</div> : null}
             {field("name", "Name", "Coin name", 48)}{field("symbol", "Ticker", "COIN", 12)}
             <section className={styles.baseSection} aria-label="Launch settings"><h3>Launch settings</h3>
               <div className={styles.launchFields}>
-              <label className={styles.field}><span>First buy · ETH</span><input id="foundation-initial-buy" inputMode="decimal" value={props.initialBuy} aria-invalid={Boolean(errors.initialBuy) || undefined} placeholder="0" onChange={event => props.onUpdate("initialBuy", event.target.value)} />{errors.initialBuy ? <span className={styles.error}>{errors.initialBuy}</span> : null}</label>
-              <label className={styles.field}><span>Creator fees · %</span><input id="foundation-creator-fee-inline" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} />{errors.creatorFeeBps ? <span className={styles.error}>{errors.creatorFeeBps}</span> : null}</label>
+              <StudioField id="foundation-initial-buy" label="First buy · ETH" error={errors.initialBuy}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" value={props.initialBuy} aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} placeholder="0" onChange={event => props.onUpdate("initialBuy", event.target.value)} /></StudioField>
+              <StudioField id="foundation-creator-fee-inline" label="Creator fees · %" error={errors.creatorFeeBps}><input id="foundation-creator-fee-inline" name="creatorFeeBps" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} aria-invalid={Boolean(errors.creatorFeeBps) || undefined} aria-describedby={errors.creatorFeeBps ? "foundation-creator-fee-inline-error" : undefined} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} /></StudioField>
               </div>
             </section>
             {field("description", "Description", "About your coin", 280)}
-            <StudioDetails title="Links" forceOpen={Object.keys(errors).some(key => key.startsWith("social-"))}>{(["website", "twitter", "telegram"] as const).map(key => <label key={key} className={styles.field}><span>{key === "twitter" ? "X" : key === "website" ? "Website" : "Telegram"}</span><input id={`foundation-social-${key}`} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} placeholder={key === "website" ? "example.com" : "@username or link"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} />{errors[`social-${key}`] ? <span className={styles.error}>{errors[`social-${key}`]}</span> : null}</label>)}
+            <StudioDetails title="Links" forceOpen={Object.keys(errors).some(key => key.startsWith("social-"))}>{(["website", "twitter", "telegram"] as const).map(key => <StudioField key={key} id={`foundation-social-${key}`} label={key === "twitter" ? "X" : key === "website" ? "Website" : "Telegram"} error={errors[`social-${key}`]}><input id={`foundation-social-${key}`} name={key} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} aria-describedby={errors[`social-${key}`] ? `foundation-social-${key}-error` : undefined} placeholder={key === "website" ? "example.com" : "@username or link"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} /></StudioField>)}
               <div className={styles.otherHeading}><h3>Other links</h3><button type="button" aria-label="Add other link" disabled={otherLinks.length >= MAX_OTHER_LINKS} onClick={() => updateOtherLinks([...otherLinks, ""])}><Plus size={17} /></button></div>
-              {otherLinks.map((link, index) => <div key={index} className={styles.otherLink}><label className={styles.field}><span className="sr-only">Other link {index + 1}</span><input value={link} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="https://" aria-invalid={Boolean(errors["social-other"]) || undefined} onChange={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? event.target.value : value))} onBlur={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? normalizeFoundationSocialInput("website", event.target.value) : value))} /></label><button type="button" aria-label={`Remove other link ${index + 1}`} onClick={() => updateOtherLinks(otherLinks.filter((_, i) => i !== index))}><X size={16} /></button></div>)}
+              {otherLinks.map((link, index) => <div key={index} className={styles.otherLink}><div className={styles.field}><label className="sr-only" htmlFor={`foundation-other-${index}`}>Other link {index + 1}</label><input id={`foundation-other-${index}`} name={`other-${index}`} value={link} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="https://" aria-invalid={Boolean(errors["social-other"]) || undefined} aria-describedby={errors["social-other"] ? "foundation-other-error" : undefined} onChange={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? event.target.value : value))} onBlur={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? normalizeFoundationSocialInput("website", event.target.value) : value))} /></div><button type="button" aria-label={`Remove other link ${index + 1}`} onClick={() => updateOtherLinks(otherLinks.filter((_, i) => i !== index))}><X size={16} /></button></div>)}
               {errors["social-socialLinks"] ? <span className={styles.error}>{errors["social-socialLinks"]}</span> : null}
-              {errors["social-other"] ? <span className={styles.error}>{errors["social-other"]}</span> : null}
+              {errors["social-other"] ? <span id="foundation-other-error" className={styles.error}>{errors["social-other"]}</span> : null}
             </StudioDetails>
           </> : panel === "quote" ? <>
             <p className={styles.moduleDescription}>This module lets you choose another asset people use to buy and sell your coin. Enter its token contract address on Robinhood Chain. Turn the module off to use ETH.</p>
             <button type="button" className={styles.quoteChoice} aria-pressed={!props.customQuote} onClick={disableQuote}><Waves size={22} /><strong>ETH</strong>{!props.customQuote ? <Check size={18} /> : null}</button>
-            <label className={styles.field}><span>Quote token address</span><input id="foundation-quote" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></label>
-            {props.quoteStatus || errors.quoteAsset ? <div className={errors.quoteAsset ? styles.error : styles.settingStatus} role="status">{errors.quoteAsset || props.quoteStatus}</div> : null}
+            <StudioField id="foundation-quote" label="Quote token address"><input id="foundation-quote" name="quoteAsset" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} aria-describedby={props.quoteStatus || errors.quoteAsset ? "foundation-quote-status" : undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></StudioField>
+            {props.quoteStatus || errors.quoteAsset ? <div id="foundation-quote-status" className={errors.quoteAsset ? styles.error : styles.settingStatus} role="status">{errors.quoteAsset || props.quoteStatus}</div> : null}
           </> : panel === "fees" ? <>
             <p className={styles.moduleDescription}>Set the percentage of each buy and sell that goes to the creator. The platform fee is charged separately.</p>
             <label className={styles.largeNumber}><span>Buy & sell</span><div><input id="foundation-creator-fee" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} /><span>%</span></div></label>
@@ -197,6 +203,11 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       </div>
     </dialog> : null}
   </form>;
+}
+
+function StudioField({ id, label, error, children }: { id: string; label: string; error?: string; children: ReactNode }) {
+  return <div className={styles.field}><label htmlFor={id}>{label}</label>{children}
+    {error ? <span id={`${id}-error`} className={styles.error}>{error}</span> : null}</div>;
 }
 
 function StudioDetails({ title, children, forceOpen = false }: { title: string; children: ReactNode; forceOpen?: boolean }) {

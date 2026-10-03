@@ -91,7 +91,7 @@
 .inspectorContent { padding: 18px; overflow: auto; min-height: 0; flex: 1; overscroll-behavior: contain; scrollbar-width: thin; animation: reveal .32s cubic-bezier(.2,.8,.2,1); }
 .moduleDescription { margin: 0 0 14px; padding: 12px 14px; border: 0; border-radius: 11px; background: var(--panel-fill-soft); color: #d8d4df; font-size: 14px; line-height: 21px; }
 .field { display: grid; gap: 6px; margin-bottom: 12px; }
-.field > span:first-child { font-size: 13px; font-weight: 500; }
+.field > :is(span,label):first-child { font-size: 13px; font-weight: 500; }
 .field input,.field textarea { width: 100%; min-width: 0; border: 0; border-radius: 9px; padding: 11px 12px; background: var(--panel-fill-control); color: #f4f4f5; font: inherit; font-size: 16px; line-height: 24px; resize: vertical; }
 .field input::placeholder,.field textarea::placeholder { color: #6d727b; }
 .settingCard { --mf-ink: #f4f4f5; --mf-control: #08090de8; --mf-muted: #93969e; --mf-control-line: transparent; padding: 10px 12px; margin-bottom: 10px; border: 0; border-radius: 11px; background: var(--panel-fill-soft); }
@@ -187,7 +187,7 @@
 .studio .field { min-width: 0; }
 .studio .field > div { min-width: 0; }
 .studio .field input,.studio .field textarea { display: block; margin: 0; min-height: 44px; box-shadow: none; background: #08090de8; }
-.studio .field > span:first-child { font-size: 14px; line-height: 20px; }
+.studio .field > :is(span,label):first-child { font-size: 14px; line-height: 20px; }
 .studio .field textarea { min-height: 68px; }
 .studio .cashtagInput { background: #08090de8; }
 .studio .cashtagInput > span { flex: 0 0 auto; font-size: 16px; line-height: 24px; }

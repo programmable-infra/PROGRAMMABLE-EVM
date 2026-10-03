@@ -18,8 +18,9 @@ export async function createModuleStudioServer() {
       description:'This module limits how much each wallet can buy during the opening period.',capabilities:['beforeSwap'],
       fields:[],available:true,studio:{category:'trading'}}];
     function App() {
+      const mode = new URLSearchParams(location.search).get('mode');
       const [draft,setDraft] = useState({name:'',symbol:'COIN',description:'',image:null,socialLinks:{},quoteAsset:'',
-        creatorFeeBps:0,initialBuy:'0.001',additionalLiquidity:'0',modules:[]});
+        creatorFeeBps:mode==='fees'?1100:0,initialBuy:'0.001',additionalLiquidity:'0',modules:[]});
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
@@ -31,7 +32,7 @@ export async function createModuleStudioServer() {
           onEnableQuote={()=>setCustomQuote(true)}
           onDefaultQuote={()=>{setCustomQuote(false);setDraft(current=>({...current,quoteAsset:''}));}}
           onChooseImage={()=>{}} onRemoveImage={()=>{}}
-          onSubmit={event=>{event.preventDefault();setErrors(draft.name?{}:{name:'Enter a coin name'});}}/>
+          onSubmit={event=>{event.preventDefault();setErrors(mode==='fees'&&draft.creatorFeeBps>1000?{creatorFeeBps:'Choose a whole percentage from 0% to 10%.'}:draft.name?{}:{name:'Enter a coin name'});}}/>
       </div></main></div>;
     }
     createRoot(document.getElementById('root')).render(<App/>);

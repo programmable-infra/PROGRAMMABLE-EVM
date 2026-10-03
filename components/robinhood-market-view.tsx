@@ -54,7 +54,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
   }
 
   return <div className={`${styles.page} page-width`}>
-    <Link className={styles.back} href="/explore/robinhood"><ArrowLeft aria-hidden="true" size={16} /> Explore</Link>
+    <Link className={styles.back} href="/explore"><ArrowLeft aria-hidden="true" size={16} /> Explore</Link>
     <section className={styles.market} aria-label={`${name} ${hasAsset ? "market" : "launch"}`}>
       <header className={styles.header}>
         <div className={styles.identity}>

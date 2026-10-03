@@ -19,7 +19,7 @@ export const PROGRAMMABLE_AGENT_ENTRY = Object.freeze({
     apiKeys: "https://programmable.market/developers/api-keys",
     customLaunchHandoff: "https://programmable.market/developers/api-keys?start=custom&chainId=4663",
     launchHistory: "https://programmable.market/developers/api-keys?view=history",
-    explore: "https://programmable.market/explore/robinhood",
+    explore: "https://programmable.market/explore",
     profile: "https://programmable.market/profile",
     manageModuleCoin: "https://programmable.market/launch/modules/manage/{tokenAddress}",
   },

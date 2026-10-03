@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChainMark } from "./chain-mark";
 import { useRobinhoodPresentation } from "./use-robinhood-presentation";
 import { SwapPanel } from "@/components/swap-panel";
 import { ResponsiveTradePanel } from "@/components/responsive-trade-panel";
 import { LaunchPairModules } from "@/components/launch-pair-modules";
 import { TokenPoolChart } from "@/components/robinhood-chart";
-import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, Copy } from "lucide-react";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { RobinhoodProjectLinks } from "@/components/robinhood-project-links";
 import { coinDollars, coinTicker, coinValuation, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
@@ -30,6 +30,17 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
   const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(address)}`, token !== null, seed, 1);
   const market = presentation.items[0]?.market ?? null;
   const links = token?.links?.map(link => ({ label: link.kind, url: link.url })) ?? [];
+  const [copyResult, setCopyResult] = useState<{ address: string; state: "copied" | "failed" } | null>(null);
+  const copyState = copyResult?.address === address ? copyResult.state : null;
+  useEffect(() => {
+    if (!copyResult) return;
+    const timer = setTimeout(() => setCopyResult(null), 3_000);
+    return () => clearTimeout(timer);
+  }, [copyResult]);
+  async function copyAddress() {
+    try { await navigator.clipboard.writeText(address); setCopyResult({ address, state: "copied" }); }
+    catch { setCopyResult({ address, state: "failed" }); }
+  }
   return <div className={`${styles.page} page-width`}>
     <Link className={styles.back} href="/explore"><ArrowLeft aria-hidden="true" size={16} />Back to Explore</Link>
     {token ? <article className={styles.market}>
@@ -38,19 +49,22 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
           <RobinhoodCoinArtwork className={styles.avatar} imageUrl={token.imageUrl} eager />
           <div className={styles.identityText}>
             <div className={styles.nameRow}><h1>{token.name || "Unnamed token"}</h1>
+              <span className={styles.ticker}>{coinTicker(token.symbol)}</span><ChainMark chainId={1} className={styles.chainLogo} />
               {links.length ? <RobinhoodProjectLinks links={links} name={token.name || "Token"} /> : null}
             </div>
-            <p className={styles.subtitle}><span>{coinTicker(token.symbol)}</span><ChainMark chainId={1} className={styles.chainLogo} /></p>
             <LaunchPairModules launch={{ tokenAddress: address, poolId: token.poolId }} chainId={1}
               market={token.quoteAssetAddress ? { poolId: token.poolId, quoteAsset: { address: token.quoteAssetAddress, symbol: token.quoteAssetSymbol ?? null } } : null}
               className={styles.launchProperties} />
             {token.description ? <p className={styles.bio}>{token.description}</p> : null}
           </div>
         </div>
-        <a className={styles.secondaryButton} href={`https://etherscan.io/token/${address}`} target="_blank" rel="noreferrer">
-          Explorer <ArrowUpRight aria-hidden="true" size={16} /><span className="sr-only"> (opens in a new tab)</span>
-        </a>
+        <button className={`${styles.secondaryButton} ${styles.copyButton}`} onClick={copyAddress} type="button" title={address}>
+          {copyState === "copied" ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
+          {copyState === "copied" ? "Copied" : "Copy address"}
+        </button>
       </header>
+      <p className="sr-only" role="status">{copyState === "copied" ? "Contract address copied" : ""}</p>
+      {copyState === "failed" ? <p className={styles.notice} role="status">Could not copy. <a href={`https://etherscan.io/token/${address}`} target="_blank" rel="noreferrer">View the address on Explorer.</a></p> : null}
       <section className={styles.launchContext} aria-label="Programmable launch">
         <div><p className={styles.origin}>Programmable · {token.launchCategoryProvenance.category === "classic" ? "Classic" : "Custom"}</p>
           <p className={styles.launchDetails}>

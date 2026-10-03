@@ -5,7 +5,7 @@ import styles from "@/components/index-reset-view.module.css";
 export function TokenIndexResetView({ unresolved = false }: Readonly<{ unresolved?: boolean }> = {}) {
   return (
     <div className={`${styles.tokenPage} page-width`}>
-      <Link className={styles.backLink} href={unresolved ? "/explore" : "/explore/ethereum"}>
+      <Link className={styles.backLink} href="/explore">
         <span aria-hidden="true">←</span>
         Back to Explore
       </Link>
