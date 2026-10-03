@@ -90,7 +90,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   };
   const moduleNodes = draft.modules.map(item => ({ id: item.id, name: catalog.find(module => module.id === item.id)?.name ?? "Module", value: undefined, icon: <ModuleLogo category={catalog.find(module => module.id === item.id)?.studio?.category ?? "other"} /> }));
   const nodes = [
-    { id: "quote", name: `$${draft.symbol || "COIN"} / ${props.quoteSymbol}`, value: undefined, icon: <ModuleLogo quote /> },
+    { id: "quote", name: "Pool pair", value: `$${draft.symbol || "COIN"} / ${props.quoteSymbol}`, icon: <ModuleLogo quote /> },
     ...(draft.creatorFeeBps ? [{ id: "fees", name: "Creator fees", value: `${draft.creatorFeeBps / 100}%`, icon: <ModuleLogo category="fees" /> }] : []),
     ...moduleNodes,
   ];
@@ -99,7 +99,6 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   // Legacy project links remain editable when opening an older saved draft.
   const otherLinks = [...(["discord", "github", "gitbook"] as const).flatMap(key => draft.socialLinks[key] ? [draft.socialLinks[key]!] : []), ...(draft.socialLinks.other ?? [])];
   const updateOtherLinks = (other: string[]) => { const links = { ...draft.socialLinks, other }; delete links.discord; delete links.github; delete links.gitbook; props.onUpdate("socialLinks", links); };
-  const settingsPanels = [{ id: "coin", name: "Coin details" }, ...(props.customQuote ? [{ id: "quote", name: "Pool pair" }] : []), ...moduleNodes.map(node => ({ id: node.id, name: node.name }))];
   const field = (key: "name" | "symbol" | "description", label: string, placeholder: string, maxLength: number) => <label className={styles.field}>
     <span>{label}</span>{key === "description" ? <textarea id={`foundation-${key}`} rows={2} maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} onChange={event => props.onUpdate(key, event.target.value)} />
       : <div className={key === "symbol" ? styles.cashtagInput : undefined}>{key === "symbol" ? <span aria-hidden="true">$</span> : null}<input id={`foundation-${key}`} autoComplete="off" maxLength={maxLength} value={draft[key]} placeholder={placeholder} aria-invalid={Boolean(errors[key]) || undefined} onChange={event => props.onUpdate(key, key === "symbol" ? event.target.value.replace(/^\$/, "").toUpperCase() : event.target.value)} /></div>}
@@ -127,13 +126,12 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
 
       <section className={styles.market} aria-label="Coin composition">
         <StudioCanvas nodes={nodes} activeId={panel} disabled={disabled} onSelect={focusPanel} onAdd={() => setPickerOpen(true)} coin={<>
-            <div className={styles.coinArtwork}><Image src={props.imageSource ?? FOUNDATION_DEFAULT_IMAGE.url} alt={`${draft.name || "Your coin"} artwork`} width={168} height={168} unoptimized onError={props.onImageError} /></div><strong>{draft.name || "Your coin"}</strong><span>${draft.symbol || "COIN"}</span><div className={styles.coinPair}>${draft.symbol || "COIN"} / {props.quoteSymbol}</div>
+            <div className={styles.coinArtwork}><Image src={props.imageSource ?? FOUNDATION_DEFAULT_IMAGE.url} alt={`${draft.name || "Your coin"} artwork`} width={168} height={168} unoptimized draggable={false} onError={props.onImageError} /></div><strong>{draft.name || "Your coin"}</strong><span>${draft.symbol || "COIN"}</span><div className={styles.coinPair}>${draft.symbol || "COIN"} / {props.quoteSymbol}</div>
         </>} />
       </section>
 
-      <aside className={styles.inspector} aria-label="Settings">
-        <nav className={styles.settingsPanels} aria-label="Selected settings">{settingsPanels.map(item => <button key={item.id} type="button" aria-pressed={panel === item.id} onClick={() => focusPanel(item.id)}>{item.name}</button>)}</nav>
-        <div className={styles.panelHeading}><h2>{panel === "coin" ? "Coin details" : panel === "quote" ? "Pool pair" : panel === "fees" ? "Creator fees" : panel === "modules" ? "Selected modules" : selected?.name ?? "Settings"}</h2><ModuleLogo quote={panel === "quote"} category={panel === "fees" ? "fees" : selected?.studio?.category ?? "other"} /></div>
+      <aside className={styles.inspector} aria-label="Coin and module settings">
+        <div className={styles.panelHeading}><h2>{panel === "coin" ? "Coin details" : panel === "quote" ? "Pool pair" : panel === "fees" ? "Creator fees" : panel === "modules" ? "Selected modules" : selected?.name ?? "Settings"}</h2></div>
         <div className={styles.inspectorContent} key={panel}>
           {panel === "coin" ? <>
             <div className={styles.imageControl}><button type="button" onClick={() => imageInput?.current?.click()}><ImagePlus size={20} />{props.imageSource ? "Change image" : "Add image"}</button>{props.imageSource ? <button type="button" aria-label="Remove coin image" onClick={props.onRemoveImage}><X size={18} /></button> : null}<input className={styles.hiddenInput} ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Coin image file" onChange={event => { props.onChooseImage(event.target.files?.[0]); event.target.value = ""; }} /></div>
@@ -153,7 +151,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
           </> : panel === "quote" ? <>
             <p className={styles.moduleDescription}>Choose the asset people use to buy and sell your coin. Keep ETH or enter another token&apos;s contract address on Robinhood Chain.</p>
             <button type="button" className={styles.quoteChoice} aria-pressed={!props.customQuote} onClick={disableQuote}><Waves size={22} /><strong>ETH</strong>{!props.customQuote ? <Check size={18} /> : null}</button>
-            <label className={styles.field}><span>Any Quote Pool</span><input id="foundation-quote" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></label>
+            <label className={styles.field}><span>Quote token address</span><input id="foundation-quote" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></label>
             {props.quoteStatus || errors.quoteAsset ? <div className={errors.quoteAsset ? styles.error : styles.settingStatus} role="status">{errors.quoteAsset || props.quoteStatus}</div> : null}
           </> : panel === "fees" ? <>
             <p className={styles.moduleDescription}>Set the percentage of each buy and sell that goes to the creator. The platform fee is charged separately.</p>
