@@ -260,12 +260,52 @@ describe("generic vNext routed swap", () => {
     await expect(prepared({ underpaid: true })).rejects.toMatchObject({ code: "OUTPUT_CREDIT_ADAPTER_PENDING" });
     await expect(prepared({ overspent: true })).rejects.toMatchObject({ code: "INPUT_BUDGET_EFFECT_UNPROVEN" });
   });
+  it("uses its final shared gas budget for every execution simulation and preserves full Nitro post-state agreement", async () => {
+    const system = "0xa4b05fffffffffffffffffffffffffffffffffff";
+    const simulate = (provider: number, disagree = false): TradeRpcV1 => {
+      const base = fixtureRpc();
+      return vi.fn(async (method, params) => {
+        const tx = params[0] as { from: string; to: string; data: Hex; value: Hex; gas?: Hex };
+        if (method === "eth_estimateGas") return toHex(100000n + BigInt(provider) * 10n);
+        if (method === "debug_traceCall" && (params[2] as { stateOverrides?: unknown }).stateOverrides) {
+          const overrides = (params[2] as { stateOverrides: Record<string, unknown> }).stateOverrides;
+          expect(overrides).not.toHaveProperty(system);
+          const output = await base("eth_call", [tx, params[1], overrides]);
+          return { type: "CALL", from: tx.from, to: tx.to, input: tx.data, value: tx.value, gasUsed: "0x2710", output };
+        }
+        if (method === "debug_traceCall" || method === "eth_call" && tx.to?.toLowerCase() === ROUTED_TRADE_CONTRACTS_V1.universalRouter.address.toLowerCase()) {
+          expect(tx.gas).toBe(toHex(120012n));
+        }
+        const value = await base(method, params);
+        if (method === "debug_traceCall" && (params[2] as { tracer: string }).tracer === "prestateTracer") {
+          const state = value as { pre: Record<string, unknown>; post: Record<string, unknown> };
+          return { pre: { ...state.pre, [system]: { storage: { [hash]: toHex(0n, { size: 32 }) } } },
+            post: { ...state.post, [system]: { storage: { [hash]: toHex(disagree ? BigInt(provider) : 100n, { size: 32 }) } } } };
+        }
+        return value;
+      });
+    };
+    const value = await prepareLaunchPlanTradeV1(request(), { loadProjection: async () => projection(), rpcs: [simulate(0), simulate(1)], now: () => now });
+    expect(value.status).toBe("ready");
+    expect(value.transaction.gasLimit).toBe("120012");
+    expect(value.evidence.feeTransfer).toMatchObject({ traderOutputCredit: "49901", recipientBalanceIncrease: "100" });
+    await expect(prepareLaunchPlanTradeV1(request(), { loadProjection: async () => projection(), rpcs: [simulate(0, true), simulate(1, true)], now: () => now }))
+      .rejects.toMatchObject({ code: "TRADE_PROVIDER_DISAGREEMENT", status: 503 });
+  });
   it("distinguishes agreed mechanical revert from disagreement and provider outage", async () => {
     await expect(prepared({ revert: true })).rejects.toMatchObject({ code: "TRADE_EXECUTION_REVERTED", status: 409 });
     await expect(prepareLaunchPlanTradeV1(request(), { loadProjection: async () => projection(), rpcs: [fixtureRpc(), fixtureRpc({ revert: true })], now: () => now }))
       .rejects.toMatchObject({ code: "TRADE_PROVIDER_DISAGREEMENT", status: 503 });
     await expect(prepareLaunchPlanTradeV1(request(), { loadProjection: async () => projection(), rpcs: [fixtureRpc(), async () => { throw new Error("secret provider URL"); }], now: () => now }))
       .rejects.toMatchObject({ code: "TRADE_ANALYSIS_PENDING", status: 503 });
+  });
+  it("reports insufficient native input before quotes and execution simulations", async () => {
+    const base = fixtureRpc(), read = vi.fn<TradeRpcV1>(async (method, params) => method === "eth_getBalance" ? "0x0" : base(method, params));
+    await expect(prepareLaunchPlanTradeV1(request(), { loadProjection: async () => projection(), rpcs: [read, read], now: () => now }))
+      .rejects.toMatchObject({ code: "INSUFFICIENT_INPUT_BALANCE", status: 400 });
+    expect(read.mock.calls.map(([method]) => method)).not.toContain("debug_traceCall");
+    expect(read.mock.calls.map(([method]) => method)).not.toContain("eth_estimateGas");
+    expect(read.mock.calls.map(([method]) => method)).not.toContain("eth_call");
   });
   it("rejects target, data, value, owner and fee substitution even after rehashing the response", async () => {
     const value = await prepared();

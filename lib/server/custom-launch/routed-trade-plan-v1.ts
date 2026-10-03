@@ -8,7 +8,7 @@ import { buildLaunchPlanRoutedSwapV1, buildLaunchPlanTradeApprovalV1, launchPlan
   type LaunchPlanTradePreparationV1, type LaunchPlanTradeTransactionV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
 import { indexStore } from "@/lib/server/robinhood-index/store";
 import { snapshotLaunches } from "@/lib/server/robinhood-index/model";
-import { agreedTradeRpcV1, bytesV1, pendingTradeV1, productionTradeRpcsV1, quantityV1, readTradeCheckpointV1, readAgreedTradeTraceV1, readTradeGasEstimateV1, successfulTradeFramesV1,
+import { agreedTradeRpcV1, bytesV1, pendingTradeV1, productionTradeRpcsV1, quantityV1, readTradeCheckpointV1, readAgreedTradeTraceV1, readTradeGasEstimateV1, readTradePostStateCallV1, successfulTradeFramesV1,
   tradeBlockV1, tradePostStateV1, type TradeRpcV1 } from "./routed-trade-rpc-v1";
 import { immutablePoolFeeRequiredAddressesV1, proveImmutablePoolFeeRuntimeV1,
   type ImmutablePoolFeeMarketV1 } from "@/lib/custom-launch/immutable-pool-fee-runtime-custom-launch-plan-v1";
@@ -42,7 +42,7 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
   if (chain !== "4663") return pendingTradeV1("TRADE_CHAIN_MISMATCH");
   const block = await readTradeCheckpointV1(rpcs), tag = toHex(BigInt(block.number));
   if (BigInt(block.timestamp) > now || BigInt(block.timestamp) + 60n < now) return pendingTradeV1("TRADE_CHECKPOINT_STALE");
-  const reference = { blockHash: block.hash, requireCanonical: true };
+  const reference = { blockHash: block.hash, requireCanonical: true as const };
   const runtimeBindings: { address: Address; runtimeCodeHash: Hex }[] = [];
   const runtimeCodes: Record<string, Hex> = {};
   const expected = new Map<string, string>();
@@ -70,14 +70,19 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
   if (requiredFeeRuntimes && !poolFeeProof) return pendingTradeV1("IMMUTABLE_POOL_FEE_RUNTIME_PENDING");
   if (poolFeeProof) binding = launchPlanTradeBindingV1(projection, request, poolFeeProof);
   runtimeBindings.sort((a, b) => a.address.toLowerCase().localeCompare(b.address.toLowerCase()));
-  const call = async (to: Address, data: Hex, overrides?: Record<string, Record<string, unknown>>) => rpc("eth_call",
-    [{ from: request.owner, to, data }, reference, ...(overrides ? [overrides] : [])], bytesV1);
+  const call = async (to: Address, data: Hex, overrides?: Record<string, Record<string, unknown>>) => overrides
+    ? readTradePostStateCallV1(rpcs, { from: request.owner, to, data }, tag, reference, overrides)
+    : rpc("eth_call", [{ from: request.owner, to, data }, reference], bytesV1);
   const tokenUint = async (token: Address, functionName: "balanceOf" | "allowance" | "decimals", args: readonly unknown[], overrides?: Record<string, Record<string, unknown>>) => {
     const data = encodeFunctionData({ abi: ROUTED_TRADE_TOKEN_ABI_V1, functionName, args: args as never });
     const raw = await call(token, data, overrides);
     if (raw.length !== 66) return pendingTradeV1("ASSET_READ_ADAPTER_PENDING");
     return BigInt(raw);
   };
+  const nativeInputBalance = binding.inputCurrency === ZERO
+    ? BigInt(await rpc("eth_getBalance", [request.owner, reference], v => quantityV1(v).toString())) : null;
+  if (nativeInputBalance !== null && nativeInputBalance < BigInt(request.amountIn))
+    throw new LaunchPlanTradeErrorV1("INSUFFICIENT_INPUT_BALANCE", "Your wallet does not have enough ETH for this amount.", 400);
   const quoteData = encodeFunctionData({ abi: QUOTER, functionName: "quoteExactInputSingle", args: [{ poolKey: binding.poolKey,
     zeroForOne: request.zeroForOne, exactAmount: BigInt(request.amountIn), hookData: request.hookData }] });
   const quoteRaw = await call(getAddress(ROUTED_TRADE_CONTRACTS_V1.v4Quoter.address), quoteData);
@@ -100,9 +105,15 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
     if (allowance < BigInt(request.amountIn)) transaction = buildLaunchPlanTradeApprovalV1(request, binding.inputCurrency, "token_approval");
     else if (permitted[0] < BigInt(request.amountIn) || BigInt(permitted[1]) < BigInt(request.deadline)) transaction = buildLaunchPlanTradeApprovalV1(request, binding.inputCurrency, "permit2_approval");
   }
+  // Use the same final gas budget at both providers. Their default simulation
+  // limits can change Nitro system accounting even for identical execution.
+  const estimateString = await readTradeGasEstimateV1(rpcs, transactionRpc(transaction), tag);
+  const gas = (BigInt(estimateString) * 120n + 99n) / 100n;
+  if (gas === 0n || gas > 30_000_000n) return pendingTradeV1("TRADE_GAS_PENDING");
+  transaction = { ...transaction, gasLimit: gas.toString() };
   // Both providers must expose the same actual revert trace; transport errors
   // remain pending and are never promoted to a permanent unsafe-model verdict.
-  const { trace, maximumGasUsed } = await readAgreedTradeTraceV1(rpcs, transactionRpc(transaction), tag);
+  const { trace, maximumGasUsed } = await readAgreedTradeTraceV1(rpcs, transactionRpc(transaction, true), tag);
   if (trace.from !== request.owner.toLowerCase() || trace.to !== transaction.to.toLowerCase() || trace.input !== transaction.data.toLowerCase()
     || trace.value !== transaction.value || trace.type !== "CALL") return pendingTradeV1("TRADE_TRACE_BINDING_CHANGED");
   if (trace.failed) throw new LaunchPlanTradeErrorV1("TRADE_EXECUTION_REVERTED", "The exact transaction currently reverts. Refresh its amount, approvals or hook data.");
@@ -113,19 +124,16 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
   await Promise.all(missingRuntimes.map(async address => runtimeBindings.push({ address: getAddress(address),
     runtimeCodeHash: keccak256(await rpc("eth_getCode", [address, reference], bytesV1)) })));
   runtimeBindings.sort((a, b) => a.address.toLowerCase().localeCompare(b.address.toLowerCase()));
-  const [rawResult, estimateString, post] = await Promise.all([
-    rpc("eth_call", [transactionRpc(transaction), reference], bytesV1),
-    readTradeGasEstimateV1(rpcs, transactionRpc(transaction), tag),
-    rpc("debug_traceCall", [transactionRpc(transaction), tag, { tracer: "prestateTracer", timeout: "10s", tracerConfig: { diffMode: true } }], tradePostStateV1),
+  const [rawResult, post] = await Promise.all([
+    rpc("eth_call", [transactionRpc(transaction, true), reference], bytesV1),
+    rpc("debug_traceCall", [transactionRpc(transaction, true), tag, { tracer: "prestateTracer", timeout: "10s", tracerConfig: { diffMode: true } }], tradePostStateV1),
   ]);
   if (rawResult !== trace.output || (transaction.kind === "token_approval" && rawResult !== "0x" && BigInt(rawResult) !== 1n)) return pendingTradeV1("TRADE_SIMULATION_DISAGREEMENT");
-  const gas = (BigInt(estimateString) * 120n + 99n) / 100n;
-  if (gas === 0n || gas > 30_000_000n || maximumGasUsed > gas) return pendingTradeV1("TRADE_GAS_PENDING");
-  transaction = { ...transaction, gasLimit: gas.toString() };
+  if (maximumGasUsed > gas) return pendingTradeV1("TRADE_GAS_PENDING");
   let feeTransfer: unknown = null;
   if (transaction.kind === "swap") {
     const nativeInput = binding.inputCurrency === ZERO;
-    const inputBefore = nativeInput ? BigInt(await rpc("eth_getBalance", [request.owner, reference], v => quantityV1(v).toString()))
+    const inputBefore = nativeInput ? nativeInputBalance!
       : await tokenUint(binding.inputCurrency, "balanceOf", [request.owner]);
     const inputAfter = nativeInput ? post[request.owner.toLowerCase()]?.balance === undefined ? inputBefore : quantityV1(post[request.owner.toLowerCase()]!.balance)
       : await tokenUint(binding.inputCurrency, "balanceOf", [request.owner], post);
