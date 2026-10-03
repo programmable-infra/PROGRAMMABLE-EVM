@@ -109,8 +109,18 @@ async function readBoth(clients, calls, blockNumber) {
   return decoded.map((item, index) => decodeFunctionResult({ ...calls[index], data: item.returnData }));
 }
 
-async function logsInRange(client, release, fromBlock, toBlock) {
+export async function logsInRange(client, release, fromBlock, toBlock) {
   if (fromBlock > toBlock) return [];
+  // Use stable windows within the provider's limit instead of failed oversized requests.
+  const window = 100_000n;
+  if (toBlock - fromBlock + 1n > window) {
+    const logs = [];
+    for (let first = fromBlock; first <= toBlock; first += window) {
+      const last = first + window - 1n < toBlock ? first + window - 1n : toBlock;
+      logs.push(...await logsInRange(client, release, first, last));
+    }
+    return logs;
+  }
   const abi = FACTORY_ABIS[release.factoryVersion];
   const event = abi.find(item => item.type === "event");
   try {
