@@ -13,6 +13,7 @@ import { resolveServerBoundRouterTradeAdapterV1 } from "@/lib/server/custom-laun
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import { readRobinhoodSwapDecimals } from "./token-metadata";
 import { SWAP_TOKEN_SCHEMA, SwapUnavailableError, type SwapChainId, type SwapTokenDescriptor } from "@/lib/swap/types";
+import { ethereumStampedSwapRoute } from "@/lib/swap/ethereum-stamped";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 export interface SwapTokenDependencies {
@@ -49,7 +50,9 @@ export async function resolveSwapToken(input: { address: string; chainId?: SwapC
   if (chainId === 1) {
     const result = await dependencies.ethereum(address, undefined, { publicPresentation: false });
     if (!result.token) throw new SwapUnavailableError(result.status === "unavailable" ? "Ethereum token details are temporarily unavailable. Try again." : "This token is not in the verified Ethereum launch index.", result.status === "unavailable" ? "INDEX_UNAVAILABLE" : "TOKEN_NOT_FOUND");
-    const row = result.token, base = { schemaVersion: SWAP_TOKEN_SCHEMA, chainId: 1 as const, token: tokenMetadata(row), manageHref: null };
+    const row = result.token;
+    if (row.tokenAddress.toLowerCase() !== address.toLowerCase()) throw new SwapUnavailableError("Enter the coin’s token address, rather than one of its supporting contracts.", "NOT_PRIMARY_TOKEN");
+    const base = { schemaVersion: SWAP_TOKEN_SCHEMA, chainId: 1 as const, token: tokenMetadata(row), manageHref: null };
     if (row.launchStampProvenance) {
       const adapter = await dependencies.ethereumCustom(row);
       const market = adapter?.project.markets.find(item => item.marketId === adapter.market.marketId);
@@ -63,6 +66,8 @@ export async function resolveSwapToken(input: { address: string; chainId?: SwapC
         && capability.supportedSides.includes("base-to-quote") && capability.supportedSides.includes("quote-to-base")) {
         return { ...base, status: "ready", route: { kind: "custom-market", projectId: adapter.projectId, marketId: market.marketId, capability } };
       }
+      const automatic = ethereumStampedSwapRoute(row);
+      if (automatic) return { ...base, status: "ready", route: { kind: "ethereum-stamped", descriptor: automatic } };
       return unavailable(base, "An ETH swap route is not available for this launch yet.");
     }
     if (row.launchModel === "custom-graph" || row.launchModel === "adaptive") return unavailable(base, "An ETH swap route is not available for this launch yet.");

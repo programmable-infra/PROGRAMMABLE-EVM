@@ -4,6 +4,7 @@ import type { ModuleEngineAvailability, ModuleEngineTemplate } from "@/lib/modul
 import type { LaunchProjectionV1 } from "@/lib/custom-launch/launch-plan-v1";
 import type { CustomV4SwapDescriptor } from "./custom-v4";
 import type { DiscoverableMarketTradeCapabilityV1 } from "@/lib/custom-launch/contract-v2";
+import type { EthereumStampedSwapRoute } from "./ethereum-stamped";
 
 export const SWAP_TOKEN_SCHEMA = "programmable.swap-token.v1" as const;
 export type SwapChainId = 1 | 4663;
@@ -20,6 +21,7 @@ export type SwapRoute =
   | { kind: "custom-v4"; descriptor: CustomV4SwapDescriptor }
   | { kind: "custom-vnext"; projection: LaunchProjectionV1; marketId: string }
   | { kind: "custom-market"; projectId: `sha256:${string}`; marketId: string; capability: DiscoverableMarketTradeCapabilityV1 }
+  | { kind: "ethereum-stamped"; descriptor: EthereumStampedSwapRoute }
   | { kind: "classic"; hook: Address; poolId: Hex; launchModel: "classic" | "deep" | "stock-paired"; launchModelVersion?: string; quoteAsset?: Address };
 
 interface SwapDescriptorBase {

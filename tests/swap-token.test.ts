@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { brotliDecompressSync } from "node:zlib";
 import { getAddress } from "viem";
 import { resolveSwapToken, type SwapTokenDependencies } from "@/lib/server/swap/token";
 import { normalizeSupportedModuleModeLaunches } from "@/lib/module-mode/source-adapters";
@@ -15,6 +16,8 @@ import genericEngine from "./fixtures/module-engine-index.json";
 import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 import { resolveServerBoundRouterTradeAdapterV1 } from "@/lib/server/custom-launch/router-trade-descriptor-v1";
 import { SHARD_ROUTER_TRADE_PROJECT_ID } from "@/lib/custom-launch/router-trade-adapters-v1";
+import ethereumRecording from "./fixtures/ethereum-stamped-swap-rpc.json";
+import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/robinhood-index/read", () => ({ readRobinhoodToken: vi.fn() }));
@@ -132,5 +135,16 @@ describe("swap source resolution", () => {
       updatedAt: "2026-09-20T16:00:00.000Z", token: changed });
     expect(await resolveSwapToken({ address: changed.tokenAddress, chainId: 1 }, deps)).toMatchObject({ status: "unavailable", route: null });
     expect(deps.custom).not.toHaveBeenCalled();
+  });
+  it("automatically resolves a finalized native ETH CustomGraph without a reviewed coin descriptor", async () => {
+    const saved = JSON.parse(brotliDecompressSync(Buffer.from(ethereumRecording.brotliBase64, "base64")).toString());
+    const row = saved.buy.snapshot.entries.find((e: CanonicalTokenExploreEntry) => e.tokenAddress === saved.buy.request.token) as CanonicalTokenExploreEntry;
+    const { deps } = nativeFixture();
+    vi.mocked(deps.ethereumCustom).mockResolvedValue(null);
+    vi.mocked(deps.ethereum).mockResolvedValue({ chainId: 1, status: "ready", sources: { classic: "current", custom: "current" }, updatedAt: saved.buy.snapshot.generatedAt, token: row });
+    expect(await resolveSwapToken({ address: row.tokenAddress, chainId: 1 }, deps)).toMatchObject({
+      status: "ready", route: { kind: "ethereum-stamped", descriptor: { stamp: { launchId: row.launchStampProvenance!.launchId } } },
+    });
+    await expect(resolveSwapToken({ address: a(900), chainId: 1 }, deps)).rejects.toMatchObject({ code: "NOT_PRIMARY_TOKEN" });
   });
 });

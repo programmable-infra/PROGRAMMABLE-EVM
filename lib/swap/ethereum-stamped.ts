@@ -1,0 +1,186 @@
+import { Actions, URVersion, V4Planner } from "@uniswap/v4-sdk";
+import { CommandType, RoutePlanner, UniversalRouterVersion } from "@uniswap/universal-router-sdk";
+import { encodeFunctionData, getAddress, isAddress, type Address, type Hex } from "viem";
+import { canonicalBrowserJsonV2, canonicalBrowserSha256V2 } from "@/lib/custom-launch/browser-authority-v2";
+import { customTradePermit2Abi, customTradeRouterAbi, customTradeTokenAbi } from "@/lib/custom-launch/trade-v1";
+import { parsePreparedTransaction, type PreparedTradeTransaction } from "@/lib/prepared-transaction";
+import { isLaunchStampProvenanceV1, type CanonicalTokenExploreEntry, type LaunchStampProvenanceV1 } from "@/lib/tokens";
+import { computeOfficialV4PoolId } from "@/lib/uniswap/liquidity-launcher-sdk";
+
+const NATIVE = "0x0000000000000000000000000000000000000000";
+const UINT128_MAX = (1n << 128n) - 1n;
+export const ETHEREUM_PERMIT2_APPROVAL_GRACE_SECONDS = 3600n;
+const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+const digest = (v: unknown): v is `sha256:${string}` => typeof v === "string" && /^sha256:[0-9a-f]{64}$/.test(v);
+const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** Reviewed Ethereum infrastructure, independent of any particular token.
+ * This is the existing v2.2 deployment and its matching V2_0 action ABI. */
+export const ETHEREUM_STAMPED_SWAP_PROTOCOL = Object.freeze({
+  poolManager: { address: "0x000000000004444c5dc75cB358380D2e3dE08A90", runtimeCodeHash: "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293" },
+  permit2: { address: "0x000000000022d473030f116ddee9f6b43ac78ba3", runtimeCodeHash: "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131" },
+  router: { address: "0xd92a36b0000531ef3063ded4de20a0783308446c", runtimeCodeHash: "0x41ccd905c8e4de29ce9536ff49233b79e3085a0987d490664e703ee1e7b1dc49" },
+} as const);
+
+export interface EthereumStampedSwapRoute {
+  schemaVersion: "programmable.ethereum-stamped-swap-route.v1";
+  chainId: 1;
+  tokenDecimals: number;
+  stamp: LaunchStampProvenanceV1;
+  routeBindingHash: `sha256:${string}`;
+}
+export interface EthereumStampedSwapRequest {
+  schemaVersion: "programmable.ethereum-stamped-swap-request.v1";
+  chainId: 1;
+  token: Address;
+  owner: Address;
+  side: "buy" | "sell";
+  amountIn: string;
+  slippageBps: number;
+  deadline: string;
+  routeBindingHash: `sha256:${string}`;
+}
+export interface EthereumSwapRuntimeBinding { address: Address; runtimeCodeHash: Hex }
+export interface EthereumStampedSwapPreparation {
+  schemaVersion: "programmable.ethereum-stamped-swap-preparation.v1";
+  status: "ready" | "approval-required";
+  request: EthereumStampedSwapRequest;
+  quote: { amountOut: string; amountOutMinimum: string; blockNumber: string; blockHash: Hex; blockTimestamp: string; validUntil: string };
+  transaction: PreparedTradeTransaction;
+  evidence: { kind: "independent-rpc-simulation"; runtimeBindings: readonly EthereumSwapRuntimeBinding[]; runtimeBindingHash: `sha256:${string}`; executionDigest: `sha256:${string}` };
+  preparationDigest: `sha256:${string}`;
+}
+
+export class EthereumStampedSwapError extends Error {
+  constructor(message: string, readonly code = "ETHEREUM_SWAP_UNAVAILABLE", readonly status = 409) { super(message); this.name = "EthereumStampedSwapError"; }
+}
+function requireValue(value: unknown, message: string): asserts value { if (!value) throw new EthereumStampedSwapError(message); }
+
+function routeHash(stamp: LaunchStampProvenanceV1, tokenDecimals: number) {
+  // Presentation and later observation checkpoints are deliberately excluded.
+  return canonicalBrowserSha256V2("programmable.ethereum-stamped-swap-route-binding.v1", {
+    chainId: 1, tokenDecimals, launchId: stamp.launchId.toLowerCase(), stampHash: stamp.stampHash.toLowerCase(),
+    router: stamp.routerAddress.toLowerCase(), token: stamp.tokenProof.tokenAddress.toLowerCase(),
+    poolManager: stamp.poolManagerAddress.toLowerCase(), poolId: stamp.poolId.toLowerCase(),
+    poolKey: { ...stamp.poolKey, currency0: stamp.poolKey.currency0.toLowerCase(), currency1: stamp.poolKey.currency1.toLowerCase(), hooks: stamp.poolKey.hooks.toLowerCase() },
+    protocol: ETHEREUM_STAMPED_SWAP_PROTOCOL,
+  });
+}
+
+/** A route candidate proves origin and encoding. Only transaction preparation
+ * proves that this owner's requested swap currently executes. No audit or
+ * reviewed-provider descriptor is inferred from a launch stamp. */
+export function ethereumStampedSwapRoute(entry: CanonicalTokenExploreEntry): EthereumStampedSwapRoute | null {
+  const stamp = entry.launchStampProvenance;
+  if (!stamp || stamp.kind !== "custom-graph" || stamp.chainId !== 1
+    || !isLaunchStampProvenanceV1(stamp, { chainId: 1, tokenAddress: entry.tokenAddress, hookAddress: entry.hookAddress, poolId: entry.poolId })
+    || !Number.isInteger(entry.tokenDecimals) || Number(entry.tokenDecimals) < 0 || Number(entry.tokenDecimals) > 36
+    || !same(stamp.poolKey.currency0, NATIVE) || !same(stamp.poolKey.currency1, entry.tokenAddress)
+    || !same(stamp.poolManagerAddress, ETHEREUM_STAMPED_SWAP_PROTOCOL.poolManager.address)
+    || !same(computeOfficialV4PoolId(stamp.poolKey), stamp.poolId)) return null;
+  return Object.freeze({ schemaVersion: "programmable.ethereum-stamped-swap-route.v1", chainId: 1,
+    tokenDecimals: entry.tokenDecimals!, stamp, routeBindingHash: routeHash(stamp, entry.tokenDecimals!) });
+}
+
+export function parseEthereumStampedSwapRoute(value: unknown, expected: { token: string; decimals: number }): EthereumStampedSwapRoute {
+  requireValue(object(value) && value.schemaVersion === "programmable.ethereum-stamped-swap-route.v1" && value.chainId === 1
+    && value.tokenDecimals === expected.decimals && digest(value.routeBindingHash), "The Ethereum route is invalid.");
+  const candidate = value as unknown as EthereumStampedSwapRoute;
+  requireValue(isAddress(expected.token) && isLaunchStampProvenanceV1(candidate.stamp, { chainId: 1, tokenAddress: getAddress(expected.token) }), "The Ethereum launch stamp is invalid.");
+  const rebuilt = ethereumStampedSwapRoute({ tokenAddress: expected.token, tokenDecimals: expected.decimals,
+    hookAddress: candidate.stamp.poolKey.hooks, poolId: candidate.stamp.poolId, launchStampProvenance: candidate.stamp } as CanonicalTokenExploreEntry);
+  requireValue(rebuilt && rebuilt.routeBindingHash === candidate.routeBindingHash, "The Ethereum route does not match this coin.");
+  return rebuilt;
+}
+
+export function parseEthereumStampedSwapRequest(value: unknown): EthereumStampedSwapRequest {
+  const keys = ["amountIn", "chainId", "deadline", "owner", "routeBindingHash", "schemaVersion", "side", "slippageBps", "token"];
+  requireValue(object(value) && Object.keys(value).sort().join() === keys.join(), "Send a valid Ethereum swap request.");
+  requireValue(value.schemaVersion === "programmable.ethereum-stamped-swap-request.v1" && value.chainId === 1
+    && typeof value.token === "string" && isAddress(value.token) && !same(value.token, NATIVE)
+    && typeof value.owner === "string" && isAddress(value.owner) && !same(value.owner, NATIVE)
+    && (value.side === "buy" || value.side === "sell") && digest(value.routeBindingHash)
+    && typeof value.amountIn === "string" && /^[1-9][0-9]{0,38}$/.test(value.amountIn) && BigInt(value.amountIn) <= UINT128_MAX
+    && typeof value.deadline === "string" && /^[1-9][0-9]{0,11}$/.test(value.deadline)
+    && Number.isSafeInteger(value.slippageBps) && Number(value.slippageBps) >= 1 && Number(value.slippageBps) <= 500,
+  "The Ethereum swap request is invalid.");
+  return Object.freeze({ ...value, token: getAddress(value.token), owner: getAddress(value.owner) } as unknown as EthereumStampedSwapRequest);
+}
+
+export function ethereumStampedRuntimeBindings(route: EthereumStampedSwapRoute): readonly EthereumSwapRuntimeBinding[] {
+  const stamp = route.stamp;
+  const bindings = [...Object.values(ETHEREUM_STAMPED_SWAP_PROTOCOL),
+    { address: stamp.routerAddress, runtimeCodeHash: stamp.routerRuntimeCodeHash },
+    { address: stamp.routeLauncherAddress, runtimeCodeHash: stamp.routeLauncherRuntimeCodeHash }, ...stamp.components];
+  const result = new Map<string, EthereumSwapRuntimeBinding>();
+  for (const item of bindings) {
+    const address = getAddress(item.address), runtimeCodeHash = item.runtimeCodeHash.toLowerCase() as Hex;
+    requireValue(!result.has(address.toLowerCase()) || same(result.get(address.toLowerCase())!.runtimeCodeHash, runtimeCodeHash), "The launch has conflicting runtime bindings.");
+    result.set(address.toLowerCase(), { address, runtimeCodeHash });
+  }
+  return [...result.values()].sort((a, b) => a.address.toLowerCase().localeCompare(b.address.toLowerCase()));
+}
+
+function swapTransaction(route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, minimum: bigint): PreparedTradeTransaction {
+  const amountIn = BigInt(request.amountIn);
+  requireValue(minimum > 0n && minimum <= UINT128_MAX, "The swap returned no usable output.");
+  const planner = new V4Planner();
+  planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [{ poolKey: route.stamp.poolKey, zeroForOne: request.side === "buy",
+    amountIn: amountIn.toString(), amountOutMinimum: minimum.toString(), hookData: "0x" }], URVersion.V2_0);
+  planner.addAction(Actions.SETTLE_ALL, [request.side === "buy" ? NATIVE : request.token, amountIn.toString()], URVersion.V2_0);
+  planner.addAction(Actions.TAKE_ALL, [request.side === "buy" ? request.token : NATIVE, minimum.toString()], URVersion.V2_0);
+  const plannerRoute = new RoutePlanner();
+  plannerRoute.addCommand(CommandType.V4_SWAP, [planner.finalize()], false, UniversalRouterVersion.V2_0);
+  // Return any native refund to msgSender. A hook may reduce the settled input;
+  // remaining transaction value must never stay in the public router.
+  plannerRoute.addCommand(CommandType.SWEEP, [NATIVE, "0x0000000000000000000000000000000000000001", "0"], false, UniversalRouterVersion.V2_0);
+  return { kind: "swap", chainId: 1, to: getAddress(ETHEREUM_STAMPED_SWAP_PROTOCOL.router.address),
+    data: encodeFunctionData({ abi: customTradeRouterAbi, functionName: "execute", args: [plannerRoute.commands as Hex, plannerRoute.inputs as Hex[], BigInt(request.deadline)] }),
+    value: request.side === "buy" ? request.amountIn : "0", gasLimit: "1" };
+}
+
+export function ethereumStampedSwapTransaction(route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, amountOut: bigint): PreparedTradeTransaction {
+  requireValue(amountOut > 0n && amountOut <= UINT128_MAX, "The swap returned no usable output.");
+  return swapTransaction(route, request, amountOut * (10_000n - BigInt(request.slippageBps)) / 10_000n);
+}
+/** Simulation only. This transaction is never returned for wallet submission. */
+export const ethereumStampedProbeTransaction = (route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest) => swapTransaction(route, request, 1n);
+
+export function ethereumStampedApprovalTransaction(request: EthereumStampedSwapRequest, kind: "token-to-permit2" | "permit2-to-router"): PreparedTradeTransaction {
+  return kind === "token-to-permit2"
+    ? { kind, chainId: 1, to: request.token, data: encodeFunctionData({ abi: customTradeTokenAbi, functionName: "approve", args: [getAddress(ETHEREUM_STAMPED_SWAP_PROTOCOL.permit2.address), BigInt(request.amountIn)] }), value: "0" }
+    : { kind, chainId: 1, to: getAddress(ETHEREUM_STAMPED_SWAP_PROTOCOL.permit2.address), data: encodeFunctionData({ abi: customTradePermit2Abi, functionName: "approve",
+      args: [request.token, getAddress(ETHEREUM_STAMPED_SWAP_PROTOCOL.router.address), BigInt(request.amountIn), Number(BigInt(request.deadline) + ETHEREUM_PERMIT2_APPROVAL_GRACE_SECONDS)] }), value: "0" };
+}
+
+export const ethereumStampedPreparationDigest = (body: Omit<EthereumStampedSwapPreparation, "preparationDigest">) =>
+  canonicalBrowserSha256V2("programmable.ethereum-stamped-swap-preparation.v1", body);
+export const ethereumStampedRuntimeDigest = (bindings: readonly EthereumSwapRuntimeBinding[]) =>
+  canonicalBrowserSha256V2("programmable.ethereum-stamped-swap-runtime.v1", bindings);
+
+export function validateEthereumStampedPreparation(value: unknown, route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, now: bigint): EthereumStampedSwapPreparation {
+  requireValue(object(value) && value.schemaVersion === "programmable.ethereum-stamped-swap-preparation.v1"
+    && (value.status === "ready" || value.status === "approval-required") && object(value.quote) && object(value.evidence)
+    && canonicalBrowserJsonV2(value.request) === canonicalBrowserJsonV2(request), "The swap response does not match your request.");
+  const prepared = value as unknown as EthereumStampedSwapPreparation, { quote, evidence } = prepared;
+  requireValue([quote.amountOut, quote.amountOutMinimum, quote.blockNumber, quote.blockTimestamp, quote.validUntil].every(item => typeof item === "string" && /^[0-9]{1,78}$/.test(item))
+    && /^0x[0-9a-f]{64}$/i.test(quote.blockHash) && BigInt(quote.validUntil) > now && BigInt(quote.validUntil) <= now + 30n
+    && BigInt(quote.validUntil) <= BigInt(request.deadline) && BigInt(quote.blockTimestamp) <= now + 5n && now <= BigInt(quote.blockTimestamp) + 60n
+    && BigInt(quote.amountOutMinimum) === BigInt(quote.amountOut) * (10_000n - BigInt(request.slippageBps)) / 10_000n,
+  "The swap quote expired or changed.");
+  requireValue(evidence.kind === "independent-rpc-simulation" && Array.isArray(evidence.runtimeBindings) && evidence.runtimeBindings.length <= 96
+    && digest(evidence.executionDigest) && digest(evidence.runtimeBindingHash)
+    && evidence.runtimeBindings.every(binding => isAddress(binding.address) && /^0x[0-9a-f]{64}$/i.test(binding.runtimeCodeHash))
+    && new Set(evidence.runtimeBindings.map(binding => binding.address.toLowerCase())).size === evidence.runtimeBindings.length
+    && evidence.runtimeBindingHash === ethereumStampedRuntimeDigest(evidence.runtimeBindings), "The current swap runtime could not be verified.");
+  for (const expected of ethereumStampedRuntimeBindings(route)) requireValue(evidence.runtimeBindings.some(binding => same(binding.address, expected.address) && same(binding.runtimeCodeHash, expected.runtimeCodeHash)), "The swap runtime does not match the launch.");
+  const transaction = parsePreparedTransaction(prepared.transaction);
+  const expected = transaction.kind === "swap" ? ethereumStampedSwapTransaction(route, request, BigInt(quote.amountOut))
+    : transaction.kind === "token-to-permit2" || transaction.kind === "permit2-to-router" ? ethereumStampedApprovalTransaction(request, transaction.kind) : null;
+  requireValue(expected && transaction.chainId === 1 && transaction.kind === expected.kind && same(transaction.to, expected.to)
+    && transaction.data === expected.data && transaction.value === expected.value && transaction.gasLimit && BigInt(transaction.gasLimit) > 0n
+    && ((transaction.kind === "swap") === (prepared.status === "ready")) && (transaction.kind === "swap" || request.side === "sell"), "The swap transaction is not canonical.");
+  const { preparationDigest, ...body } = prepared;
+  requireValue(digest(preparationDigest) && preparationDigest === ethereumStampedPreparationDigest(body), "The swap preparation changed.");
+  return prepared;
+}
