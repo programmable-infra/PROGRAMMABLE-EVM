@@ -167,6 +167,11 @@ export async function prepareCustomV4Swap(input: unknown, dependencies: {
     const raw = await call(request.token, encodeFunctionData({ abi: ROUTED_TRADE_TOKEN_ABI_V1, functionName, args: args as never }), overrides);
     if (raw.length !== 66) return pendingTradeV1("SWAP_TOKEN_READ_PENDING"); return BigInt(raw);
   };
+  const nativeBuyBalance = request.buy
+    ? BigInt(await rpc("eth_getBalance", [request.owner, reference], value => quantityV1(value).toString())) : null;
+  if (nativeBuyBalance !== null && nativeBuyBalance < BigInt(request.amountIn)) {
+    throw new LaunchPlanTradeErrorV1("INSUFFICIENT_INPUT_BALANCE", "Your wallet does not have enough ETH for this amount.", 400);
+  }
   const [quoteRaw, tokenDecimals] = await Promise.all([
     call(getAddress(ROUTED_TRADE_CONTRACTS_V1.v4Quoter.address), encodeFunctionData({ abi: QUOTER, functionName: "quoteExactInputSingle", args: [{
       poolKey: descriptor.poolKey, zeroForOne: request.buy, exactAmount: BigInt(request.amountIn), hookData: "0x" }] })), tokenUint("decimals", []),
@@ -225,7 +230,7 @@ export async function prepareCustomV4Swap(input: unknown, dependencies: {
   let settlement: CustomV4SwapPreparation["evidence"]["settlement"] = null;
   if (transaction.kind === "swap") {
     const owner = request.owner.toLowerCase();
-    const nativeBefore = BigInt(await rpc("eth_getBalance", [request.owner, reference], value => quantityV1(value).toString()));
+    const nativeBefore = nativeBuyBalance ?? BigInt(await rpc("eth_getBalance", [request.owner, reference], value => quantityV1(value).toString()));
     const nativeResults = posts.map(post => post[owner]?.balance === undefined ? nativeBefore : quantityV1(post[owner]!.balance));
     if (nativeResults[0] !== nativeResults[1]) return pendingTradeV1("SWAP_EFFECT_DISAGREEMENT");
     const nativeAfter = nativeResults[0]!;
