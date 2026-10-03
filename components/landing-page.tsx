@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, type CSSProperties } from "react";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -34,7 +34,7 @@ function heroStarStyle(index: number): HeroStarStyle {
   };
 }
 
-function scrollToExplore(behavior: ScrollBehavior, moveFocus = false) {
+function scrollToExplore(behavior: ScrollBehavior) {
   const chapter = document.getElementById("explore");
   const header = document.querySelector<HTMLElement>(".header-inner");
   if (chapter) chapter.dataset.visible = "true";
@@ -44,20 +44,11 @@ function scrollToExplore(behavior: ScrollBehavior, moveFocus = false) {
   const headerHeight = header?.getBoundingClientRect().height ?? 0;
   const breathingRoom = window.innerWidth <= 960 ? 16 : 24;
   const top = window.scrollY + target.getBoundingClientRect().top - headerHeight - breathingRoom;
-  if (moveFocus) target.focus({ preventScroll: true });
   window.scrollTo({ behavior, left: 0, top });
 }
 
 export function LandingPage() {
   const pageRef = useRef<HTMLElement>(null);
-
-  function exploreCoins(event: MouseEvent<HTMLAnchorElement>) {
-    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    if (window.location.hash !== "#explore") window.history.pushState(null, "", "#explore");
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    scrollToExplore(reducedMotion ? "instant" : "smooth", true);
-  }
 
   useLayoutEffect(() => {
     const alignLandingHash = () => {
@@ -161,7 +152,7 @@ export function LandingPage() {
             priority
           />
           <h1 id="landing-title">Programmable</h1>
-          <p>Infrastructure for customizable tokens.</p>
+          <p>The garden of customizable tokens</p>
           <div className={styles.heroActions}>
             <Link className={styles.launchButton} href="/launch" prefetch={false}>
               Launch a coin
@@ -169,10 +160,6 @@ export function LandingPage() {
           </div>
         </div>
 
-        <a className={styles.scrollCue} href="#explore" onClick={exploreCoins}>
-          <span>Explore coins</span>
-          <span aria-hidden="true">↓</span>
-        </a>
       </section>
 
       <div

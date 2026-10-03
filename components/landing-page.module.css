@@ -176,38 +176,9 @@
   transform: translateY(1px);
 }
 
-.launchButton:focus-visible,
-.scrollCue:focus-visible {
+.launchButton:focus-visible {
   outline: 2px solid var(--webde-ink);
   outline-offset: 4px;
-}
-
-.scrollCue {
-  align-items: center;
-  background: var(--panel-fill-action);
-  border: 1px solid var(--webde-ink);
-  border-radius: var(--webde-radius-control);
-  bottom: 25px;
-  color: var(--webde-canvas);
-  display: inline-flex;
-  flex-direction: row;
-  font-size: 16px;
-  font-weight: 600;
-  gap: 12px;
-  left: 50%;
-  line-height: 1.5;
-  min-height: 52px;
-  padding: 8px 16px;
-  position: absolute;
-  text-decoration: none;
-  transition: background-color 180ms var(--webde-ease);
-  transform: translateX(-50%);
-  white-space: nowrap;
-  z-index: 3;
-}
-
-.scrollCue span:last-child {
-  font-size: 20px;
 }
 
 .exploreChapter {
@@ -291,18 +262,6 @@
   }
 }
 
-@keyframes cue-reveal {
-  from {
-    opacity: 0;
-    transform: translate3d(-50%, 18px, 0);
-  }
-
-  to {
-    opacity: 1;
-    transform: translate3d(-50%, 0, 0);
-  }
-}
-
 @keyframes hero-fade {
   from {
     opacity: 0;
@@ -340,11 +299,6 @@
     background: var(--panel-fill-action-hover);
     color: var(--webde-canvas);
   }
-
-  .scrollCue:hover {
-    background: var(--panel-fill-action-hover);
-    color: var(--webde-canvas);
-  }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -364,10 +318,6 @@
 
   .heroContent > p {
     animation-delay: 160ms;
-  }
-
-  .scrollCue {
-    animation: cue-reveal 760ms cubic-bezier(0.23, 1, 0.32, 1) 300ms both;
   }
 
   .heroTwinkles i {
@@ -425,12 +375,6 @@
     gap: 8px 16px;
   }
 
-  .scrollCue {
-    bottom: 14px;
-    font-size: 14px;
-    max-width: calc(100% - 32px);
-  }
-
   .exploreChapter {
     padding-top: 24px;
     scroll-margin-top: 72px;
@@ -459,8 +403,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .launchButton,
-  .scrollCue {
+  .launchButton {
     transition: none;
   }
 
@@ -470,8 +413,7 @@
 
   .heroLogo,
   .hero h1,
-  .heroContent > p,
-  .scrollCue {
+  .heroContent > p {
     animation: hero-fade 180ms cubic-bezier(0.23, 1, 0.32, 1) both;
   }
 
@@ -482,10 +424,6 @@
 
   .page[data-reveal-ready="true"] .revealSection[data-visible="true"] {
     opacity: 1;
-  }
-
-  .scrollCue span:last-child {
-    animation: none;
   }
 
   .heroTwinkles i {

@@ -65,14 +65,17 @@ test("disconnect failure stays inline and success returns to connect",async ({pa
   await page.getByRole("button",{name:"Fail disconnect"}).click();
   await page.getByRole("button",{name:menuName}).click();
   await page.getByRole("button",{name:"Disconnect",exact:true}).click();
-  await expect(page.getByRole("button",{name:"Connect wallet",exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Open menu",exact:true})).toBeFocused();
-  await expect(page.getByRole("group",{name:"Wallet actions",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Connect wallet",exact:true})).not.toBeVisible();
+  await page.getByRole("button",{name:"Open menu",exact:true}).click();
+  await expect(page.getByRole("group",{name:"Wallet actions",exact:true}).getByRole("button",{name:"Connect wallet",exact:true})).toBeVisible();
 });
 
 test("keeps network selection out of the global header",async ({page})=>{
   await expect(page.getByRole("button",{name:/Viewing .* Switch to/})).toHaveCount(0);
-  await expect(page.getByLabel("Connected wallet 0xaaaa…aaaa", {exact:true})).toBeVisible();
+  await expect(page.getByText("0xaaaa…aaaa", {exact:true})).not.toBeVisible();
+  await page.getByRole("button", {name:"Open menu",exact:true}).click();
+  await expect(page.getByRole("group", {name:"Wallet actions",exact:true})).toContainText("0xaaaa…aaaa");
 });
 
 test("network choices stay absent on desktop and mobile", async ({ page }) => {
@@ -86,19 +89,23 @@ test("network choices stay absent on desktop and mobile", async ({ page }) => {
 
 test("anonymous Connect wallet closes navigation before opening login",async ({page})=>{
   await page.getByRole("button",{name:"Use anonymous session"}).click();
+  await expect(page.getByRole("button",{name:"Connect wallet",exact:true})).not.toBeVisible();
   await page.getByRole("button",{name:"Open menu",exact:true}).click();
-  await page.getByRole("button",{name:"Connect wallet",exact:true}).click();
+  await page.getByRole("group",{name:"Wallet actions",exact:true}).getByRole("button",{name:"Connect wallet",exact:true}).click();
   await expect(page.getByRole("dialog",{name:"Connect wallet fixture"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Open menu",exact:true})).toHaveAttribute("aria-expanded","false");
 });
 
 test("passive session hydration is labelled loading without claiming an SDK prompt is open", async ({ page }) => {
   await page.getByRole("button", { name: "Toggle wallet hydration", exact: true }).click();
-  await expect(page.getByRole("banner").getByRole("button", { name: "Loading wallet", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Loading wallet", exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: "Open menu", exact: true }).click();
+  await expect(page.getByRole("group", { name: "Wallet actions", exact: true }).getByRole("button", { name: "Loading wallet", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Opening wallet", exact: true })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Toggle wallet hydration", exact: true }).click();
-  await expect(page.getByLabel("Connected wallet 0xaaaa…aaaa", {exact:true})).toBeVisible();
+  await page.getByRole("button", { name: "Open menu", exact: true }).click();
+  await expect(page.getByRole("group", { name: "Wallet actions", exact: true })).toContainText("0xaaaa…aaaa");
 });
 
 test("keyboard navigation opens instantly and returns focus without trapping the page", async ({ page }) => {
