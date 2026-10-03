@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 
 const sections = [
   { id: "files", label: "Files" },
+  { id: "fees", label: "Platform fee" },
   { id: "inputs", label: "Launch inputs" },
   { id: "authorization", label: "Authorization" },
   { id: "indexing", label: "Indexing" },
@@ -26,6 +27,15 @@ export default function EthereumCustomHookReference() {
         Solidity interfaces, an incomplete request template, the deployment snapshot and read-only verifiers.</p>
       <p className={styles.bodyCopy}>Read the current <a href="https://developers.programmable.family/api/v2/manifest">Ethereum stamp manifest</a> before preparing
         a launch. Match its chain, Router, Graph Factory, runtime hashes, ABI hash and finality policy. The bundled snapshot is a reference.</p>
+    </section>
+    <section id="fees"><h2>Platform fee</h2>
+      <p className={styles.bodyCopy}>The current Programmable platform fee for Ethereum Mainnet Custom Hook launches is
+        <strong> 0.30% (30 bps)</strong> on each successful buy or sell through the launch&apos;s fee-bearing pool.
+        Project fees and LP fees are separate. A 1 ETH trade at this rate allocates 0.003 ETH to Programmable.</p>
+      <p className={styles.bodyCopy}>Use integer arithmetic: the rate is <code>3,000 / 1,000,000</code>.
+        Disclose the hook&apos;s fee basis, asset, accounting mode, recipient, rounding, accrual and claim path.
+        The launch stamp establishes origin; it does not prove fee enforcement or payment.
+        Earlier contracts and exact versioned API profiles retain their recorded rates.</p>
     </section>
     <section id="inputs"><h2>Launch inputs</h2>
       <p className={styles.bodyCopy}>Prepare the complete <code>CustomGraphRouteV1</code>, <code>StampRequestV1</code> and <code>LaunchPermitV1</code>

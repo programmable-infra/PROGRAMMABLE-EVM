@@ -19,9 +19,9 @@ These percentages apply to trades, not an allocation of the coin's token supply.
 
 ## Custom launches
 
-Custom fees depend on the project's contracts and recorded fee settings. Creator fees, platform fees and liquidity-provider fees can follow different rules. Check the configuration for the coin and trading route you use.
+The current platform fee for Ethereum Mainnet Custom Hook launches is **0.30% (30 bps)** on each successful buy or sell through the launch's fee-bearing pool. Project fees and liquidity-provider fees are separate. A 1 ETH trade at this rate allocates 0.003 ETH to Programmable.
 
-Existing launch contracts retain their original fees. The [fee reference](reference/fee-versions.md) lists the rates for Native20, earlier Module Mode contracts and Ethereum launches.
+Your hook defines how that fee is calculated, which asset it uses and how it accrues. Verify the exact deployed fee path. A launch stamp establishes origin; it does not prove fee enforcement or payment. Existing contracts and versioned API profiles retain their recorded rates. The [fee reference](reference/fee-versions.md) lists the rates for Native20, earlier Module Mode contracts and Ethereum launches.
 
 ## Platform revenue
 
