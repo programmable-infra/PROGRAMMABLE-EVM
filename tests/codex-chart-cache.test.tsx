@@ -45,7 +45,7 @@ describe("Shared chart navigation cache", () => {
   });
   it("keeps the chart controls minimal with a minute option", () => {
     const html = renderToStaticMarkup(<CodexPriceChart tokenAddress={token} chainId={4663} name="Coin" />);
-    expect(html).toContain('title="Last minute"'); expect(html).toContain(">1m</button>");
+    expect(html).toContain('title="One-minute candles over the last 30 minutes"'); expect(html).toContain(">1m</button>");
     expect(html).not.toContain("<footer"); expect(html).not.toContain(">Codex<"); expect(html).not.toContain(">Price <");
   });
 });

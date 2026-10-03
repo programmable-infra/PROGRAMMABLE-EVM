@@ -30,11 +30,8 @@ const desktopNavItems = [
 ];
 
 const menuNavItems = [
-  { href: "/launch", label: "Launch options" },
   { href: "/developers/api-keys", label: "API keys" },
-  { href: "/profile", label: "Profile" },
   { href: "/docs", label: "Docs" },
-  { href: "/privacy", label: "Privacy & settings" },
 ];
 
 const mobileNavItems = [desktopNavItems[0], ...menuNavItems];
@@ -142,7 +139,6 @@ function HeaderWalletActions({ open, triggerRef, onClose }: Readonly<{
   onClose: () => void;
 }>) {
   const { wallet, authenticated, disconnecting, disconnect } = useWallet();
-  const copyAddressRef = useRef<HTMLInputElement>(null);
   const busyRef = useRef(false);
   const menuOpen = open && wallet !== null;
   const account = wallet?.account ?? null;
@@ -151,32 +147,24 @@ function HeaderWalletActions({ open, triggerRef, onClose }: Readonly<{
     menuOpen: boolean;
     operation: object | null;
     message: string;
-    copyFailed: boolean;
-  }>({ account, menuOpen, operation: null, message: "", copyFailed: false });
+  }>({ account, menuOpen, operation: null, message: "" });
 
   // An asynchronous result belongs only to the account and menu that started it.
   if (feedback.account !== account || feedback.menuOpen !== menuOpen) {
-    setFeedback({ account, menuOpen, operation: null, message: "", copyFailed: false });
+    setFeedback({ account, menuOpen, operation: null, message: "" });
   }
   const feedbackCurrent = feedback.account === account && feedback.menuOpen === menuOpen;
   const message = feedbackCurrent ? feedback.message : "";
-  const showCopyAddress = menuOpen && feedbackCurrent && feedback.copyFailed;
-
-  useEffect(() => {
-    if (!showCopyAddress) return;
-    copyAddressRef.current?.focus();
-    copyAddressRef.current?.select();
-  }, [showCopyAddress]);
 
   function startFeedback() {
     const operation = {};
-    setFeedback({ account, menuOpen, operation, message: "", copyFailed: false });
+    setFeedback({ account, menuOpen, operation, message: "" });
     return operation;
   }
-  function completeFeedback(operation: object, text: string, copyFailed = false) {
+  function completeFeedback(operation: object, text: string) {
     setFeedback((current) => current.operation === operation &&
       current.account === account && current.menuOpen
-      ? { ...current, message: text, copyFailed }
+      ? { ...current, message: text }
       : current);
   }
 
@@ -186,17 +174,7 @@ function HeaderWalletActions({ open, triggerRef, onClose }: Readonly<{
       <span>Connected wallet</span>
       <span>{shortenAddress(wallet.account)}</span>
     </p>
-    <AdminDashboardLink account={wallet.account} authenticated={authenticated}
-      menuOpen={menuOpen} onNavigate={onClose} />
-    <button type="button" onClick={async () => {
-      const operation = startFeedback();
-      try {
-        await navigator.clipboard.writeText(wallet.account);
-        completeFeedback(operation, "Address copied");
-      } catch {
-        completeFeedback(operation, "Select and copy the address below.", true);
-      }
-    }}>Copy address</button>
+    <Link href="/profile" prefetch={false} onClick={onClose}>Profile</Link>
     <button type="button" aria-disabled={disconnecting || undefined} aria-busy={disconnecting || undefined} onClick={async () => {
       if (busyRef.current) return;
       busyRef.current = true;
@@ -214,10 +192,9 @@ function HeaderWalletActions({ open, triggerRef, onClose }: Readonly<{
         busyRef.current = false;
       }
     }}>{disconnecting ? "Disconnecting…" : "Disconnect"}</button>
+    <AdminDashboardLink account={wallet.account} authenticated={authenticated}
+      menuOpen={menuOpen} onNavigate={onClose} />
     <p className={message ? styles.walletFeedback : "sr-only"} role="status" aria-live="polite">{message}</p>
-    {showCopyAddress ? <input ref={copyAddressRef} className={styles.walletAddress}
-      aria-label="Wallet address" readOnly value={wallet.account}
-      onFocus={(event) => event.currentTarget.select()} /> : null}
   </div>;
 }
 

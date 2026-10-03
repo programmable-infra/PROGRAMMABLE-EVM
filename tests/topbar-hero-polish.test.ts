@@ -83,13 +83,14 @@ describe("topbar and Explore hero polish", () => {
     for (const label of [
       "Explore",
       "Launch a token",
-      "Launch options",
       "Docs",
       "API keys",
-      "Profile",
     ]) {
       expect(navigation).toContain(`label: "${label}"`);
     }
+    expect(navigation).toContain('<Link href="/profile" prefetch={false} onClick={onClose}>Profile</Link>');
+    expect(navigation).not.toContain('label: "Launch options"');
+    expect(navigation).not.toContain('label: "Privacy & settings"');
     expect(navigation).not.toContain(
       '{ href: "/migration", label: "Migrate" }',
     );

@@ -1,5 +1,5 @@
 export const CODEX_CHART_RANGES = {
-  "1m": { seconds: 60, resolution: "1S", candleSeconds: 1, refreshMs: 30_000, label: "Last minute" },
+  "1m": { seconds: 1_800, resolution: "1", candleSeconds: 60, refreshMs: 30_000, label: "One-minute candles over the last 30 minutes" },
   "1H": { seconds: 3_600, resolution: "1", candleSeconds: 60, refreshMs: 30_000, label: "Last hour" },
   "1D": { seconds: 86_400, resolution: "15", candleSeconds: 900, refreshMs: 60_000, label: "Last day" },
   "1W": { seconds: 604_800, resolution: "60", candleSeconds: 3_600, refreshMs: 60_000, label: "Last week" },

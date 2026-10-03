@@ -31,25 +31,22 @@ test("Module Mode keeps navigation and the connected account inside its menu", a
   await expect(header.getByRole("button", { name: "Disconnect", exact: true })).toBeVisible();
 });
 
-test("one navigation menu includes wallet actions; copy, Escape, outside click and focus work", async ({page,context}) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+test("one navigation menu includes the connected profile; Escape, outside click and focus work", async ({page}) => {
   const trigger = page.getByRole("button", {name:menuName});
   await trigger.click();
   const menu = page.getByRole("group",{name:"Wallet actions",exact:true});
   const navigation = page.getByRole("navigation", {name:"Menu navigation",exact:true});
-  await expect(navigation.getByRole("link")).toHaveText(["Launch options", "API keys", "Profile", "Docs", "Privacy & settings"]);
+  await expect(navigation.getByRole("link")).toHaveText(["API keys", "Docs"]);
   await expect(navigation.getByRole("link", { name: "API keys", exact: true })).toHaveAttribute("href", "/developers/api-keys");
-  await expect(menu.getByRole("button")).toHaveText(["Copy address","Disconnect"]);
+  await expect(menu.getByRole("button")).toHaveText(["Disconnect"]);
+  await expect(menu.getByRole("link", { name: "Profile", exact: true })).toHaveAttribute("href", "/profile");
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await menu.getByRole("button",{name:"Copy address",exact:true}).click();
-  await expect(menu.getByRole("status")).toHaveText("Address copied");
-  expect(await page.evaluate(()=>navigator.clipboard.readText())).toBe("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   await page.keyboard.press("Escape");
   await expect(menu).toHaveCount(0);
   await expect(trigger).toBeFocused();
   await trigger.click();
   await page.keyboard.press("Tab");
-  await expect(navigation.getByRole("link",{name:"Launch options",exact:true})).toBeFocused();
+  await expect(navigation.getByRole("link",{name:"API keys",exact:true})).toBeFocused();
   await page.getByRole("link",{name:"Outside control"}).click();
   await expect(menu).toHaveCount(0);
   await expect(trigger).toHaveCSS("background-color","rgba(0, 0, 0, 0)");
@@ -91,6 +88,7 @@ test("anonymous Connect wallet closes navigation before opening login",async ({p
   await page.getByRole("button",{name:"Use anonymous session"}).click();
   await expect(page.getByRole("button",{name:"Connect wallet",exact:true})).not.toBeVisible();
   await page.getByRole("button",{name:"Open menu",exact:true}).click();
+  await expect(page.getByRole("banner").getByRole("link", { name: "Profile", exact: true })).toHaveCount(0);
   await page.getByRole("group",{name:"Wallet actions",exact:true}).getByRole("button",{name:"Connect wallet",exact:true}).click();
   await expect(page.getByRole("dialog",{name:"Connect wallet fixture"})).toBeVisible();
   await expect(page.getByRole("button",{name:"Open menu",exact:true})).toHaveAttribute("aria-expanded","false");

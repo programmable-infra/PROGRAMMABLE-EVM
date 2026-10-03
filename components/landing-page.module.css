@@ -153,10 +153,12 @@
 
 .launchButton {
   align-items: center;
-  background: var(--panel-fill-action);
-  border: 1px solid var(--webde-ink);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  background: var(--panel-fill);
+  border: 0;
   border-radius: var(--webde-radius-control);
-  color: var(--webde-canvas);
+  color: var(--webde-ink);
   display: inline-flex;
   font-size: 16px;
   font-weight: 600;
@@ -296,8 +298,8 @@
 
 @media (hover: hover) and (pointer: fine) {
   .launchButton:hover {
-    background: var(--panel-fill-action-hover);
-    color: var(--webde-canvas);
+    background: var(--panel-fill-hover);
+    color: var(--webde-ink);
   }
 }
 

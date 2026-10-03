@@ -96,9 +96,9 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
       void import("@/lib/swap/client").then(({ fetchSwapToken }) => fetchSwapToken({ address: normalizedAddress, chainId, signal: controller.signal }))
         .then(value => { if (!controller.signal.aborted) setAsset({ key: assetKey, descriptor: value }); })
         .catch(caught => { if (!controller.signal.aborted) setAsset({ key: assetKey, error: message(caught) }); });
-    }, 300);
+    }, embedded ? 0 : 200);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [assetKey, chainId, normalizedAddress, validAddress, lookupRevision]);
+  }, [assetKey, chainId, normalizedAddress, validAddress, lookupRevision, embedded]);
 
   useEffect(() => {
     if (!owner) return;
@@ -135,7 +135,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
       void import("@/lib/swap/client").then(({ prepareSwap }) => prepareSwap({ descriptor, owner, side, amountIn: parsed, slippageBps }, walletRef.current))
         .then(value => { if (active) setQuotation({ key: quoteKey, review: value, receivedAt: Date.now() }); })
         .catch(caught => { if (active) setQuotation({ key: quoteKey, error: message(caught) }); });
-    }, 450);
+    }, 250);
     return () => { active = false; clearTimeout(timer); };
   }, [canQuote, descriptor, owner, parsed, side, slippageBps, quoteKey, busy]);
 

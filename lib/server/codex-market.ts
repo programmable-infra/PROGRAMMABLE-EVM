@@ -118,7 +118,7 @@ const cachedChart = unstable_cache(async (address: string, chainId: number, rang
   const earliest = from - config.candleSeconds;
   const points = parseCodexBars(data.getTokenBars, address.toLowerCase(), chainId, earliest, to);
   return { tokenAddress: address.toLowerCase(), chainId, range, points, source: "codex", observedAt: new Date().toISOString() };
-}, ["codex-token-bars-v2"], { revalidate: 60 });
+}, ["codex-token-bars-v3"], { revalidate: 60 });
 
 export async function readCodexChart(address: string, chainId: number, range: CodexChartRange): Promise<CodexChart> {
   if (!marketAddress.test(address) || ![1, 4663].includes(chainId) || !Object.hasOwn(CODEX_CHART_RANGES, range)) throw new Error("Invalid chart request");
