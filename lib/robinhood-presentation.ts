@@ -21,6 +21,9 @@ export type RobinhoodCoinPresentation = Readonly<{
   /** Explicit for merged catalogs; legacy Robinhood reads omit this field. */
   chainId?: 1 | 4663;
   tokenAddress: string;
+  /** Optional current public token getters; never used to select a trading route. */
+  name?: string;
+  symbol?: string | null;
   imageUrl: string | null;
   description: string | null;
   links: readonly Readonly<{ label: string; url: string }>[];

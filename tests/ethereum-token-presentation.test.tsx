@@ -1,0 +1,39 @@
+import type { ReactNode } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
+import type { RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+const display = vi.hoisted(() => ({ items: [] as RobinhoodCoinPresentation[] }));
+vi.mock("@/components/use-robinhood-presentation", () => ({ useRobinhoodPresentation: () => display }));
+vi.mock("@/components/swap-panel", () => ({ SwapPanel: () => null }));
+vi.mock("@/components/responsive-trade-panel", () => ({ ResponsiveTradePanel: ({ children }: { children: ReactNode }) => children }));
+vi.mock("@/components/launch-pair-modules", () => ({ LaunchPairModules: () => null }));
+vi.mock("@/components/robinhood-chart", () => ({ TokenPoolChart: () => null }));
+import { EthereumTokenView } from "@/components/ethereum-token-view";
+
+const token = { ...customGraphExploreEntry, description: "Old description", imageUrl: "https://example.com/old.png",
+  links: [{ kind: "website" as const, url: "https://example.com/old" }] };
+const presentation = { chainId: 1 as const, tokenAddress: token.tokenAddress, name: "Updated coin", symbol: "NEW",
+  description: "Current description", imageUrl: "https://example.com/new.png", links: [{ label: "X", url: "https://x.com/new" }], market: null };
+const render = () => renderToStaticMarkup(<EthereumTokenView address={token.tokenAddress} token={token} status="ready" updatedAt={null} />);
+beforeEach(() => { display.items = []; });
+describe("Ethereum live public presentation", () => {
+  it("renders updated name, symbol, artwork and links from the matching presentation refresh", () => {
+    display.items = [presentation];
+    const html = render();
+    expect(html).toContain("Updated coin"); expect(html).toContain("$NEW"); expect(html).toContain("https://example.com/new.png");
+    expect(html).toContain('href="https://x.com/new"'); expect(html).toContain("Current description");
+    expect(html).not.toContain("Old description"); expect(token.name).toBe(customGraphExploreEntry.name);
+  });
+  it("honors clearing metadata instead of reintroducing the old description, links and image", () => {
+    display.items = [{ ...presentation, description: null, imageUrl: null, links: [] }];
+    const html = render();
+    expect(html).not.toContain("Old description"); expect(html).not.toContain("https://example.com/old");
+    expect(html).not.toContain("https://example.com/old.png");
+  });
+  it("does not borrow display data from a different token or chain", () => {
+    display.items = [{ ...presentation, chainId: 4663 }, { ...presentation, tokenAddress: "0x3333333333333333333333333333333333333333" }];
+    const html = render();
+    expect(html).toContain(token.name); expect(html).toContain("Old description"); expect(html).not.toContain("Updated coin");
+  });
+});

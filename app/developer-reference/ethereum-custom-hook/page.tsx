@@ -13,6 +13,7 @@ const sections = [
   { id: "inputs", label: "Launch inputs" },
   { id: "authorization", label: "Authorization" },
   { id: "indexing", label: "Indexing" },
+  { id: "metadata", label: "Token metadata" },
 ] as const;
 
 export default function EthereumCustomHookReference() {
@@ -50,6 +51,17 @@ export default function EthereumCustomHookReference() {
         includes valid finalized stamps. Missing market data or an unsupported trading adapter does not remove a verified launch.</p>
       <p className={styles.bodyCopy}>External terminals need their own integration with this stamp contract. They control their ingestion and
         timing. The stamp does not guarantee that a third-party service has completed indexing.</p>
+    </section>
+    <section id="metadata"><h2>Token metadata</h2>
+      <p className={styles.bodyCopy}>Expose standard <code>name()</code> and <code>symbol()</code> getters. For the image, description and links,
+        expose <code>metadata()</code> returning <code>(string description, string website, string image, bytes extraData)</code>,
+        or <code>tokenURI()</code> returning inline <code>data:application/json</code>. The website reads these values at a finalized
+        block and caches the display for one minute. During a provider interruption, recent values remain visible for up to five minutes.
+        Updated display values do not change the original launch stamp.</p>
+      <p className={styles.bodyCopy}>Inline JSON accepts <code>description</code>, <code>image</code>, <code>website</code> or <code>external_url</code>,
+        <code>x</code> or <code>twitter</code>, and <code>telegram</code>, <code>discord</code>, <code>github</code> and <code>gitbook</code>.
+        Use public HTTPS URLs. JSON can be literal UTF-8, percent-encoded or base64-encoded. The website does not fetch external tokenURI documents.
+        Unsupported or invalid metadata does not remove the coin from Explore.</p>
     </section>
   </DocsShell>;
 }
