@@ -148,13 +148,13 @@ test.describe("Module Studio", () => {
       const modules = navigation.getByRole("button", { name: "Modules", exact: true });
       const canvas = navigation.getByRole("button", { name: "Your coin", exact: true });
       await expect(settings).toHaveAttribute("aria-pressed", "true");
-      await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+      await expect(page.locator("#foundation-name")).toBeVisible();
       await modules.click(); await expect(modules).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByRole("switch", { name: "Any Quote Pool", exact: true })).toBeVisible();
-      await expect(page.getByLabel("Name", { exact: true })).toBeHidden();
+      await expect(page.locator("#foundation-name")).toBeHidden();
       await canvas.click(); await expect(canvas).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByRole("button", { name: "Edit coin details", exact: true })).toBeVisible();
-      await settings.click(); await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+      await settings.click(); await expect(page.locator("#foundation-name")).toBeVisible();
     });
   }
 
@@ -163,10 +163,10 @@ test.describe("Module Studio", () => {
     await page.getByRole("switch", { name: "Initial wallet buy limit", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Initial wallet buy limit", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Review coin", exact: true }).click();
-    await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+    await expect(page.locator("#foundation-name")).toBeVisible();
     await page.getByRole("button", { name: "Edit Initial wallet buy limit", exact: true }).click();
     await page.getByRole("button", { name: "Review coin", exact: true }).click();
-    await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+    await expect(page.locator("#foundation-name")).toBeVisible();
     await expect(page.getByText("Enter a coin name", { exact: true })).toBeVisible();
   });
 
