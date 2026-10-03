@@ -324,7 +324,7 @@ export function ModuleFoundationBuilder({ layout = "form", availability, context
     customQuote={customQuote} canResolveQuote={canResolveQuote} formRef={form} imageInput={imageInput}
     onSocialChange={updateSocial} onImageError={() => setImageError("The image could not load. Choose another image.")}
     onEnableQuote={() => chooseMarket(true)} onRetryAvailability={availability.status === "unavailable" ? onRetryAvailability : undefined}
-    emptyModulesMessage={availability.status === "ready" ? "No modules available" : "Loading modules…"}
+    emptyModulesMessage={availability.status === "checking" ? "Loading modules…" : availability.status === "unavailable" ? "Modules could not load." : "No modules available"}
     onUpdate={update} onChooseImage={file => void chooseImage(file)} onRemoveImage={() => { setLocalImage(null); update("image", null); setImageError(""); }}
     onQuoteChange={address => { if (!customQuote) { quoteGeneration.current += 1; pendingQuote.current = null; setCustomQuote(true); setQuoteLookup(null); } update("quoteAsset", address); }}
     onDefaultQuote={() => chooseMarket(false)} onSubmit={event => void prepare(event)} onBack={onBack} />;

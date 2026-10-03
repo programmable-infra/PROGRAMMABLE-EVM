@@ -2,12 +2,9 @@
 
 import { useEffect, useId, useRef, useState, type PointerEvent, type MouseEvent, type KeyboardEvent, type ReactNode } from "react";
 import styles from "./studio.module.css";
+import { clamp, defaultCardPositions, freeCardPosition, minimumCanvasHeight, type Point, type Size, type Card } from "./canvas-layout";
 
-type Point = { x: number; y: number };
-type Size = { width: number; height: number };
-type Card = Point & Size;
 export type StudioCanvasNode = { id: string; name: string; value?: string; icon: ReactNode };
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 function anchor(card: Card, target: Point) {
   const dx = target.x - card.x, dy = target.y - card.y;
@@ -83,20 +80,33 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
     return () => { observer?.disconnect(); window.removeEventListener("resize", schedule); cancelAnimationFrame(frame); };
   }, [signature]);
 
-  function card(id: string): Card {
-    const size = geometry?.cards[id] ?? { width: 0, height: 0 };
-    const area = geometry?.canvas ?? { width: 0, height: 0 };
-    const point = positions[id] ?? { x: .5, y: .16 };
-    return { ...size, x: clamp(point.x * area.width, size.width / 2 + 12, area.width - size.width / 2 - 12),
-      y: clamp(point.y * area.height, size.height / 2 + 12, area.height - size.height / 2 - 12) };
+  const area = geometry?.canvas ?? { width: 0, height: 0 };
+  const center: Card = { ...(geometry?.cards.coin ?? { width: 0, height: 0 }), x: area.width / 2, y: area.height / 2 };
+  const largestNode = { width: Math.max(0, ...nodes.map(node => geometry?.cards[node.id]?.width ?? 0)),
+    height: Math.max(0, ...nodes.map(node => geometry?.cards[node.id]?.height ?? 0)) };
+  const minimumHeight = geometry ? minimumCanvasHeight(area.width, center, largestNode, nodes.length) : undefined;
+  const cards: Record<string, Card> = { coin: center };
+  let needsArrangement = false;
+  for (const node of nodes) {
+    const size = geometry?.cards[node.id] ?? { width: 0, height: 0 };
+    const point = positions[node.id] ?? { x: .2, y: .16 };
+    const free = freeCardPosition({ x: point.x * area.width, y: point.y * area.height }, size, area, Object.values(cards));
+    if (!free) { needsArrangement = true; break; }
+    cards[node.id] = { ...size, ...free };
   }
+  if (needsArrangement) {
+    const defaults = defaultCardPositions(area, center, largestNode, nodes.length);
+    nodes.forEach((node, index) => { cards[node.id] = { ...(geometry?.cards[node.id] ?? largestNode), ...defaults[index] }; });
+  }
+  function card(id: string): Card { return cards[id]; }
 
   function place(id: string, point: Point) {
-    if (!geometry || disabled) return;
+    if (!geometry || disabled || id === "coin") return;
     const size = geometry.cards[id];
     if (!size || !geometry.canvas.width || !geometry.canvas.height) return;
-    const next = { x: clamp(point.x, size.width / 2 + 12, geometry.canvas.width - size.width / 2 - 12) / geometry.canvas.width,
-      y: clamp(point.y, size.height / 2 + 12, geometry.canvas.height - size.height / 2 - 12) / geometry.canvas.height };
+    const free = freeCardPosition(point, size, geometry.canvas, Object.entries(cards).filter(([key]) => key !== id).map(([, value]) => value));
+    if (!free) return;
+    const next = { x: free.x / geometry.canvas.width, y: free.y / geometry.canvas.height };
     setPositions(current => ({ ...current, [id]: next }));
   }
 
@@ -116,6 +126,9 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
       onPointerDown: (event: PointerEvent<HTMLButtonElement>) => {
         if (disabled || event.button !== 0 || !event.isPrimary || !geometry) return;
         const id = event.currentTarget.dataset.nodeId!;
+        if (id === "coin") return;
+        event.preventDefault();
+        event.currentTarget.focus({ preventScroll: true });
         suppressedClick.current = null;
         drag.current = { id, pointerId: event.pointerId, start: { x: event.clientX, y: event.clientY }, point: card(id), moved: false };
         event.currentTarget.setPointerCapture(event.pointerId);
@@ -142,17 +155,16 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
       onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {
         const id = event.currentTarget.dataset.nodeId!;
         const delta = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
-        if (!delta || disabled) return;
+        if (!delta || disabled || id === "coin") return;
         event.preventDefault(); const current = card(id), step = event.shiftKey ? 40 : 12;
         place(id, { x: current.x + delta[0] * step, y: current.y + delta[1] * step });
       },
   };
 
-  const center = card("coin");
   const position = (id: string) => geometry ? { left: card(id).x, top: card(id).y }
     : { left: `${(positions[id]?.x ?? .5) * 100}%`, top: `${(positions[id]?.y ?? .5) * 100}%` };
-  return <div ref={canvas} className={styles.canvas} data-dragging={Boolean(dragging)}>
-    <span id={instructions} className="sr-only">Drag to move. Arrow keys also move the card.</span>
+  return <div ref={canvas} className={styles.canvas} style={{ minHeight: minimumHeight }} data-dragging={Boolean(dragging)}>
+    <span id={instructions} className="sr-only">Drag a module, including its image, to move it. Arrow keys also move modules. Your coin stays in the center.</span>
     <button type="button" className={styles.canvasAdd} aria-label="Add module" onClick={onAdd} />
     {geometry?.canvas.width && geometry.canvas.height ? <svg className={styles.connections} viewBox={`0 0 ${geometry.canvas.width} ${geometry.canvas.height}`} aria-hidden="true">
       <defs><linearGradient id={gradient} gradientUnits="userSpaceOnUse" x1={0} y1={0} x2={geometry.canvas.width} y2={geometry.canvas.height}><stop stopColor="#b695fa" /><stop offset=".5" stopColor="#efd2ed" /><stop offset="1" stopColor="#ff929d" /></linearGradient></defs>
@@ -166,7 +178,7 @@ export function StudioCanvas({ nodes, activeId, coin, disabled, onSelect, onAdd 
         return <g key={node.id} className={styles.connection} data-active={activeId === node.id} opacity={clamp((separation - 14) / 24, 0, 1)}><path className={styles.connectionBase} pathLength={100} d={path} stroke={`url(#${gradient})`} /><path className={styles.connectionPulse} d={path} pathLength={100} stroke={`url(#${gradient})`}  /><circle className={styles.connectionPort} cx={start.x} cy={start.y} r={3} /><circle className={styles.connectionPort} cx={end.x} cy={end.y} r={3} /></g>;
       })}
     </svg> : null}
-    {nodes.map(node => <button {...handlers} data-node-id={node.id} key={node.id} type="button" className={styles.flowNode} title={node.name} style={position(node.id)} data-dragging={dragging === node.id} aria-describedby={instructions} aria-pressed={activeId === node.id}><span className={styles.nodeIcon}>{node.icon}</span><span className={styles.nodeText}><strong>{node.name}</strong>{node.value ? <span className={styles.nodeValue}>{node.value}</span> : null}</span></button>)}
-    <button {...handlers} data-node-id="coin" type="button" className={styles.coinNode} style={position("coin")} data-dragging={dragging === "coin"} aria-label="Edit coin details" aria-describedby={instructions} aria-pressed={activeId === "coin"}>{coin}</button>
+    {nodes.map(node => <button {...handlers} data-node-id={node.id} key={node.id} type="button" className={styles.flowNode} aria-label={`Edit ${node.name}`} title={node.name} style={position(node.id)} data-dragging={dragging === node.id} aria-describedby={instructions} aria-pressed={activeId === node.id}><span className={styles.nodeIcon}>{node.icon}</span><span className={styles.nodeText}><strong>{node.name}</strong>{node.value ? <span className={styles.nodeValue}>{node.value}</span> : null}</span></button>)}
+    <button {...handlers} data-node-id="coin" type="button" className={styles.coinNode} style={{ left: "50%", top: "50%" }} aria-label="Edit coin details" aria-pressed={activeId === "coin"}>{coin}</button>
   </div>;
 }
