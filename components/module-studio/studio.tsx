@@ -31,6 +31,7 @@ export interface FoundationStudioProps {
   formRef?: RefObject<HTMLFormElement | null>;
   imageInput?: RefObject<HTMLInputElement | null>;
   preview?: boolean;
+  modulesLoading?: boolean;
   emptyModulesMessage?: string;
   onUpdate: <K extends keyof FoundationStudioDraft>(key: K, value: FoundationStudioDraft[K]) => void;
   onSocialChange?: (kind: ModuleSocialKind, value: string) => void;
@@ -90,7 +91,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   };
   const moduleNodes = draft.modules.map(item => ({ id: item.id, name: catalog.find(module => module.id === item.id)?.name ?? "Module", value: undefined, icon: <ModuleLogo category={catalog.find(module => module.id === item.id)?.studio?.category ?? "other"} /> }));
   const nodes = [
-    { id: "quote", name: "Pool pair", value: `$${draft.symbol || "COIN"} / ${props.quoteSymbol}`, icon: <ModuleLogo quote /> },
+    ...(props.customQuote ? [{ id: "quote", name: "Any Quote Pool", value: `$${draft.symbol || "COIN"} / ${props.quoteSymbol}`, icon: <ModuleLogo quote /> }] : []),
     ...(draft.creatorFeeBps ? [{ id: "fees", name: "Creator fees", value: `${draft.creatorFeeBps / 100}%`, icon: <ModuleLogo category="fees" /> }] : []),
     ...moduleNodes,
   ];
@@ -106,12 +107,13 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   </label>;
 
   return <form className={styles.studio} ref={formRef} onSubmit={props.onSubmit} noValidate>
-    <header className={styles.heading}>{props.preview ? <a className={styles.homeLogo} href="https://programmable.market" aria-label="Programmable home"><Image src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png" alt="" width={32} height={42} unoptimized /></a> : null}<div className={styles.title}><h1>Module Mode</h1><p>Choose your own rules for your coin.</p></div>{props.preview ? <span className={styles.previewTag}>Preview</span> : null}</header>
+    <header className={styles.heading}>{props.preview ? <a className={styles.homeLogo} href="https://programmable.market" aria-label="Programmable home"><Image src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png" alt="" width={42} height={52} unoptimized /></a> : null}<div className={styles.title}><h1>Module Mode</h1><p>Build your coin with the rules you choose</p></div>{props.preview ? <span className={styles.previewTag}>Preview</span> : null}</header>
     <nav className={styles.mobileNavigation} aria-label="Studio panels">{(["modules", "canvas", "settings"] as const).map(value => <button type="button" key={value} aria-pressed={mobilePanel === value} onClick={() => setMobilePanel(value)}>{value === "canvas" ? "Your coin" : value[0].toUpperCase() + value.slice(1)}</button>)}</nav>
     <fieldset className={styles.workspace} disabled={disabled} data-mobile-panel={errorPanel && errorSignature !== handledErrors ? "settings" : mobilePanel}>
       <aside id="studio-module-library" tabIndex={-1} className={styles.library} aria-label="Module library">
         <div className={styles.panelHeading}><h2>Modules</h2></div>
-        <div className={styles.moduleList}>
+        <div className={styles.moduleList} aria-busy={props.modulesLoading || undefined}>
+          {props.modulesLoading ? <ModuleListLoading /> : <>
           {props.canResolveQuote ? <button type="button" className={styles.moduleCard} data-active={props.customQuote} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}>
             <span className={styles.moduleName}><ModuleLogo quote /><span>Any Quote Pool</span></span>
             <span className={styles.toggle} data-checked={props.customQuote} aria-hidden="true"><span /></span>
@@ -121,6 +123,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
             <span className={styles.toggle} data-checked={enabled} aria-hidden="true"><span /></span>
           </button>; })}
           {!catalog.length ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}
+          </>}
         </div>
       </aside>
 
@@ -131,25 +134,27 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       </section>
 
       <aside className={styles.inspector} aria-label="Coin and module settings">
-        <div className={styles.panelHeading}><h2>{panel === "coin" ? "Coin details" : panel === "quote" ? "Pool pair" : panel === "fees" ? "Creator fees" : panel === "modules" ? "Selected modules" : selected?.name ?? "Settings"}</h2></div>
+        <div className={styles.panelHeading}><h2>{panel === "coin" ? "Coin details" : panel === "quote" ? "Any Quote Pool" : panel === "fees" ? "Creator fees" : panel === "modules" ? "Selected modules" : selected?.name ?? "Settings"}</h2></div>
         <div className={styles.inspectorContent} key={panel}>
           {panel === "coin" ? <>
             <div className={styles.imageControl}><button type="button" onClick={() => imageInput?.current?.click()}><ImagePlus size={20} />{props.imageSource ? "Change image" : "Add image"}</button>{props.imageSource ? <button type="button" aria-label="Remove coin image" onClick={props.onRemoveImage}><X size={18} /></button> : null}<input className={styles.hiddenInput} ref={imageInput} type="file" accept="image/jpeg,image/png,image/webp" aria-label="Coin image file" onChange={event => { props.onChooseImage(event.target.files?.[0]); event.target.value = ""; }} /></div>
             {errors.image ? <div className={styles.error}>{errors.image}</div> : null}
             {field("name", "Name", "Coin name", 48)}{field("symbol", "Ticker", "COIN", 12)}
             <section className={styles.baseSection} aria-label="Launch settings"><h3>Launch settings</h3>
+              <div className={styles.launchFields}>
               <label className={styles.field}><span>First buy · ETH</span><input id="foundation-initial-buy" inputMode="decimal" value={props.initialBuy} aria-invalid={Boolean(errors.initialBuy) || undefined} placeholder="0" onChange={event => props.onUpdate("initialBuy", event.target.value)} />{errors.initialBuy ? <span className={styles.error}>{errors.initialBuy}</span> : null}</label>
               <label className={styles.field}><span>Creator fees · %</span><input id="foundation-creator-fee-inline" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} />{errors.creatorFeeBps ? <span className={styles.error}>{errors.creatorFeeBps}</span> : null}</label>
+              </div>
             </section>
             {field("description", "Description", "About your coin", 280)}
-            <section className={styles.baseSection} aria-label="Links"><h3>Links</h3>{(["website", "twitter", "telegram"] as const).map(key => <label key={key} className={styles.field}><span>{key === "twitter" ? "X" : key === "website" ? "Website" : "Telegram"}</span><input id={`foundation-social-${key}`} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} placeholder={key === "website" ? "example.com" : "@username or link"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} />{errors[`social-${key}`] ? <span className={styles.error}>{errors[`social-${key}`]}</span> : null}</label>)}
+            <StudioDetails title="Links" forceOpen={Object.keys(errors).some(key => key.startsWith("social-"))}>{(["website", "twitter", "telegram"] as const).map(key => <label key={key} className={styles.field}><span>{key === "twitter" ? "X" : key === "website" ? "Website" : "Telegram"}</span><input id={`foundation-social-${key}`} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} placeholder={key === "website" ? "example.com" : "@username or link"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} />{errors[`social-${key}`] ? <span className={styles.error}>{errors[`social-${key}`]}</span> : null}</label>)}
               <div className={styles.otherHeading}><h3>Other links</h3><button type="button" aria-label="Add other link" disabled={otherLinks.length >= MAX_OTHER_LINKS} onClick={() => updateOtherLinks([...otherLinks, ""])}><Plus size={17} /></button></div>
               {otherLinks.map((link, index) => <div key={index} className={styles.otherLink}><label className={styles.field}><span className="sr-only">Other link {index + 1}</span><input value={link} autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="https://" aria-invalid={Boolean(errors["social-other"]) || undefined} onChange={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? event.target.value : value))} onBlur={event => updateOtherLinks(otherLinks.map((value, i) => i === index ? normalizeFoundationSocialInput("website", event.target.value) : value))} /></label><button type="button" aria-label={`Remove other link ${index + 1}`} onClick={() => updateOtherLinks(otherLinks.filter((_, i) => i !== index))}><X size={16} /></button></div>)}
               {errors["social-socialLinks"] ? <span className={styles.error}>{errors["social-socialLinks"]}</span> : null}
               {errors["social-other"] ? <span className={styles.error}>{errors["social-other"]}</span> : null}
-            </section>
+            </StudioDetails>
           </> : panel === "quote" ? <>
-            <p className={styles.moduleDescription}>Choose the asset people use to buy and sell your coin. Keep ETH or enter another token&apos;s contract address on Robinhood Chain.</p>
+            <p className={styles.moduleDescription}>This module lets you choose another asset people use to buy and sell your coin. Enter its token contract address on Robinhood Chain. Turn the module off to use ETH.</p>
             <button type="button" className={styles.quoteChoice} aria-pressed={!props.customQuote} onClick={disableQuote}><Waves size={22} /><strong>ETH</strong>{!props.customQuote ? <Check size={18} /> : null}</button>
             <label className={styles.field}><span>Quote token address</span><input id="foundation-quote" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></label>
             {props.quoteStatus || errors.quoteAsset ? <div className={errors.quoteAsset ? styles.error : styles.settingStatus} role="status">{errors.quoteAsset || props.quoteStatus}</div> : null}
@@ -183,9 +188,11 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
     }}>
       <div className={styles.pickerHeading}><h2 id="studio-picker-title">Add module</h2><button type="button" aria-label="Close module list" onClick={closePicker} autoFocus><X size={20} /></button></div>
       <div className={styles.pickerList}>
+        {props.modulesLoading ? <ModuleListLoading /> : <>
         {props.canResolveQuote ? <button type="button" disabled={disabled} className={styles.pickerModule} onClick={() => { closePicker(); if (props.customQuote) focusPanel("quote"); else enableQuote(); }}><ModuleLogo quote /><span className={styles.pickerModuleLabel}>Any Quote Pool</span>{props.customQuote ? <Check size={18} /> : <Plus size={18} />}</button> : null}
         {modules.map(module => { const enabled = draft.modules.some(item => item.id === module.id); return <button type="button" key={module.id} className={styles.pickerModule} disabled={disabled || (!enabled && Boolean(blockedReason(module)))} title={blockedReason(module)} onClick={() => { closePicker(); if (enabled) focusPanel(module.id); else toggle(module); }}><ModuleLogo category={module.studio?.category ?? "other"} /><span className={styles.pickerModuleLabel}>{module.name}</span>{enabled ? <Check size={18} /> : <Plus size={18} />}</button>; })}
         {!catalog.length && !props.canResolveQuote ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}
+        </>}
       </div>
     </dialog> : null}
   </form>;
@@ -193,6 +200,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
 
 function StudioDetails({ title, children, forceOpen = false }: { title: string; children: ReactNode; forceOpen?: boolean }) {
   const [expanded, setOpen] = useState(false);
+  if (forceOpen && !expanded) setOpen(true);
   const open = forceOpen || expanded;
   const id = useId();
   return <section className={styles.details} data-open={open}><button type="button" aria-expanded={open} aria-controls={id} onClick={() => setOpen(current => !current)}>{title}<ChevronDown size={16} /></button>
@@ -202,4 +210,8 @@ function StudioDetails({ title, children, forceOpen = false }: { title: string; 
 
 function ModuleLogo({ category = "other", quote = false }: { category?: FoundationStudioCategory; quote?: boolean }) {
   return <span className={styles.moduleArt} data-flower={quote ? "quote" : category} aria-hidden="true" />;
+}
+
+function ModuleListLoading() {
+  return <div className={styles.moduleLoading} role="status"><span className="sr-only">Loading modules…</span><div aria-hidden="true" /><div aria-hidden="true" /></div>;
 }
