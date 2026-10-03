@@ -29,7 +29,9 @@ Native20's rate is not a universal rule for custom contracts. Use the fee config
 
 ## Ethereum launches
 
-Classic includes Programmable's 0.10% within the selected fee. A 1% fee leaves 0.90% for creator rewards. Ethereum Custom contracts with a verified platform-fee path charge 0.10% for Programmable in addition to project fees.
+Current Ethereum Mainnet Custom Hook launches use a **0.30% (30 bps)** Programmable platform fee. In parts per million, the rate is **3,000 / 1,000,000**. Project and LP fees are separate. Confirm the deployed contract's assessment base, fee asset, accounting mode, recipient, accrual and claim path before presenting the fee as enforced or collected. A launch stamp alone does not certify fee behavior.
+
+Earlier Classic contracts retain their 0.10% included share. A 1% Classic fee leaves 0.90% for creator rewards. Retained fee-certified Custom API profiles specify an exact 0.10% share; their versioned formats and deployed contracts remain unchanged. These older rates are not the current Ethereum Custom Hook launch policy.
 
 [Classic on Ethereum](../models/classic.md) describes its deployed contracts, liquidity and recipient rules.
 

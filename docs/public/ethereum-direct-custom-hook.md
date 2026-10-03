@@ -2,6 +2,12 @@
 
 This handoff covers an Ethereum Mainnet Custom Hook built outside the Custom Launch API. It defines the canonical launch stamp and indexing identity. The hook's economic design remains the builder's choice.
 
+## Platform fee
+
+The current platform fee for Ethereum Mainnet Custom Hook launches is **0.30% (30 bps)** on each successful buy or sell through the launch's fee-bearing pool. Project fees and liquidity-provider fees are separate. A 1 ETH trade at this rate allocates 0.003 ETH to Programmable.
+
+Implement and disclose the exact fee basis, asset, accounting mode, Programmable recipient, rounding, accrual and claim path in the hook's reviewed configuration. Do not derive the platform charge from `PoolKey.fee`; that field describes the pool's LP fee. Use integer arithmetic: 30 basis points is `3,000` hundredths of a bip, or `3,000 / 1,000,000`. A stamp proves launch identity, not fee enforcement or payment. Earlier contracts and exact versioned API profiles retain their original rates.
+
 ## Launch boundary
 
 Execute a fresh CustomGraph through the canonical Ethereum `ProgrammableLaunchStampRouterV1.launchAndStampV1(permit, stampRequest, routePayload, signature)`. The Router deploys the graph through its bound Graph Factory, runs its initializers, checks the resulting contracts and newly initialized Uniswap V4 pool, then stamps the launch atomically.
