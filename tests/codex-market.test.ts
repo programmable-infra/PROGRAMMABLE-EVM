@@ -15,6 +15,15 @@ const pool = (overrides = {}) => ({ address: poolId, networkId: 4663, token0: `0
 const row = () => ({ token: { address, networkId: 4663 }, priceUSD: "0.001", marketCap: "1000000", circulatingMarketCap: "500000", liquidity: "215595", totalLiquidityUsd: "2027259", volume24: "0", change24: "-0.05" });
 
 describe("Codex price history", () => {
+  it("does not show unknown circulating supply as zero market cap when the provider has a total-supply valuation", async () => {
+    vi.stubEnv("CODEX_API_KEY", "test-private-key");
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ data: { filterTokens: { results: [{ ...row(), circulatingMarketCap: "0" }] }, filterPairs: { results: [] } } }));
+    vi.stubGlobal("fetch", fetcher);
+    expect((await readCodexMarkets([{ tokenAddress: address, poolId }])).get(address))
+      .toMatchObject({ marketCapUsd: null, fdvUsd: 1_000_000, valuationKind: "fdv" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves candle times and gaps, with no invented prices", () => {
     expect(parseCodexBars(bars(), address, 4663, 100, 220)).toEqual([{ time: 100_000, price: .001 }, { time: 220_000, price: .002 }]);
     expect(parseCodexBars(bars({ s: "no_data", t: [], c: [] }), address, 4663, 100, 220)).toEqual([]);

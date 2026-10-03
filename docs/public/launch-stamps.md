@@ -21,3 +21,9 @@ The API request ID and the onchain launch ID are different identifiers. A shared
 A stamp proves the recorded origin and contract relationships. It does not prove an audit, present liquidity, sellability or external terminal support. A direct factory call outside the Router does not acquire a stamp later.
 
 [Verify a launch](developers/verify.md) explains the checks and source-specific references.
+
+## Direct Ethereum Custom Hooks
+
+An Ethereum CustomGraph can be prepared outside the launch API. The official stamp requires a fresh launch through the canonical Router and a valid authorization accepted by its permit authority. Prepare the graph, predicted addresses, runtime hashes and permit before deployment. A separately deployed token cannot acquire this Router stamp later.
+
+[Direct Ethereum Custom Hook inputs and files](ethereum-direct-custom-hook.md) provides the exact tuples, ABI, request template and read-only verifier. The [downloadable bundle](https://programmable.market/developers/ethereum-custom-hook-indexing.zip) contains the complete files.

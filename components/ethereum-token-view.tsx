@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useMemo } from "react";
+import { ChainMark } from "./chain-mark";
+import { useRobinhoodPresentation } from "./use-robinhood-presentation";
 import { SwapPanel } from "@/components/swap-panel";
 import { ResponsiveTradePanel } from "@/components/responsive-trade-panel";
 import { LaunchPairModules } from "@/components/launch-pair-modules";
@@ -6,20 +11,27 @@ import { TokenPoolChart } from "@/components/robinhood-chart";
 import { ArrowLeft, ArrowUpRight } from "lucide-react";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { RobinhoodProjectLinks } from "@/components/robinhood-project-links";
-import { coinDollars, coinTicker, coinValuation, type RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
+import { coinDollars, coinTicker, coinValuation, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import styles from "./robinhood-token-view.module.css";
 
-export function EthereumTokenView({ address, token, status, updatedAt, market }: {
+export function EthereumTokenView({ address, token, status, updatedAt, market: initialMarket, initialPresentation }: {
   address: string;
   token: CanonicalTokenExploreEntry | null;
   status: "ready" | "stale" | "partial" | "unavailable";
   updatedAt: string | null;
   market?: RobinhoodCoinMarket | null;
+  initialPresentation?: Promise<RobinhoodCoinPresentation | null>;
 }) {
+  const seed = useMemo(() => initialPresentation ?? (initialMarket && token ? Promise.resolve({
+    chainId: 1 as const, tokenAddress: address, imageUrl: token.imageUrl ?? null, description: token.description ?? null,
+    links: (token.links ?? []).map(link => ({ label: link.kind, url: link.url })), market: initialMarket,
+  }) : undefined), [address, token, initialMarket, initialPresentation]);
+  const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(address)}`, token !== null, seed, 1);
+  const market = presentation.items[0]?.market ?? null;
   const links = token?.links?.map(link => ({ label: link.kind, url: link.url })) ?? [];
   return <div className={`${styles.page} page-width`}>
-    <Link className={styles.back} href="/explore/ethereum"><ArrowLeft aria-hidden="true" size={16} />Back to Explore</Link>
+    <Link className={styles.back} href="/explore"><ArrowLeft aria-hidden="true" size={16} />Back to Explore</Link>
     {token ? <article className={styles.market}>
       <header className={styles.header}>
         <div className={styles.identity}>
@@ -28,7 +40,7 @@ export function EthereumTokenView({ address, token, status, updatedAt, market }:
             <div className={styles.nameRow}><h1>{token.name || "Unnamed token"}</h1>
               {links.length ? <RobinhoodProjectLinks links={links} name={token.name || "Token"} /> : null}
             </div>
-            <p className={styles.subtitle}><span>{coinTicker(token.symbol)}</span><span>Ethereum</span></p>
+            <p className={styles.subtitle}><span>{coinTicker(token.symbol)}</span><ChainMark chainId={1} className={styles.chainLogo} /></p>
             <LaunchPairModules launch={{ tokenAddress: address, poolId: token.poolId }} chainId={1}
               market={token.quoteAssetAddress ? { poolId: token.poolId, quoteAsset: { address: token.quoteAssetAddress, symbol: token.quoteAssetSymbol ?? null } } : null}
               className={styles.launchProperties} />

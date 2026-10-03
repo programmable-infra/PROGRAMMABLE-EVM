@@ -12,6 +12,28 @@ import { indexStore } from "./store";
 const readSnapshot = unstable_cache(async () => (await indexStore().read())?.snapshot ?? null,
   ["robinhood-website-index-v1"], { revalidate: 15 });
 
+/** Complete verified discovery identities. Presentation and paging never determine membership. */
+export async function readRobinhoodExploreCatalog() {
+  try {
+    const snapshot = await readSnapshot();
+    const state = launchList(snapshot);
+    return { status: state.status, updatedAt: state.updatedAt,
+      items: exploreCatalog(snapshot).filter(row => isDiscoverableRobinhoodToken(row.tokenAddress)),
+      sourceEvidence: snapshot ? {
+        router: { source: "canonical-launch-stamp-router", sourceAddress: snapshot.routerAddress, binding: snapshot.binding,
+          startBlock: snapshot.startBlock, cursor: snapshot.cursor, finalizedBlock: snapshot.finalizedBlock, updatedAt: snapshot.updatedAt },
+        modules: moduleModeSnapshots(snapshot).map(source => ({ source: source.sourceKind, sourceAddress: source.sourceAddress,
+          ...(source.factoryVersion ? { factoryVersion: source.factoryVersion } : {}),
+          releaseDigest: source.releaseDigest, startBlock: source.startBlock, cursor: source.cursor,
+          finalizedBlock: source.finalizedBlock, updatedAt: source.updatedAt })),
+        launchProjections: snapshot.launchProjections ? { sourceUrl: snapshot.launchProjections.sourceUrl,
+          updatedAt: snapshot.launchProjections.updatedAt, nextCursor: snapshot.launchProjections.nextCursor } : null,
+      } : null };
+  } catch {
+    return { status: "unavailable" as const, updatedAt: null, items: [], sourceEvidence: null };
+  }
+}
+
 export async function readRobinhoodLaunches(page = 1, query = "", filters: RobinhoodExploreFilters = DEFAULT_EXPLORE_FILTERS, pageSize: 6 | 8 | 10 | 50 = 50) {
   try {
     const snapshot = await readSnapshot();

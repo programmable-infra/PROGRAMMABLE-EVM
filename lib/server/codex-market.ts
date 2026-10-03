@@ -70,8 +70,10 @@ const cachedMarkets = unstable_cache(async (identities: readonly Identity[], cha
     seen.add(address);
     const priceUsd = marketNumber(row.priceUSD);
     if (priceUsd === null || priceUsd <= 0) continue;
-    const marketCapUsd = marketNumber(row.circulatingMarketCap);
-    const fdvUsd = marketNumber(row.marketCap);
+    // A positive token price with unknown/zero provider supply is not a measured zero-dollar valuation.
+    const circulating = marketNumber(row.circulatingMarketCap), total = marketNumber(row.marketCap);
+    const marketCapUsd = circulating !== null && circulating > 0 ? circulating : null;
+    const fdvUsd = total !== null && total > 0 ? total : null;
     const change = marketNumber(row.change24, true);
     const pool = liquidity.get(identities.find(token => token.tokenAddress === address)!.poolId);
     entries.push([address, { source: "codex", priceUsd, marketCapUsd, fdvUsd,
@@ -80,7 +82,7 @@ const cachedMarkets = unstable_cache(async (identities: readonly Identity[], cha
       observedAt, sourceUrl: "https://www.codex.io/" }]);
   }
   return entries;
-}, ["codex-token-markets-v2"], { revalidate: 30 });
+}, ["codex-token-markets-v3"], { revalidate: 30 });
 
 /** Only enrich identities supplied by the verified launch catalog. No provider token becomes a launch. */
 export async function readCodexMarkets(tokens: readonly Identity[], chainId = 4663): Promise<Map<string, RobinhoodCoinMarket>> {

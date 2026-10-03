@@ -18,6 +18,8 @@ export type RobinhoodCoinMarket = Readonly<{
 }>;
 
 export type RobinhoodCoinPresentation = Readonly<{
+  /** Explicit for merged catalogs; legacy Robinhood reads omit this field. */
+  chainId?: 1 | 4663;
   tokenAddress: string;
   imageUrl: string | null;
   description: string | null;
@@ -32,19 +34,21 @@ export function mergeRobinhoodPresentations(
   incoming: readonly RobinhoodCoinPresentation[] | null,
   now = Date.now(),
 ) {
-  const saved = new Map(previous.map((item) => [item.tokenAddress.toLowerCase(), item.market]));
+  const key = (item: RobinhoodCoinPresentation) => `${item.chainId ?? 4663}:${item.tokenAddress.toLowerCase()}`;
+  const saved = new Map(previous.map((item) => [key(item), item.market]));
   let delayed = incoming === null;
   function recent(market: RobinhoodCoinMarket | null | undefined) {
     const age = market ? now - Date.parse(market.observedAt) : NaN;
     return age >= 0 && age <= ROBINHOOD_MARKET_MAX_AGE_MS ? market : null;
   }
   const items = (incoming ?? previous.map((item) => ({ ...item, market: null }))).map((item) => {
-    const previousMarket = saved.get(item.tokenAddress.toLowerCase());
+    const previousMarket = saved.get(key(item));
     const samePool = !item.market || previousMarket?.poolId.toLowerCase() === item.market.poolId.toLowerCase();
     const savedMarket = samePool ? recent(previousMarket) : null;
     const nextMarket = recent(item.market);
     // Keep a complete, recent observation; never give saved values a new timestamp.
-    const market = savedMarket && (!nextMarket || Date.parse(savedMarket.observedAt) > Date.parse(nextMarket.observedAt))
+    const market = savedMarket && (!nextMarket || Date.parse(savedMarket.observedAt) > Date.parse(nextMarket.observedAt)
+      || (coinValuation(savedMarket).value !== null && coinValuation(nextMarket).value === null))
       ? savedMarket : nextMarket ?? null;
     if (market !== item.market || (previousMarket && !nextMarket)) delayed = true;
     return market === item.market ? item : { ...item, market };

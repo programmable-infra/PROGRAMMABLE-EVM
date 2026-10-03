@@ -5,6 +5,8 @@ import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 
 import { ExploreFilters } from "@/components/explore-filters";
+import { ChainMark } from "@/components/chain-mark";
+import { exploreIdentityKey } from "@/lib/unified-explore";
 import type { LaunchPresentationSource } from "@/lib/launch-presentation-details";
 import { AnimatedMarketCap } from "@/components/animated-market-cap";
 import { ETHEREUM_EXPLORE_FILTERS, ETHEREUM_EXPLORE_MODES } from "@/lib/ethereum-explore";
@@ -20,6 +22,7 @@ import { isPinnedRobinhoodToken } from "@/lib/robinhood-explore-policy";
 import styles from "@/components/robinhood-launches-view.module.css";
 
 type Launch = LaunchPresentationSource & {
+  chainId?: ViewChainId;
   launchProjection?: import("@/lib/custom-launch/launch-plan-v1").LaunchProjectionV1;
   launchId: string;
   tokenAddress: string;
@@ -35,9 +38,10 @@ type Launch = LaunchPresentationSource & {
 };
 
 type LaunchResponse = {
-  chainId: ViewChainId;
+  chainId?: ViewChainId;
+  scope?: "all";
   status: "ready" | "syncing" | "stale" | "partial" | "unavailable";
-  sources?: { classic: string; custom: string };
+  sources?: Record<string, string>;
   updatedAt: string | null;
   items: Launch[];
   presentations: RobinhoodCoinPresentation[];
@@ -52,6 +56,7 @@ type LaunchResponse = {
 };
 
 type Request = RobinhoodExploreRequest;
+type ExploreScope = ViewChainId | "all";
 type Snapshot = { request: Request; data: LaunchResponse; fetchedAt: number };
 
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
@@ -61,8 +66,8 @@ const REQUEST_TIMEOUT_MS = 15_000;
 const ROBINHOOD_WEBSITE_FILTERS: RobinhoodExploreFilters = { ...DEFAULT_EXPLORE_FILTERS, sort: "highest" };
 
 // Public, browser-only navigation state. Nothing is written during server rendering.
-const rememberedSnapshots = new Map<ViewChainId, { value: Snapshot; savedAt: number }>();
-function readRememberedSnapshot(chainId: ViewChainId) {
+const rememberedSnapshots = new Map<ExploreScope, { value: Snapshot; savedAt: number }>();
+function readRememberedSnapshot(chainId: ExploreScope) {
   const rememberedSnapshot = rememberedSnapshots.get(chainId);
   if (typeof window === "undefined" || !rememberedSnapshot || Date.now() - rememberedSnapshot.savedAt >= 300_000) return null;
   const value = rememberedSnapshot.value;
@@ -71,7 +76,7 @@ function readRememberedSnapshot(chainId: ViewChainId) {
   } };
 }
 function rememberSnapshot(value: Snapshot) {
-  if (typeof window !== "undefined") rememberedSnapshots.set(value.data.chainId, { value, savedAt: Date.now() });
+  if (typeof window !== "undefined") rememberedSnapshots.set(value.data.scope ?? value.data.chainId!, { value, savedAt: Date.now() });
   return value;
 }
 
@@ -103,13 +108,17 @@ function isLaunch(value: unknown, chainId: ViewChainId): value is Launch {
       && Number(value.decimals) >= 0 && Number(value.decimals) <= 255));
 }
 
-function readResponse(value: unknown, chainId: ViewChainId): LaunchResponse {
-  if (!isObject(value) || value.chainId !== chainId
+function readResponse(value: unknown, chainId: ExploreScope): LaunchResponse {
+  const validLaunch = (item: unknown) => chainId === "all"
+    ? isObject(item) && (item.chainId === 1 || item.chainId === 4663) && isLaunch(item, item.chainId)
+    : isLaunch(item, chainId);
+  if (!isObject(value) || (chainId === "all" ? value.scope !== "all" : value.chainId !== chainId)
     || !["ready", "syncing", "stale", "partial", "unavailable"].includes(String(value.status))
     || !isDate(value.updatedAt) || !Array.isArray(value.items)
-    || value.items.length > 50 || !value.items.every(item => isLaunch(item, chainId)) || !isObject(value.page)
+    || value.items.length > 50 || !value.items.every(validLaunch) || !isObject(value.page)
     || !Array.isArray(value.presentations) || value.presentations.length > 50
-    || !value.presentations.every((item) => isObject(item) && typeof item.tokenAddress === "string" && ADDRESS.test(item.tokenAddress))) {
+    || !value.presentations.every((item) => isObject(item) && typeof item.tokenAddress === "string" && ADDRESS.test(item.tokenAddress)
+      && (chainId !== "all" || item.chainId === 1 || item.chainId === 4663))) {
     throw new Error("Invalid launch response");
   }
   const page = value.page;
@@ -133,9 +142,13 @@ export function RobinhoodLaunchesView({
   return <IndexedLaunchList key={selectedChain} chainId={selectedChain} embedded={embedded} enabled={hydrated} />;
 }
 
-function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; enabled: boolean; chainId: ViewChainId }) {
-  const chainName = chainId === 4663 ? "Robinhood" : "Ethereum";
-  const defaultFilters = chainId === 4663 ? ROBINHOOD_WEBSITE_FILTERS : ETHEREUM_EXPLORE_FILTERS;
+export function UnifiedLaunchesView({ embedded = false }: { embedded?: boolean }) {
+  return <IndexedLaunchList chainId="all" embedded={embedded} enabled />;
+}
+
+function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; enabled: boolean; chainId: ExploreScope }) {
+  const chainName = chainId === "all" ? "Programmable" : chainId === 4663 ? "Robinhood" : "Ethereum";
+  const defaultFilters = chainId !== 1 ? ROBINHOOD_WEBSITE_FILTERS : ETHEREUM_EXPLORE_FILTERS;
   const headingId = useId();
   const searchId = useId();
   const statusId = useId();
@@ -148,7 +161,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
   const [loading, setLoading] = useState(!initial);
   const [failedRequest, setFailedRequest] = useState<Request | null>(null);
   const [now, setNow] = useState(Date.now);
-  const presentations = new Map((snapshot?.data.presentations ?? []).map((item) => [item.tokenAddress.toLowerCase(), item]));
+  const presentations = new Map((snapshot?.data.presentations ?? []).map((item) => [exploreIdentityKey(item), item]));
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -183,7 +196,8 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
       try {
         const query = new URLSearchParams({ page: String(request.page), pageSize: String(ROBINHOOD_EXPLORE_PAGE_SIZE),
           q: request.q, sort: request.sort, mode: request.mode ?? "all" });
-        const response = await fetch(`/api/explore/${chainId === 4663 ? "robinhood" : "ethereum"}?${query}`, {
+        const endpoint = chainId === "all" ? "/api/explore/launches" : `/api/explore/${chainId === 4663 ? "robinhood" : "ethereum"}`;
+        const response = await fetch(`${endpoint}?${query}`, {
           signal: activeController.signal,
           cache: "no-store",
           headers: { accept: "application/json" },
@@ -200,7 +214,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
             } });
           }
           const presentations = mergeRobinhoodPresentations(current?.data.presentations ?? [], data.presentations).items;
-          if (chainId === 4663) rememberRobinhoodTokenPresentations(presentations);
+          rememberRobinhoodTokenPresentations(presentations.map(item => ({ ...item, chainId: item.chainId ?? (chainId === 1 ? 1 : 4663) })));
           return rememberSnapshot({ request, fetchedAt: Date.now(), data: { ...data,
             presentations,
           } });
@@ -266,7 +280,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
   const sameRequest = sameRobinhoodExploreRequest(snapshot?.request, request);
   const pending = !sameRequest && !failed;
   const data = sameRequest ? snapshot?.data : undefined;
-  const pinned = chainId === 4663 ? snapshot?.data.items.find(launch => isPinnedRobinhoodToken(launch.tokenAddress, chainId)) : null;
+  const pinned = chainId !== 1 ? snapshot?.data.items.find(launch => isPinnedRobinhoodToken(launch.tokenAddress, launch.chainId ?? 4663)) : null;
   const items = data?.items ?? (pending && pinned ? [pinned] : []);
   const hasRows = items.length > 0;
   const updatingSearch = search.trim() !== request.q;
@@ -283,7 +297,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
     : data?.status === "stale" || data?.status === "unavailable"
       ? hasRows ? "Checking for updates automatically." : "Couldn’t load launches. Checking again automatically."
       : data?.status === "partial"
-        ? `Some ${data.sources?.classic === "unavailable" ? "Classic" : "Custom"} launches couldn’t load.`
+        ? "Some launches couldn’t load. Checking for updates automatically."
       : data?.status === "syncing"
         ? "Checking for new launches."
         : updatingSearch ? "Searching…" : "";
@@ -354,13 +368,15 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
         {hasRows || pending ? (
           <ul className={styles.list} id={listId} aria-label={`${chainName} launches`} aria-busy={pending}>
             {items.map((launch, index) => {
-              const details = presentations.get(launch.tokenAddress.toLowerCase());
+              const launchChainId = launch.chainId ?? (chainId === "all" ? 4663 : chainId);
+              const identity = exploreIdentityKey({ ...launch, chainId: launchChainId });
+              const details = presentations.get(chainId === "all" ? identity : exploreIdentityKey({ tokenAddress: launch.tokenAddress }));
               const valuation = coinValuation(details?.market);
               const hasAsset = !launch.launchProjection || launch.launchProjection.primaryComponentId !== null;
               return (
-              <li key={launch.tokenAddress.toLowerCase()} className={styles.item}>
+              <li key={identity} className={styles.item}>
                 <article className={styles.row}>
-                <Link className={styles.cardLink} href={`/token/${launch.tokenAddress}${chainId === 1 ? "?chain=1" : ""}`}>
+                <Link className={styles.cardLink} href={`/token/${launch.tokenAddress}${launchChainId === 1 ? "?chain=1" : ""}`}>
                   <RobinhoodCoinArtwork
                     eager={index < 5}
                     imageUrl={details?.imageUrl} loading={loading && !details}
@@ -372,13 +388,15 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
                       <strong className={styles.name} title={launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}>{launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}</strong>
                       {hasAsset ? <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span> : null}
                     </div>
-                    <span className={styles.mode}>{launch.category === "classic" ? "Classic" : isRobinhoodModuleLaunch(launch) ? "Module" : "Custom"}</span>
+                    <span className={styles.mode}>{launch.category === "classic" ? "Classic" : isRobinhoodModuleLaunch(launch) ? "Module" : "Custom"}
+                      <ChainMark chainId={launchChainId} className={styles.chainMark} />
+                    </span>
                   </div>
                   <div className={styles.cardFooter}>
-                    {hasAsset && (chainId === 4663 || valuation.value !== null) ? <div className={styles.marketCap} title={details?.market ? `Observed ${new Date(details.market.observedAt).toUTCString()}` : "Market data is not available yet"}>
+                    {hasAsset ? <div className={styles.marketCap} title={details?.market ? `Observed ${new Date(details.market.observedAt).toUTCString()}` : "Market data is not available yet"}>
                       <span title={valuation.title}>{valuation.label}</span>
                       {details?.market && valuation.value !== null
-                        ? <AnimatedMarketCap metric={{ kind: "usd", value: valuation.value }} replayKey={`${chainId}:${launch.tokenAddress.toLowerCase()}:${details.market.poolId.toLowerCase()}:${valuation.label}`} />
+                        ? <AnimatedMarketCap metric={{ kind: "usd", value: valuation.value }} replayKey={`${identity}:${details.market.poolId.toLowerCase()}:${valuation.label}`} />
                         : <strong>—</strong>}
                     </div> : null}
                     {launch.launchedAt ? <time className={styles.launched} dateTime={launch.launchedAt} title={`Launched ${new Date(launch.launchedAt).toUTCString()}`}>{coinAge(launch.launchedAt, now)}</time> : null}
@@ -398,7 +416,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
                   <span className={`${styles.skeletonLine} ${styles.skeletonSymbol}`} />
                   <span className={`${styles.skeletonLine} ${styles.skeletonMode}`} />
                 </div>
-                <div className={styles.cardFooter}>{chainId === 4663 ? <div className={styles.marketCap}>
+                <div className={styles.cardFooter}>{chainId !== 1 ? <div className={styles.marketCap}>
                   <span className={`${styles.skeletonLine} ${styles.skeletonCaption}`} />
                   <span className={`${styles.skeletonLine} ${styles.skeletonNumber}`} />
                 </div> : null}<span className={`${styles.skeletonLine} ${styles.skeletonAge}`} /></div>

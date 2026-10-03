@@ -4,7 +4,7 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { readRobinhoodOnchainMarkets, type RobinhoodMarketIdentity } from "./robinhood-market";
 import { isRobinhoodModuleSourceKind, type RobinhoodLaunch } from "@/lib/robinhood-launches";
-import { ROBINHOOD_MARKET_MAX_AGE_MS, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+import { coinValuation, ROBINHOOD_MARKET_MAX_AGE_MS, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { PROGRAMMABLE_MAIN_TOKEN_PRESENTATION } from "@/lib/programmable-main-token-presentation";
 import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 import { MODULE_DEFAULT_TOKEN_IMAGE } from "@/lib/module-mode/token-metadata";
@@ -321,11 +321,18 @@ export async function readRobinhoodMarkets(tokens: readonly MarketToken[]): Prom
     .toSorted((a, b) => a.tokenAddress.localeCompare(b.tokenAddress));
   if (identities.length === 0) return new Map();
   const codex = await readCodexMarkets(identities);
-  const missing = identities.filter(token => !codex.has(token.tokenAddress));
+  const missing = identities.filter(token => !codex.has(token.tokenAddress)
+    || coinValuation(codex.get(token.tokenAddress)).value === null);
   const fallback = missing.length ? await cachedMarkets(missing).catch(error => { if (!codex.size) throw error; return []; }) : [];
-  const entries = [...codex.entries(), ...fallback];
+  // Keep an observation whole. Never attach an older supply valuation to a newer price/timestamp.
+  const entries = new Map(codex);
   const now = Date.now();
-  return new Map(entries.filter(([, market]) => {
+  for (const [identity, observation] of fallback) {
+    const age = now - Date.parse(observation.observedAt);
+    if (age >= 0 && age <= ROBINHOOD_MARKET_MAX_AGE_MS
+      && (!entries.has(identity) || coinValuation(observation).value !== null)) entries.set(identity, observation);
+  }
+  return new Map([...entries].filter(([, market]) => {
     const age = now - Date.parse(market.observedAt);
     return age >= 0 && age <= ROBINHOOD_MARKET_MAX_AGE_MS;
   }));

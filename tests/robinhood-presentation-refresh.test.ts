@@ -12,6 +12,21 @@ const saved: RobinhoodCoinPresentation = {
 };
 
 describe("Robinhood market refresh", () => {
+  it("keeps a recent complete valuation when a newer partial response omits supply data, without refreshing its age", () => {
+    const incomplete = { ...saved, market: { ...saved.market!, marketCapUsd: null, fdvUsd: null,
+      priceUsd: .004, observedAt: new Date(now).toISOString() } };
+    const result = mergeRobinhoodPresentations([saved], [incomplete], now);
+    expect(result.items[0].market).toBe(saved.market);
+    expect(result.delayed).toBe(true);
+    expect(mergeRobinhoodPresentations([saved], [incomplete], now + 120_001).items[0].market).toBe(incomplete.market);
+  });
+
+  it("never transfers the same token address's valuation across chains", () => {
+    const ethereum = { ...saved, chainId: 1 as const, market: null };
+    expect(mergeRobinhoodPresentations([saved], [ethereum], now).items[0].market).toBeNull();
+    expect(mergeRobinhoodPresentations([{ ...saved, chainId: 1 }], [ethereum], now).items[0].market).toBe(saved.market);
+  });
+
   it("keeps the entire recent observation when optional market data is unavailable", () => {
     const result = mergeRobinhoodPresentations([saved], [{ ...saved, market: null }], now);
     expect(result.items[0].market).toBe(saved.market);

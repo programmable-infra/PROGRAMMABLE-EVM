@@ -8,12 +8,14 @@ import {
   rememberRobinhoodTokenPresentations,
 } from "@/components/robinhood-presentation-cache";
 
-export function useRobinhoodPresentation(query: string, enabled = true, initialPresentation?: Promise<RobinhoodCoinPresentation | null>) {
+export function useRobinhoodPresentation(query: string, enabled = true, initialPresentation?: Promise<RobinhoodCoinPresentation | null>, chainId: 1 | 4663 = 4663) {
+  const identity = `${chainId}:${query}`;
   const [state, setState] = useState<{
-    query: string; items: readonly RobinhoodCoinPresentation[]; loading: boolean; delayed: boolean;
+    query: string; identity: string; items: readonly RobinhoodCoinPresentation[]; loading: boolean; delayed: boolean;
   }>(() => ({
     query,
-    ...(enabled ? readRememberedRobinhoodPresentation(query) : null) ?? { items: [], delayed: false },
+    identity,
+    ...(enabled ? readRememberedRobinhoodPresentation(query, chainId) : null) ?? { items: [], delayed: false },
     loading: true,
   }));
 
@@ -24,15 +26,15 @@ export function useRobinhoodPresentation(query: string, enabled = true, initialP
     let timer: ReturnType<typeof setTimeout> | undefined;
     let expiryTimer: ReturnType<typeof setTimeout> | undefined;
     let misses = 0;
-    const remembered = readRememberedRobinhoodPresentation(query);
+    const remembered = readRememberedRobinhoodPresentation(query, chainId);
     let items = remembered?.items ?? [];
     let lastAttemptAt = 0;
     const isVisible = () => document.visibilityState !== "hidden";
     function accept(incoming: readonly RobinhoodCoinPresentation[] | null) {
-      const next = rememberRobinhoodPresentation(query, mergeRobinhoodPresentations(items, incoming));
+      const next = rememberRobinhoodPresentation(query, mergeRobinhoodPresentations(items, incoming), chainId);
       items = next.items;
       rememberRobinhoodTokenPresentations(items);
-      setState({ query, ...next, loading: false });
+      setState({ query, identity, ...next, loading: false });
       clearTimeout(expiryTimer);
       const expiries = items.flatMap(item => item.market ? [Date.parse(item.market.observedAt) + ROBINHOOD_MARKET_MAX_AGE_MS + 1] : []);
       if (expiries.length) expiryTimer = setTimeout(() => { if (!disposed) { accept(items); schedule(); } }, Math.max(0, Math.min(...expiries) - Date.now()));
@@ -49,7 +51,7 @@ export function useRobinhoodPresentation(query: string, enabled = true, initialP
       const active = controller;
       const timeout = setTimeout(() => active.abort(), 15_000);
       try {
-        const response = await fetch(`/api/explore/robinhood/presentation?${query}`, {
+        const response = await fetch(`/api/explore/${chainId === 1 ? "ethereum" : "robinhood"}/presentation?${query}`, {
           signal: active.signal, cache: "no-store", headers: { accept: "application/json" },
         });
         if (!response.ok) throw new Error("Presentation unavailable");
@@ -93,13 +95,13 @@ export function useRobinhoodPresentation(query: string, enabled = true, initialP
       clearTimeout(expiryTimer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [enabled, query, initialPresentation]);
+  }, [enabled, query, identity, initialPresentation, chainId]);
 
   if (!enabled) return { query, items: [], loading: false, delayed: false };
   // A route or account change can reuse only its own saved presentation.
-  return state.query === query ? state : {
+  return state.identity === identity ? state : {
     query,
-    ...readRememberedRobinhoodPresentation(query) ?? { items: [], delayed: false },
+    ...readRememberedRobinhoodPresentation(query, chainId) ?? { items: [], delayed: false },
     loading: true,
   };
 }
