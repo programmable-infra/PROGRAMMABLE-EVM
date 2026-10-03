@@ -6,11 +6,21 @@ vi.mock("@/lib/server/ethereum-explore", () => ({ readEthereumExploreCatalog: mo
 import { GET } from "@/app/api/market/chart/route";
 const address = `0x${"ab".repeat(20)}`;
 afterEach(() => vi.resetAllMocks());
-it.each(["token=bad", `token=${address}&range=all`, `token=${address}&chain=10`, `token=${address}&query=arbitrary`])("rejects invalid chart inputs without provider calls: %s", async query => {
+it.each(["token=bad", `token=${address}&range=all`, `token=${address}&chain=10`, `token=${address}&query=arbitrary`,
+  `token=${address}&token=${address}`, `token=${address}&range=1m&range=1D`])("rejects invalid chart inputs without provider calls: %s", async query => {
   expect((await GET(new Request(`https://example.com/api/market/chart?${query}`))).status).toBe(400);
   expect(mocks.chart).not.toHaveBeenCalled();
 });
 describe("verified chart identity", () => {
+  it("serves a verified last-minute chart with a bounded shared cache", async () => {
+    mocks.robinhood.mockResolvedValue({ token: { tokenAddress: address } });
+    mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1m", source: "codex", points: [] });
+    const response = await GET(new Request(`https://example.com/api/market/chart?token=${address}&range=1m`));
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toContain("s-maxage=30");
+    expect(mocks.chart).toHaveBeenCalledExactlyOnceWith(address, 4663, "1m");
+    expect(await response.json()).toMatchObject({ range: "1m", source: "codex" });
+  });
   it("does not request Codex for an address outside either launch index", async () => {
     mocks.robinhood.mockResolvedValue({ token: null }); mocks.ethereum.mockResolvedValue({ entries: [] });
     for (const chain of [1,4663]) expect((await GET(new Request(`https://example.com/api/market/chart?token=${address}&chain=${chain}`))).status).toBe(404);
@@ -21,7 +31,7 @@ describe("verified chart identity", () => {
     mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1D", source: "codex", points: [] });
     const url = `https://example.com/api/market/chart?token=${address}`;
     const response = await GET(new Request(url));
-    expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toContain("s-maxage=15");
+    expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toContain("s-maxage=60");
     mocks.chart.mockRejectedValue(new Error("private provider response"));
     const failed = await GET(new Request(url));
     expect(failed.status).toBe(503); expect(JSON.stringify(await failed.json())).not.toContain("private provider response");

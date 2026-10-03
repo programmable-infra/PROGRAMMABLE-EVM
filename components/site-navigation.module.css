@@ -238,7 +238,7 @@
 }
 
 .mobileSheetSurface {
-  background: var(--webde-surface);
+  background: var(--panel-fill-menu);
   border: 1px solid var(--webde-line);
   border-radius: var(--webde-radius-card);
   box-shadow: 0 16px 32px rgb(0 0 0 / 0.32);

@@ -10,6 +10,7 @@ import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 import { MODULE_DEFAULT_TOKEN_IMAGE } from "@/lib/module-mode/token-metadata";
 import { readModuleTokenMetadata } from "@/lib/server/module-mode/token-presentation";
 import { projectionPublicUrl } from "@/lib/custom-launch/launch-projection-v1";
+import { projectLinkLabel } from "@/lib/project-link-label";
 // @ts-expect-error -- the canonical launch package is ESM JavaScript.
 import { hashProjectMetadata, validateProjectMetadata } from "@/packages/launch/src/project-metadata.mjs";
 
@@ -350,7 +351,7 @@ export async function readRobinhoodPresentations(tokens: readonly RobinhoodLaunc
     const presentation = token.launchProjection ? {
       imageUrl: projectionPublicUrl(publication?.imageUrl),
       description: typeof publication?.description === "string" ? publication.description.slice(0, 4096) : null,
-      links: Array.isArray(publication?.links) ? publication.links.flatMap(link => { const url = projectionPublicUrl(link); return url ? [{ label: "Project link", url }] : []; }) : [],
+      links: Array.isArray(publication?.links) ? publication.links.flatMap(link => { const url = projectionPublicUrl(link); return url ? [{ label: projectLinkLabel(url), url }] : []; }) : [],
     } : source.status === "fulfilled" ? source.value.get(key) : undefined;
     const main = key === MAIN_TOKEN;
     const override = displayOverride(key);
@@ -364,7 +365,7 @@ export async function readRobinhoodPresentations(tokens: readonly RobinhoodLaunc
     return {
       tokenAddress: token.tokenAddress,
       imageUrl: override?.imageUrl ?? presentation?.imageUrl ?? (main ? PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.imageUrl : isRobinhoodModuleSourceKind(token.sourceKind) ? MODULE_DEFAULT_TOKEN_IMAGE : null),
-      description: presentation?.description ?? (main ? PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.description : null),
+      description: main ? PROGRAMMABLE_MAIN_TOKEN_PRESENTATION.description : presentation?.description ?? null,
       links,
       market: markets.status === "fulfilled" ? markets.value.get(key) ?? null : null,
     };

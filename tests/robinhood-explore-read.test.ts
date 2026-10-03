@@ -34,6 +34,17 @@ beforeEach(() => {
 });
 
 describe("Robinhood Explore read model", () => {
+  it.each([
+    "0xc3c389273ea80eb4c9e378f174f0214dba73b5cb", "0x6dcad5b2373963a677d8e0e2d7dcafea192ea41b",
+    "0x08bdedb48ee01f29dd88e84e6d9296e84d736aa2", "0xaa86dd7c149d8220a5a90028620a0e1b2a75f261",
+  ])("hides the requested test identity %s from discovery while keeping its canonical lookup", async tokenAddress => {
+    const test = { ...token(1), tokenAddress }, publicToken = token(2);
+    mocks.read.mockResolvedValue({ snapshot: saved([test, publicToken]) }); mocks.markets.mockResolvedValue(new Map());
+    const list = await readRobinhoodLaunches();
+    expect(list.items).toEqual([publicToken]); expect(list.page.totalItems).toBe(1);
+    expect((await readRobinhoodLaunches(1, tokenAddress)).items).toEqual([]);
+    expect((await readRobinhoodToken(tokenAddress)).token).toEqual(test);
+  });
   it("uses only the selected token's source freshness while retaining its stale and syncing states", async () => {
     const routerRow = token(1);
     const moduleRow: RobinhoodModuleLaunch = {

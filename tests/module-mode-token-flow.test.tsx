@@ -33,7 +33,9 @@ describe("Module Mode token identity and navigation", () => {
   it("shows native source identity and its real manage route without a Custom stamp claim", () => {
     const token = moduleRow();
     const html = renderToStaticMarkup(<RobinhoodTokenView address={token.tokenAddress} token={token} status="ready" />);
-    expect(html).toContain(`<code>${token.tokenAddress}</code>`); expect(html).toContain('aria-label="Attached modules"');
+    expect(html).toMatch(new RegExp(`<button[^>]*title="${token.tokenAddress}"[^>]*>.*?Copy address</button>`));
+    expect(html).not.toContain(`<code>${token.tokenAddress}</code>`);
+    expect(html).toContain('aria-label="Attached modules"');
     expect(html).toContain("Module 1"); expect(html).toContain("Module 2");
     expect(html).toContain(`/launch/modules/manage/${token.tokenAddress}`);
     expect(html).not.toContain(`#trade`);

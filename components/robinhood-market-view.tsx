@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, ArrowUpRight, Check, Copy } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Copy } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatedMarketCap } from "./animated-market-cap";
 import { RobinhoodChart } from "./robinhood-chart";
@@ -74,16 +74,12 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
             {copyState === "copied" ? "Copied" : "Copy address"}
           </button>
           {creator && /^0x(?!0{40}$)[\da-f]{40}$/i.test(creator) ? <Link className={styles.secondaryButton} href={`/profile?account=${creator}&chain=4663`} prefetch={false} title={`Dev wallet: ${creator}`}>Dev wallet</Link> : null}
-          <a className={styles.secondaryButton} href={explorerHref} target="_blank" rel="noreferrer">Explorer <ArrowUpRight aria-hidden="true" size={16} /><span className="sr-only"> (opens in a new tab)</span></a>
         </div>
       </header>
       <p className="sr-only" role="status">{copyState === "copied" ? "Contract address copied" : ""}</p>
       {copyState === "failed" ? <p className={styles.notice} role="status">Could not copy. <a href={explorerHref} target="_blank" rel="noreferrer">View the address on Explorer.</a></p> : null}
 
-      <section className={styles.launchContext} aria-label="Programmable launch">
-        <div><p className={styles.contractAddress}><span>CA</span><code>{address}</code></p></div>
-        {manageHref ? <div className={styles.launchActions}><Link className={styles.secondaryButton} href={manageHref} prefetch={false} aria-label="Manage coin">Manage <ArrowRight aria-hidden="true" size={16} /></Link></div> : null}
-      </section>
+      {manageHref ? <div className={styles.launchActions}><Link className={styles.secondaryButton} href={manageHref} prefetch={false} aria-label="Manage coin">Manage <ArrowRight aria-hidden="true" size={16} /></Link></div> : null}
       {status !== "ready" ? <p className={styles.notice} role="status">{status === "syncing"
         ? `New launches are still being checked. This ${hasAsset ? "coin" : "launch"} comes from the verified launch index.`
         : "Showing the last verified launch record. Index updates are temporarily unavailable."}</p> : null}
@@ -93,7 +89,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
           <Metric label="Price" value={coinDollars(market?.priceUsd, true)} />
           <Metric label={valuation.label} title={valuation.title} value={market && valuation.value !== null
             ? <AnimatedMarketCap metric={{ kind: "usd", value: valuation.value }} replayKey={`4663:${address.toLowerCase()}:${market.poolId.toLowerCase()}:${valuation.label}`} /> : "—"} />
-          <Metric label="Liquidity" value={coinDollars(market?.liquidityUsd)} />
+          <Metric label="Liquidity" title="Liquidity in this coin’s launch pool" value={coinDollars(market?.liquidityUsd)} />
           <Metric label="24h volume" value={coinDollars(market?.volume24hUsd)} />
           <div><dt>24h change</dt><dd className={styles.change} data-direction={change != null && change < 0 ? "down" : change != null && change > 0 ? "up" : "flat"}>
             {change != null && Number.isFinite(change) ? `${change > 0 ? "+" : ""}${change.toFixed(2)}%` : "—"}

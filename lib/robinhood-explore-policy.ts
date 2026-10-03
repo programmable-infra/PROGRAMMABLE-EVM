@@ -4,6 +4,10 @@ export const PINNED_ROBINHOOD_TOKEN = "0xc60ba256b44334a0cd2c7242e98b88f031abb00
 
 // Requested Explore exclusions do not remove canonical launch records or coin pages.
 const EXPLORE_EXCLUDED_TOKENS = new Set([
+  "0xc3c389273ea80eb4c9e378f174f0214dba73b5cb", // Test2
+  "0x6dcad5b2373963a677d8e0e2d7dcafea192ea41b", // Any Quote ETH Internal Test
+  "0x08bdedb48ee01f29dd88e84e6d9296e84d736aa2", // Programmable Fixed Canary
+  "0xaa86dd7c149d8220a5a90028620a0e1b2a75f261", // Programmable General Canary
   "0x15fca474b23cafe775120b1fafbcff0e7a827af2", // release canary
   "0xe8b292783382c93706dc43b54bba03f0f1a9908e", // catch trade
   "0x9fa5619b14d3fb6900247db219a3feb657ca46fc", // Tradable

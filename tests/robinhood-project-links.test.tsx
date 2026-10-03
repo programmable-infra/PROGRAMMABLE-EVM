@@ -4,6 +4,15 @@ import { RobinhoodProjectLinks } from "@/components/robinhood-project-links";
 import { MODULE_TOKEN_FALLBACK_IMAGE, RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 
 describe("Coin metadata presentation", () => {
+  it("recognizes generic Blob publication links and uses the regular social icons", () => {
+    const html = renderToStaticMarkup(<RobinhoodProjectLinks links={[
+      { label: "Project link", url: "https://playblob.com/" }, { label: "Project link", url: "https://x.com/playblobdotcom" },
+    ]} name="Blob" />);
+    expect(html).toContain('aria-label="Website (opens in a new tab)"');
+    expect(html).toContain('aria-label="X (opens in a new tab)"');
+    expect(html).toContain("lucide-globe"); expect(html).not.toContain("lucide-link-2");
+    expect(html).not.toContain("Project link");
+  });
   it("renders remaining socials as named external links and omits GitHub", () => {
     const links = ["Website", "X", "Telegram", "Discord", "GitHub", "GitBook"].map(label => ({ label, url: `https://example.com/${label.toLowerCase()}` }));
     const html = renderToStaticMarkup(<RobinhoodProjectLinks links={links} name="Coin" />);

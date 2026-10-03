@@ -29,8 +29,10 @@
 .identity strong { color: #ededeb; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .identity svg { flex-shrink: 0; }
 .identity a { margin-left: auto; color: #d2d2cf; min-height: 32px; min-width: 32px; display: grid; place-items: center; border-radius: 8px; }
-.embedded { min-width: 0; width: 100%; color: var(--webde-ink); }
-.embedded .card { width: 100%; padding: 20px; box-shadow: none; }
+.embedded { display: flex; min-width: 0; width: 100%; color: var(--webde-ink); }
+.embedded .card { display: flex; flex: 1; flex-direction: column; width: 100%; padding: 20px; box-shadow: none; }
+.embedded .card > form { display: flex; flex: 1; flex-direction: column; }
+.embedded .primary { margin-top: auto; }
 .sides { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 4px; margin-bottom: 20px; border-radius: 12px; background: var(--webde-control); }
 .sides button { min-height: 44px; border: 0; border-radius: 8px; background: transparent; color: var(--webde-muted); font: inherit; font-size: 15px; font-weight: 550; cursor: pointer; }
 .sides button[aria-pressed="true"] { background: var(--panel-fill-action); color: #161616; }

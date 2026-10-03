@@ -23,7 +23,7 @@
 }
 
 .label span { margin-left: 8px; }
-.price { font-size: 30px; font-variant-numeric: tabular-nums; font-weight: 500; line-height: 36px; margin: 8px 0 0; }
+.price { font-size: 30px; font-variant-numeric: tabular-nums; font-weight: 500; line-height: 36px; margin: 0; }
 .status { padding-top: 4px; }
 .plot { flex: 1; min-height: 160px; position: relative; }
 .svg { height: 100%; inset: 0; overflow: visible; position: absolute; width: 100%; }
@@ -43,8 +43,6 @@
 .ranges button { border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--webde-muted); padding: 7px 9px; font: inherit; font-size: 12px; cursor: pointer; }
 .ranges button[aria-pressed="true"] { border-color: var(--webde-line); background: var(--panel-fill-control); color: var(--webde-ink); }
 .ranges button:focus-visible { outline: 2px solid var(--webde-ink); outline-offset: 2px; }
-.crosshair { stroke: var(--webde-muted); stroke-width: 1; stroke-dasharray: 3 5; opacity: .5; }
-.chartFooter { display: flex; justify-content: space-between; gap: 12px; min-height: 20px; font-size: 11px; color: var(--webde-muted); font-variant-numeric: tabular-nums; }
 .skeleton { width: 100%; height: 2px; border-radius: 2px; background: var(--webde-line); animation: chartLoading 1.2s ease-in-out infinite; }
 @keyframes chartLoading { 50% { opacity: .25; } }
 @media(prefers-reduced-motion:reduce) { .skeleton { animation: none; } }
