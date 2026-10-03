@@ -47,7 +47,7 @@ export async function resolveSwapToken(input: { address: string; chainId?: SwapC
   if (input.chainId !== undefined && input.chainId !== 1 && input.chainId !== 4663) throw new SwapUnavailableError("Select Ethereum or Robinhood Chain.", "INVALID_CHAIN");
   const address = getAddress(input.address), chainId = input.chainId ?? 4663;
   if (chainId === 1) {
-    const result = await dependencies.ethereum(address);
+    const result = await dependencies.ethereum(address, undefined, { publicPresentation: false });
     if (!result.token) throw new SwapUnavailableError(result.status === "unavailable" ? "Ethereum token details are temporarily unavailable. Try again." : "This token is not in the verified Ethereum launch index.", result.status === "unavailable" ? "INDEX_UNAVAILABLE" : "TOKEN_NOT_FOUND");
     const row = result.token, base = { schemaVersion: SWAP_TOKEN_SCHEMA, chainId: 1 as const, token: tokenMetadata(row), manageHref: null };
     if (row.launchStampProvenance) {

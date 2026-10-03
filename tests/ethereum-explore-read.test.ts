@@ -20,6 +20,34 @@ const source = (entries: CanonicalTokenExploreEntry[], status: "current" | "last
 const unavailable = async (): Promise<never> => { throw new Error("source unavailable"); };
 
 describe("Ethereum verified Explore adapter", () => {
+  it("refreshes public presentation after identity checks without changing the canonical source evidence", async () => {
+    const evidence = { source: "canonical-launch-stamp-router" as const, asOfBlock: "26113816", asOfBlockHash: hex(10,64),
+      commitment: `sha256:${"ab".repeat(32)}`, generatedAt: "2026-10-03T19:23:00Z" };
+    const original = structuredClone(customGraphExploreEntry);
+    const custom = async () => ({ entries: [customGraphExploreEntry], status: "current" as const, generatedAt: evidence.generatedAt, evidence });
+    const metadata = vi.fn(async (entries: readonly CanonicalTokenExploreEntry[]) => entries.map(entry => ({ ...entry,
+      name: "Renamed coin", symbol: "NEW", imageUrl: "https://example.com/coin.png", links: [{ kind: "x" as const, url: "https://x.com/coin" }] })));
+    const catalog = await readEthereumCustomExploreCatalog({ custom, metadata });
+    expect(catalog.entries[0]?.name).toBe("Renamed coin"); expect(catalog.sourceEvidence).toEqual(evidence);
+    expect(metadata).toHaveBeenCalledWith([customGraphExploreEntry], evidence);
+    const token = await readEthereumToken(customGraphExploreEntry.tokenAddress, { classic: source([]), custom, metadata });
+    expect(token.token?.name).toBe("Renamed coin"); expect(token.token?.imageUrl).toBe("https://example.com/coin.png");
+    expect(token.token?.launchStampProvenance).toEqual(original.launchStampProvenance);
+    expect(customGraphExploreEntry).toEqual(original);
+    metadata.mockClear();
+    const canonical = await readEthereumToken(customGraphExploreEntry.tokenAddress,
+      { classic: source([]), custom, metadata }, { publicPresentation: false });
+    expect(canonical.token).toEqual(original);
+    expect(metadata).not.toHaveBeenCalled();
+  });
+  it("keeps verified launches available when the optional metadata reader fails", async () => {
+    const evidence = { source: "canonical-launch-stamp-router" as const, asOfBlock: "26113816", asOfBlockHash: hex(10,64),
+      commitment: `sha256:${"ab".repeat(32)}`, generatedAt: "2026-10-03T19:23:00Z" };
+    const custom = async () => ({ entries: [customGraphExploreEntry], status: "current" as const, generatedAt: evidence.generatedAt, evidence });
+    const metadata = vi.fn(async (): Promise<never> => { throw new Error("optional metadata unavailable"); });
+    expect((await readEthereumCustomExploreCatalog({ custom, metadata })).entries).toEqual([customGraphExploreEntry]);
+    expect((await readEthereumToken(customGraphExploreEntry.tokenAddress, { classic: source([]), custom, metadata })).token).toEqual(customGraphExploreEntry);
+  });
   it("hides SHARD from both discovery feeds without dropping its canonical token record or new launches", async () => {
     const custom = source([shardRouterTradeEntry, customGraphExploreEntry]);
     const catalog = await readEthereumCustomExploreCatalog({ custom });

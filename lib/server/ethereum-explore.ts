@@ -8,6 +8,7 @@ import { readCodexMarkets } from "./codex-market";
 import { ETHEREUM_EXPLORE_FILTERS } from "@/lib/ethereum-explore";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import type { RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
+import { readEthereumPublicTokenMetadata } from "./ethereum-public-token-metadata";
 
 type SourceStatus = "current" | "last-known-good" | "unavailable";
 type SourceEvidence = {
@@ -23,8 +24,10 @@ type CatalogSource = { entries: readonly CanonicalTokenExploreEntry[]; status: E
 type Dependencies = {
   classic: () => Promise<CatalogSource>;
   custom: () => Promise<CatalogSource>;
+  metadata?: typeof readEthereumPublicTokenMetadata;
 };
 const readers: Dependencies = {
+  metadata: readEthereumPublicTokenMetadata,
   classic: async () => {
     const catalog = await readEnvioClassicV3CatalogV1();
     return { ...catalog, entries: catalog.entries.filter((entry): entry is CanonicalTokenExploreEntry => entry.exploreKind === "token"),
@@ -39,10 +42,10 @@ const readers: Dependencies = {
 };
 
 /** Unified discovery admits only the canonical Ethereum Custom Hook lane. */
-export async function readEthereumCustomExploreCatalog(dependencies: Pick<Dependencies, "custom"> = readers) {
+export async function readEthereumCustomExploreCatalog(dependencies: Pick<Dependencies, "custom" | "metadata"> = readers) {
   try {
     const catalog = await dependencies.custom();
-    const entries = publicExploreCatalogEntriesV1(catalog.entries.map(publicExplorePresentationEntryV1))
+    let entries = publicExploreCatalogEntriesV1(catalog.entries.map(publicExplorePresentationEntryV1))
       .filter((entry): entry is CanonicalTokenExploreEntry => entry.exploreKind === "token"
         && entry.launchCategoryProvenance.category === "custom" && isPublicExploreIdentityV1(entry));
     const identities = new Set<string>();
@@ -50,6 +53,9 @@ export async function readEthereumCustomExploreCatalog(dependencies: Pick<Depend
       const identity = entry.tokenAddress.toLowerCase();
       if (identities.has(identity)) throw new Error("Conflicting Ethereum launch identities");
       identities.add(identity);
+    }
+    if (dependencies.metadata && catalog.evidence?.source === "canonical-launch-stamp-router") {
+      entries = [...await dependencies.metadata(entries, catalog.evidence).catch(() => entries)];
     }
     return { status: catalog.status === "current" ? "ready" as const : "stale" as const,
       updatedAt: catalog.generatedAt, entries, sourceEvidence: catalog.evidence ?? null };
@@ -66,12 +72,15 @@ export async function readEthereumExploreCatalog(dependencies: Dependencies = re
     custom: custom.status === "fulfilled" ? custom.value.status : "unavailable",
   };
   const accepted = [classic, custom].flatMap(result => result.status === "fulfilled" ? [result.value] : []);
-  const entries = accepted.flatMap(source => source.entries).map(publicExplorePresentationEntryV1);
+  let entries = accepted.flatMap(source => source.entries).map(publicExplorePresentationEntryV1);
   const identities = new Set<string>();
   for (const entry of entries) {
     const identity = entry.tokenAddress.toLowerCase();
     if (identities.has(identity)) throw new Error("Conflicting Ethereum launch identities");
     identities.add(identity);
+  }
+  if (dependencies.metadata && custom.status === "fulfilled" && custom.value.evidence?.source === "canonical-launch-stamp-router") {
+    entries = [...await dependencies.metadata(entries, custom.value.evidence).catch(() => entries)];
   }
   const status = accepted.length === 0 ? "unavailable" as const
     : accepted.length !== 2 ? "partial" as const
@@ -114,16 +123,22 @@ export async function readEthereumLaunches(page = 1, query = "", filters = ETHER
   };
 }
 
-export async function readEthereumToken(address: string, dependencies?: Dependencies) {
+export async function readEthereumToken(address: string, dependencies?: Dependencies, options: { publicPresentation?: boolean } = {}) {
   try {
-    let catalog = await readEthereumExploreCatalog(dependencies);
+    const tokenReaders = options.publicPresentation === false ? { ...(dependencies ?? readers), metadata: undefined } : dependencies;
+    let catalog = await readEthereumExploreCatalog(tokenReaders);
     const findToken = () => catalog.entries.find(entry => entry.tokenAddress.toLowerCase() === address.toLowerCase()) ?? null;
     let token = findToken();
     // A cold page has its own reader cache. Give a temporarily missing source
     // one bounded recovery read before treating its verified token as unavailable.
     if (!token && (catalog.status === "partial" || catalog.status === "unavailable")) {
-      catalog = await readEthereumExploreCatalog(dependencies);
+      catalog = await readEthereumExploreCatalog(tokenReaders);
       token = findToken();
+    }
+    const metadata = (tokenReaders ?? readers).metadata;
+    const boundary = catalog.sourceEvidence.custom;
+    if (token && metadata && boundary?.source === "canonical-launch-stamp-router") {
+      token = (await metadata([token], boundary).catch(() => [token!]))[0] ?? token;
     }
     return { chainId: catalog.chainId, status: catalog.status, sources: catalog.sources, updatedAt: catalog.updatedAt,
       // The verified snapshot uses null-prototype proof records. React requires
@@ -140,6 +155,7 @@ export async function readEthereumTokenPresentation(address: string) {
   const entry = record.token;
   const markets = await readCodexMarkets([entry], 1).catch(() => new Map<string, RobinhoodCoinMarket>());
   return { ...record, presentation: { chainId: 1 as const, tokenAddress: entry.tokenAddress,
+    name: entry.name, symbol: entry.symbol,
     imageUrl: entry.imageUrl ?? null, description: entry.description ?? null,
     links: (entry.links ?? []).map(link => ({ label: link.kind, url: link.url })),
     market: markets.get(entry.tokenAddress.toLowerCase()) ?? null } };

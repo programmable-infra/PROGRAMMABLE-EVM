@@ -25,11 +25,17 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
 }) {
   const seed = useMemo(() => initialPresentation ?? (initialMarket && token ? Promise.resolve({
     chainId: 1 as const, tokenAddress: address, imageUrl: token.imageUrl ?? null, description: token.description ?? null,
+    name: token.name, symbol: token.symbol,
     links: (token.links ?? []).map(link => ({ label: link.kind, url: link.url })), market: initialMarket,
   }) : undefined), [address, token, initialMarket, initialPresentation]);
   const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(address)}`, token !== null, seed, 1);
-  const market = presentation.items[0]?.market ?? null;
-  const links = token?.links?.map(link => ({ label: link.kind, url: link.url })) ?? [];
+  const display = presentation.items.find(item => item.chainId === 1 && item.tokenAddress.toLowerCase() === address.toLowerCase());
+  const market = display?.market ?? null;
+  const name = display?.name ?? token?.name ?? "Unnamed token";
+  const symbol = display?.symbol ?? token?.symbol;
+  const imageUrl = display ? display.imageUrl : token?.imageUrl;
+  const description = display ? display.description : token?.description;
+  const links = display?.links ?? token?.links?.map(link => ({ label: link.kind, url: link.url })) ?? [];
   const [copyResult, setCopyResult] = useState<{ address: string; state: "copied" | "failed" } | null>(null);
   const copyState = copyResult?.address === address ? copyResult.state : null;
   useEffect(() => {
@@ -46,16 +52,16 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
     {token ? <article className={styles.market}>
       <header className={styles.header}>
         <div className={styles.identity}>
-          <RobinhoodCoinArtwork className={styles.avatar} imageUrl={token.imageUrl} eager />
+          <RobinhoodCoinArtwork className={styles.avatar} imageUrl={imageUrl} eager />
           <div className={styles.identityText}>
-            <div className={styles.nameRow}><h1>{token.name || "Unnamed token"}</h1>
-              <span className={styles.ticker}>{coinTicker(token.symbol)}</span><ChainMark chainId={1} className={styles.chainLogo} />
-              {links.length ? <RobinhoodProjectLinks links={links} name={token.name || "Token"} /> : null}
+            <div className={styles.nameRow}><h1>{name}</h1>
+              <span className={styles.ticker}>{coinTicker(symbol ?? null)}</span><ChainMark chainId={1} className={styles.chainLogo} />
+              {links.length ? <RobinhoodProjectLinks links={links} name={name} /> : null}
             </div>
             <LaunchPairModules launch={{ tokenAddress: address, poolId: token.poolId }} chainId={1}
               market={token.quoteAssetAddress ? { poolId: token.poolId, quoteAsset: { address: token.quoteAssetAddress, symbol: token.quoteAssetSymbol ?? null } } : null}
               className={styles.launchProperties} />
-            {token.description ? <p className={styles.bio}>{token.description}</p> : null}
+            {description ? <p className={styles.bio}>{description}</p> : null}
           </div>
         </div>
         <button className={`${styles.secondaryButton} ${styles.copyButton}`} onClick={copyAddress} type="button" title={address}>
@@ -85,8 +91,8 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
         <div><dt>24h volume</dt><dd>{coinDollars(market?.volume24hUsd)}</dd></div>
       </dl>
       <div className={styles.tradingLayout}>
-        <TokenPoolChart tokenAddress={address} poolId={token.poolId} name={token.name || "Token"} chainId={1} market={market} />
-        <ResponsiveTradePanel symbol={token.symbol}><SwapPanel key={`1:${address.toLowerCase()}`} embedded initialAddress={address} initialChainId={1} tokenSymbol={token.symbol} /></ResponsiveTradePanel>
+        <TokenPoolChart tokenAddress={address} poolId={token.poolId} name={name} chainId={1} market={market} />
+        <ResponsiveTradePanel symbol={symbol}><SwapPanel key={`1:${address.toLowerCase()}`} embedded initialAddress={address} initialChainId={1} tokenSymbol={symbol} /></ResponsiveTradePanel>
       </div>
     </article> : <section className={styles.empty}>
       <h1>{status === "ready" ? "Launch not found" : "Token details are temporarily unavailable"}</h1>

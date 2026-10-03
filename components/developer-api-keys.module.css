@@ -91,7 +91,7 @@
 .expiryTrigger > svg { color: var(--webde-muted); flex: none; }
 .expiryTrigger[aria-expanded="true"] { border-color: #666660; }
 .expiryTrigger[aria-expanded="true"] > svg { transform: rotate(180deg); }
-.expiryMenu { background: var(--panel-fill-dialog); border: 0; border-radius: 12px; box-shadow: 0 12px 32px #0008; display: grid; gap: 4px; inset-block-start: calc(100% + 8px); inset-inline: 0; padding: 4px; position: absolute; z-index: 5; }
+.expiryMenu { background: #101216; border: 0; border-radius: 12px; box-shadow: 0 12px 32px #0008; display: grid; gap: 4px; inset-block-start: calc(100% + 8px); inset-inline: 0; padding: 4px; position: absolute; z-index: 5; }
 .expiryOption { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 8px; color: var(--webde-muted); display: flex; font: inherit; font-size: 14px; gap: 12px; justify-content: space-between; min-height: 44px; padding: 8px 12px; text-align: start; width: 100%; }
 .expiryOption[aria-selected="true"] { background: var(--panel-fill-hover); color: var(--webde-ink); }
 .expiryOption > svg { color: var(--api-accent); flex: none; }
