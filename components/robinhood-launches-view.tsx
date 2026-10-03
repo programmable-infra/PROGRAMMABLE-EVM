@@ -147,6 +147,21 @@ export function UnifiedLaunchesView({ embedded = false }: { embedded?: boolean }
 }
 
 function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; enabled: boolean; chainId: ExploreScope }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(!embedded);
+  const readEnabled = enabled && (!embedded || inView);
+  useEffect(() => {
+    if (!embedded || !listRef.current) return;
+    if (typeof window.IntersectionObserver !== "function") {
+      const frame = window.requestAnimationFrame(() => setInView(true));
+      return () => window.cancelAnimationFrame(frame);
+    }
+    const observer = new IntersectionObserver(entries => {
+      setInView(entries.some(entry => entry.isIntersecting));
+    }, { rootMargin: "160px 0px" });
+    observer.observe(listRef.current);
+    return () => observer.disconnect();
+  }, [embedded]);
   const chainName = chainId === "all" ? "Programmable" : chainId === 4663 ? "Robinhood" : "Ethereum";
   const defaultFilters = chainId !== 1 ? ROBINHOOD_WEBSITE_FILTERS : ETHEREUM_EXPLORE_FILTERS;
   const headingId = useId();
@@ -172,7 +187,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
   }, [search]);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!readEnabled) return;
     let disposed = false;
     let controller: AbortController | null = null;
     let refreshTimer: number | undefined;
@@ -253,7 +268,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
       window.clearTimeout(refreshTimer);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [chainId, enabled, request]);
+  }, [chainId, readEnabled, request]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -314,7 +329,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
         : snapshot?.request.q || hasFilters ? "No matching launches" : "No launches yet";
 
   return (
-    <div className={`${styles.page} page-width`}>
+    <div ref={listRef} className={`${styles.page} page-width`}>
       <header className={styles.heading}>
         <Heading data-explore-heading id={headingId} tabIndex={-1}>Explore</Heading>
       </header>

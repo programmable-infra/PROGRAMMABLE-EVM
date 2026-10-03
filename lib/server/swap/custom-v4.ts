@@ -6,8 +6,8 @@ import { canonicalBrowserJsonV2, canonicalBrowserSha256V2 } from "@/lib/custom-l
 import { isRobinhoodProjectedLaunch, projectionAddress, projectionHash, projectionObject, resolveProjectionAddress } from "@/lib/custom-launch/launch-projection-v1";
 import { LaunchPlanTradeErrorV1, ROUTED_TRADE_CONTRACTS_V1, ROUTED_TRADE_PERMIT2_ABI_V1,
   ROUTED_TRADE_TOKEN_ABI_V1, type LaunchPlanTradeTransactionV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
-import { agreedTradeRpcV1, bytesV1, objectV1, pendingTradeV1, productionTradeRpcsV1, quantityV1, readTradeCheckpointV1, successfulTradeFramesV1,
-  tradeBlockV1, tradePostStateV1, tradeTraceV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
+import { agreedTradeRpcV1, bytesV1, objectV1, pendingTradeV1, productionTradeRpcsV1, quantityV1, readTradeCheckpointV1, readAgreedTradeTraceV1, readTradeGasEstimateV1, successfulTradeFramesV1,
+  tradeBlockV1, tradePostStateV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 import { readRobinhoodToken } from "@/lib/server/robinhood-index/read";
 import { buildCustomV4Swap, buildCustomV4SwapApproval, CUSTOM_V4_NATIVE, CUSTOM_V4_SWAP_DESCRIPTOR, CUSTOM_V4_SWAP_RESPONSE,
   customV4PoolId, customV4SwapAmounts, customV4SwapDescriptorDigest, customV4SwapPreparationDigest, parseCustomV4SwapRequest, validateCustomV4SwapDescriptor,
@@ -186,7 +186,7 @@ export async function prepareCustomV4Swap(input: unknown, dependencies: {
     if (allowance < BigInt(request.amountIn)) transaction = buildCustomV4SwapApproval(request, "token_approval");
     else if (permitted < BigInt(request.amountIn) || BigInt(expiration) < BigInt(request.deadline)) transaction = buildCustomV4SwapApproval(request, "permit2_approval");
   }
-  const trace = await rpc("debug_traceCall", [transactionRpc(transaction), tag, { tracer: "callTracer", timeout: "10s" }], tradeTraceV1);
+  const { trace, maximumGasUsed } = await readAgreedTradeTraceV1(rpcs, transactionRpc(transaction), tag);
   if (!same(trace.from, request.owner) || !trace.to || !same(trace.to, transaction.to) || trace.input !== transaction.data.toLowerCase()
     || trace.value !== transaction.value || trace.type !== "CALL") return pendingTradeV1("SWAP_TRACE_BINDING_CHANGED");
   if (trace.failed) throw new LaunchPlanTradeErrorV1("SWAP_EXECUTION_REVERTED", "This swap currently reverts. Try a smaller amount or refresh the quote.");
@@ -196,13 +196,13 @@ export async function prepareCustomV4Swap(input: unknown, dependencies: {
   await Promise.all(missing.map(async address => runtimeBindings.push({ address: getAddress(address), runtimeCodeHash: keccak256(await rpc("eth_getCode", [address, reference], bytesV1)) })));
   const [result, estimate, posts] = await Promise.all([
     rpc("eth_call", [transactionRpc(transaction), reference], bytesV1),
-    rpc("eth_estimateGas", [transactionRpc(transaction), tag], value => quantityV1(value).toString()),
+    readTradeGasEstimateV1(rpcs, transactionRpc(transaction), tag),
     Promise.all(rpcs.map(async read => tradePostStateV1(await read("debug_traceCall", [transactionRpc(transaction), tag,
       { tracer: "prestateTracer", timeout: "10s", tracerConfig: { diffMode: true } }])))),
   ]);
   if (result !== trace.output || (transaction.kind === "token_approval" && result !== "0x" && BigInt(result) !== 1n)) return pendingTradeV1("SWAP_SIMULATION_DISAGREEMENT");
   const gas = (BigInt(estimate) * 120n + 99n) / 100n;
-  if (gas === 0n || gas > 30_000_000n || BigInt(trace.gasUsed) > gas) return pendingTradeV1("SWAP_GAS_PENDING");
+  if (gas === 0n || gas > 30_000_000n || maximumGasUsed > gas) return pendingTradeV1("SWAP_GAS_PENDING");
   transaction = { ...transaction, gasLimit: gas.toString() };
   // ArbOS also writes internal gas bookkeeping during a trace. Its counters can
   // differ between providers even when the same swap executes identically.

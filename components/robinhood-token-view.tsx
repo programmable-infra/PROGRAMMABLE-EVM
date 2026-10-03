@@ -27,7 +27,7 @@ export function RobinhoodTokenView({ address, token, status, initialPresentation
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); }, [address]);
 
   if (!token) return <div className={`${styles.page} page-width`}>
-    <Link className={styles.back} href="/explore/robinhood"><ArrowLeft aria-hidden="true" size={16} /> Explore</Link>
+    <Link className={styles.back} href="/explore"><ArrowLeft aria-hidden="true" size={16} /> Explore</Link>
     <section className={styles.empty}>
       <h1>Token details</h1>
       <p>{status === "ready" ? "This token is not in the verified Robinhood launch index." : "Robinhood launch details are temporarily unavailable. Try again in a moment."}</p>

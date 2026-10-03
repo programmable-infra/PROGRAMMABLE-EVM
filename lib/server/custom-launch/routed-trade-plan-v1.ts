@@ -8,8 +8,8 @@ import { buildLaunchPlanRoutedSwapV1, buildLaunchPlanTradeApprovalV1, launchPlan
   type LaunchPlanTradePreparationV1, type LaunchPlanTradeTransactionV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
 import { indexStore } from "@/lib/server/robinhood-index/store";
 import { snapshotLaunches } from "@/lib/server/robinhood-index/model";
-import { agreedTradeRpcV1, bytesV1, pendingTradeV1, productionTradeRpcsV1, quantityV1, readTradeCheckpointV1, successfulTradeFramesV1,
-  tradeBlockV1, tradePostStateV1, tradeTraceV1, type TradeRpcV1 } from "./routed-trade-rpc-v1";
+import { agreedTradeRpcV1, bytesV1, pendingTradeV1, productionTradeRpcsV1, quantityV1, readTradeCheckpointV1, readAgreedTradeTraceV1, readTradeGasEstimateV1, successfulTradeFramesV1,
+  tradeBlockV1, tradePostStateV1, type TradeRpcV1 } from "./routed-trade-rpc-v1";
 import { immutablePoolFeeRequiredAddressesV1, proveImmutablePoolFeeRuntimeV1,
   type ImmutablePoolFeeMarketV1 } from "@/lib/custom-launch/immutable-pool-fee-runtime-custom-launch-plan-v1";
 import { proveImmutablePoolFeeTradeAccrualV1 } from "./immutable-pool-fee-trade-v1";
@@ -102,8 +102,7 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
   }
   // Both providers must expose the same actual revert trace; transport errors
   // remain pending and are never promoted to a permanent unsafe-model verdict.
-  const trace = await rpc("debug_traceCall", [transactionRpc(transaction), tag,
-    { tracer: "callTracer", timeout: "10s" }], tradeTraceV1);
+  const { trace, maximumGasUsed } = await readAgreedTradeTraceV1(rpcs, transactionRpc(transaction), tag);
   if (trace.from !== request.owner.toLowerCase() || trace.to !== transaction.to.toLowerCase() || trace.input !== transaction.data.toLowerCase()
     || trace.value !== transaction.value || trace.type !== "CALL") return pendingTradeV1("TRADE_TRACE_BINDING_CHANGED");
   if (trace.failed) throw new LaunchPlanTradeErrorV1("TRADE_EXECUTION_REVERTED", "The exact transaction currently reverts. Refresh its amount, approvals or hook data.");
@@ -116,12 +115,12 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
   runtimeBindings.sort((a, b) => a.address.toLowerCase().localeCompare(b.address.toLowerCase()));
   const [rawResult, estimateString, post] = await Promise.all([
     rpc("eth_call", [transactionRpc(transaction), reference], bytesV1),
-    rpc("eth_estimateGas", [transactionRpc(transaction), tag], v => quantityV1(v).toString()),
+    readTradeGasEstimateV1(rpcs, transactionRpc(transaction), tag),
     rpc("debug_traceCall", [transactionRpc(transaction), tag, { tracer: "prestateTracer", timeout: "10s", tracerConfig: { diffMode: true } }], tradePostStateV1),
   ]);
   if (rawResult !== trace.output || (transaction.kind === "token_approval" && rawResult !== "0x" && BigInt(rawResult) !== 1n)) return pendingTradeV1("TRADE_SIMULATION_DISAGREEMENT");
   const gas = (BigInt(estimateString) * 120n + 99n) / 100n;
-  if (gas === 0n || gas > 30_000_000n || BigInt(trace.gasUsed) > gas) return pendingTradeV1("TRADE_GAS_PENDING");
+  if (gas === 0n || gas > 30_000_000n || maximumGasUsed > gas) return pendingTradeV1("TRADE_GAS_PENDING");
   transaction = { ...transaction, gasLimit: gas.toString() };
   let feeTransfer: unknown = null;
   if (transaction.kind === "swap") {

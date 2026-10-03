@@ -98,6 +98,11 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [
       {
+        source: "/docs/ethereum-direct-custom-hook",
+        destination: "/developer-reference/ethereum-custom-hook",
+        permanent: false,
+      },
+      {
         source: "/swap",
         destination: "/explore",
         permanent: true,

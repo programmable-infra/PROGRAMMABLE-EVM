@@ -140,6 +140,38 @@ test.describe("Module Studio", () => {
     await expect(address).toHaveValue(""); await expect(toggle).toHaveAttribute("aria-checked", "true");
   });
 
+  test("coin fields keep exact names after validation and describe their errors", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 }); await page.goto(`${studioOrigin}?mode=error`);
+    const name = page.getByLabel("Name", { exact: true });
+    await expect(name).toHaveAccessibleDescription("Enter a coin name");
+    await name.fill("Garden");
+    await page.getByLabel("Ticker", { exact: true }).fill("$GARDEN");
+    await expect(page.getByLabel("Ticker", { exact: true })).toHaveValue("GARDEN");
+    await page.getByRole("button", { name: "Links", exact: true }).click();
+    await page.getByLabel("X", { exact: true }).fill("@ garden");
+    await page.getByLabel("Telegram", { exact: true }).fill("@garden");
+    await page.getByRole("button", { name: "Add other link", exact: true }).click();
+    await expect(page.getByLabel("X", { exact: true })).toHaveValue("https://x.com/garden");
+    await expect(page.getByLabel("Telegram", { exact: true })).toHaveValue("https://t.me/garden");
+    await page.getByLabel("Other link 1", { exact: true }).fill("garden.example");
+    await page.getByRole("button", { name: "Links", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Links", exact: true })).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("textbox", { name: "Other link 1", exact: true })).toHaveCount(0);
+  });
+
+  test("a creator fee error returns to its visible coin field from a module", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 }); await page.goto(`${studioOrigin}?mode=fees`);
+    const navigation = page.getByRole("navigation", { name: "Studio panels" });
+    await navigation.getByRole("button", { name: "Modules", exact: true }).click();
+    await page.getByRole("switch", { name: "Initial wallet buy limit", exact: true }).click();
+    await page.getByRole("button", { name: "Review coin", exact: true }).click();
+    const fee = page.getByLabel("Creator fees · %", { exact: true });
+    await expect(fee).toBeVisible();
+    await expect(fee).toHaveAttribute("aria-invalid", "true");
+    await expect(fee).toHaveAccessibleDescription("Choose a whole percentage from 0% to 10%.");
+    await expect(page.getByRole("heading", { name: "Coin details", exact: true })).toBeVisible();
+  });
+
   for (const width of [390, 320]) {
     test(`validation highlights the visible panel and still allows navigation at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 }); await page.goto(`${studioOrigin}?mode=error`);
