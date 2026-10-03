@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 
 import { toEventSelector, type AbiEvent } from "viem";
 import { describe, expect, it } from "vitest";
+import { getRewrittenUrl, unstable_getResponseFromNextConfig } from "next/experimental/testing/server";
 
 import nextConfig from "../next.config";
 
@@ -174,6 +175,19 @@ function sortJsonKeys(value: unknown): unknown {
 }
 
 describe("Robinhood terminal and indexer documentation", () => {
+  it("excludes the native Ethereum alias from the GitBook rewrite even before redirects run", async () => {
+    const rewriteOnly = { ...nextConfig, redirects: async () => [] };
+    const native = await unstable_getResponseFromNextConfig({
+      url: "https://programmable.market/docs/ethereum-direct-custom-hook", nextConfig: rewriteOnly,
+    });
+    expect(getRewrittenUrl(native)).toBeNull();
+    for (const path of ["launch/launch", "ethereum-direct-custom-hook-other"]) {
+      const gitbook = await unstable_getResponseFromNextConfig({
+        url: `https://programmable.market/docs/${path}`, nextConfig: rewriteOnly,
+      });
+      expect(getRewrittenUrl(gitbook)).toBe(`https://proxy.gitbook.site/sites/site_V93gQ/${path}`);
+    }
+  });
   it("keeps public docs in GitBook and preserves the technical compatibility guide", async () => {
     const rewrites = await nextConfig.rewrites?.();
 
@@ -189,7 +203,7 @@ describe("Robinhood terminal and indexer documentation", () => {
           destination: "https://proxy.gitbook.site/sites/site_V93gQ",
         },
         {
-          source: "/docs/:match*",
+          source: "/docs/:match((?!ethereum-direct-custom-hook$).*)",
           destination: "https://proxy.gitbook.site/sites/site_V93gQ/:match*",
         },
       ],
