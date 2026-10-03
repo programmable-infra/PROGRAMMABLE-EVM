@@ -78,7 +78,7 @@
 .preview { align-items: center; background: var(--panel-fill); display: flex; flex-direction: column; justify-content: center; min-width: 0; padding: 32px; }
 .summaryContent { background: var(--panel-fill); border: 1px solid #484643; border-radius: 20px; padding: 24px; position: static; width: 100%; }
 .coinIdentity { align-items: flex-start; display: flex; flex-direction: column; gap: 0; }
-.coinArtwork { border-radius: 12px; grid-row: 1 / 3; height: 64px; outline: 1px solid rgb(255 255 255 / .1); overflow: hidden; position: relative; width: 64px; }
+.coinArtwork { border-radius: 12px; grid-row: 1 / 3; height: 64px; outline: none; overflow: hidden; position: relative; width: 64px; }
 .coinArtwork img { object-fit: cover; }
 .coinPlaceholder { align-items: center; background: var(--panel-fill); border: 1px solid #775568; color: #f0bfd6; display: flex; font-size: 24px; justify-content: center; }
 .coinIdentity h2 { align-self: auto; font-size: 20px; font-weight: 500; letter-spacing: -.02em; line-height: 28px; margin: 0; overflow-wrap: anywhere; text-wrap: balance; }

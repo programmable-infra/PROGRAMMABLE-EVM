@@ -136,7 +136,7 @@
 @media (hover: hover) and (pointer: fine) {
   .action:hover {
     background: var(--panel-fill-action-hover);
-    border-color: #ffffff;
+    border-color: var(--panel-line);
     transform: translateY(-1px);
   }
 }

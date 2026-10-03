@@ -1215,9 +1215,9 @@ body:has([data-docs-shell]) .site-header::before {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: rgba(255, 255, 255, 0.045);
-  border-color: rgba(255, 255, 255, 0.075);
+  border-color: var(--panel-line);
   border-radius: var(--radius-control);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  box-shadow: none;
   width: 44px;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { ArrowLeft, ArrowRight, Check, Copy } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatedMarketCap } from "./animated-market-cap";
@@ -61,9 +62,10 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
           <div className={styles.identityText}>
             <div className={styles.nameRow}>
               <h1>{name}</h1>
+              {hasAsset ? <span className={styles.ticker}>{coinTicker(symbol ?? null)}</span> : null}
+              <Image className={styles.chainLogo} src="/brand/networks/robinhood-feather-white.svg" alt="Robinhood Chain" width={17} height={22} title="Robinhood Chain" />
               {presentation?.links.length ? <RobinhoodProjectLinks links={presentation.links} name={name} /> : null}
             </div>
-            <p className={styles.subtitle}>{hasAsset ? <span>{coinTicker(symbol ?? null)}</span> : null}<span>Robinhood</span></p>
             {launch ? <LaunchPairModules launch={launch} chainId={4663} market={market} className={styles.launchProperties} /> : null}
             {description && description.toLowerCase() !== name.trim().toLowerCase() ? <p className={styles.bio}>{description}</p> : null}
           </div>

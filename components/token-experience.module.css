@@ -2175,7 +2175,7 @@
 
 .primaryAction {
   background: var(--panel-fill-action);
-  border: 1px solid #fff;
+  border: 1px solid var(--panel-line);
   box-shadow: none;
   color: #000;
 }

@@ -43,7 +43,7 @@
 
 .previewFlag {
   background: rgb(255 255 255 / 0.08);
-  border: 1px solid rgb(255 255 255 / 0.14);
+  border: 1px solid var(--panel-line);
   border-radius: 999px;
   color: var(--webde-muted);
   font-family: var(--font-plex-mono), monospace;
@@ -141,7 +141,7 @@
 
 .officialNotice {
   background: rgb(255 255 255 / 0.055);
-  border: 1px solid rgb(255 255 255 / 0.11);
+  border: 1px solid var(--panel-line);
   border-radius: 8px;
   color: var(--webde-muted);
   font-size: 12px;
@@ -462,7 +462,7 @@
 }
 
 .amountControl:focus-within {
-  border-color: #fff;
+  border-color: var(--panel-line);
   box-shadow: 0 0 0 2px rgb(255 255 255 / 0.12);
 }
 
@@ -566,7 +566,7 @@
 
 .acknowledgement input:checked {
   background: var(--panel-fill-action);
-  border-color: #fff;
+  border-color: var(--panel-line);
 }
 
 .acknowledgement input:checked::before {
@@ -585,7 +585,7 @@
 
 .primaryAction {
   background: var(--panel-fill-action);
-  border: 1px solid #fff;
+  border: 1px solid var(--panel-line);
   border-radius: 8px;
   color: #000;
   cursor: pointer;
@@ -684,7 +684,7 @@
 
 .secondaryAction {
   background: var(--panel-fill-action);
-  border: 1px solid #fff;
+  border: 1px solid var(--panel-line);
   border-radius: 8px;
   color: #000;
   cursor: pointer;

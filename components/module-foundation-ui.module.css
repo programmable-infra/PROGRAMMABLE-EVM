@@ -29,7 +29,7 @@
 .builderPage .imageButton { border-radius: 16px; flex-basis: 80px; height: 80px; }
 .builderPage .imageCopy .secondaryButton { background: transparent; border-color: transparent; justify-content: flex-start; padding-left: 0; }
 .builderPage .field input, .builderPage .field textarea { background: var(--panel-fill-control); }
-.builderPage .field :is(input, textarea, select):focus-visible { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; outline: none; }
+.builderPage .field :is(input, textarea, select):focus-visible { border-color: var(--panel-line); box-shadow: none; outline: 2px solid var(--mf-focus, #fff); outline-offset: 2px; }
 .builderPage .amountInput input { padding-right: 44px; }
 .builderPage .amountInput > span { right: 12px; }
 .builderPage .socialDetails > summary { align-items: center; display: flex; gap: 8px; list-style: none; width: fit-content; }
@@ -189,7 +189,7 @@
 .imageRow > .iconButton { align-self: start; margin-left: auto; }
 .saved { align-items: center; color: #bbdfc5; display: flex; font-size: 12px; gap: 4px; line-height: 20px; margin: 0; }
 .primaryButton, .secondaryButton, .selectedButton, .textButton, .iconButton { align-items: center; border-radius: 8px; cursor: pointer; display: inline-flex; flex: 0 0 auto; font: inherit; font-size: 16px; font-weight: 500; gap: 8px; justify-content: center; line-height: 24px; min-height: 44px; padding: 8px 12px; text-decoration: none; }
-.primaryButton { background: var(--panel-fill-action); border: 1px solid #fff; color: #181818; }
+.primaryButton { background: var(--panel-fill-action); border: 1px solid var(--panel-line); color: #181818; }
 .secondaryButton { background: transparent; border: 1px solid var(--mf-control-line); color: var(--mf-ink); }
 .selectedButton { background: var(--panel-fill-hover); border: 1px solid #707070; color: var(--mf-ink); }
 .textButton { background: transparent; border: 0; color: var(--mf-ink); font-size: 12px; font-weight: 400; justify-content: start; line-height: 20px; min-height: 44px; padding: 4px 0; text-align: start; text-decoration: underline; text-underline-offset: 4px; }
@@ -298,7 +298,7 @@
 .marketAbout > p { color: var(--mf-muted); font-size: 16px; line-height: 24px; margin: 0 0 24px; max-width: 60ch; }
 .marketPage { --mf-focus: #fff; }
 .marketPage .tradePanel .field input { background: var(--panel-fill-control); font-size: 24px; font-variant-numeric: tabular-nums; line-height: 32px; min-height: 64px; }
-.marketPage .tradePanel .field input:focus-visible { border-color: #fff; box-shadow: inset 0 0 0 1px #fff; outline: none; }
+.marketPage .tradePanel .field input:focus-visible { border-color: var(--panel-line); box-shadow: none; outline: 2px solid var(--mf-focus, #fff); outline-offset: 2px; }
 .tradeAmountLabel { align-items: center; display: flex; justify-content: space-between; margin-top: -8px; }
 .tradeAmountLabel > label { margin: 0; }
 .tradeMax { background: transparent; border: 0; color: var(--mf-ink); cursor: pointer; font: inherit; font-size: 14px; min-height: 44px; min-width: 44px; padding: 8px; }
@@ -312,7 +312,7 @@
 .tradeSettings > summary > span { color: var(--mf-ink); font-variant-numeric: tabular-nums; }
 .tradeSlippage { display: grid; gap: 8px; grid-template-columns: repeat(3, 1fr); padding: 0 0 8px; }
 .tradeSlippage > button { background: transparent; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-muted); cursor: pointer; font: inherit; min-height: 44px; }
-.tradeSlippage > button[aria-pressed="true"] { background: var(--panel-fill-action); border-color: #fff; color: #181818; }
+.tradeSlippage > button[aria-pressed="true"] { background: var(--panel-fill-action); border-color: var(--panel-line); color: #181818; }
 .tradeMax:disabled, .tradeSlippage > button:disabled { cursor: default; opacity: .45; }
 .tradeResult { align-items: center; color: var(--mf-muted); display: flex; flex-wrap: wrap; font-size: 14px; gap: 0 8px; line-height: 20px; margin-top: 16px; }
 .tradeResult > a { align-items: center; display: inline-flex; justify-content: center; min-height: 44px; min-width: 44px; }
@@ -320,7 +320,7 @@
 .tradePanel { background: var(--mf-surface); border: 1px solid var(--mf-line); border-radius: 16px; min-width: 0; padding: 24px; }
 .sideButtons { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; margin-bottom: 24px; }
 .sideButtons button { background: transparent; border: 1px solid var(--mf-control-line); border-radius: 8px; color: var(--mf-muted); cursor: pointer; font: inherit; font-size: 16px; font-weight: 500; line-height: 24px; min-height: 48px; padding: 8px 12px; }
-.sideButtons button[aria-pressed="true"] { background: var(--panel-fill-action); border-color: #fff; color: #181818; }
+.sideButtons button[aria-pressed="true"] { background: var(--panel-fill-action); border-color: var(--panel-line); color: #181818; }
 .tradePanel > form > .primaryButton { margin-top: 16px; width: 100%; }
 .tradeReview { display: grid; gap: 16px; }
 .tradeReview h2 { font-size: 20px; font-weight: 500; line-height: 28px; margin: 0; }

@@ -90,7 +90,7 @@ describe("Robinhood Explore read model", () => {
     mocks.read.mockResolvedValue({ snapshot: saved([...rows, canary]) });
     mocks.markets.mockResolvedValue(observations);
     const result = await readRobinhoodLaunches(2, "", { sort: "highest" });
-    expect(mocks.markets).toHaveBeenCalledWith([...rows, canary]);
+    expect(mocks.markets).toHaveBeenCalledWith(rows);
     expect(result.items).toEqual(rows.slice(50));
     expect(mocks.presentations).toHaveBeenCalledWith(rows.slice(50), observations);
     expect(result.presentations[0].market).toBe(observations.get(rows[50].tokenAddress));
