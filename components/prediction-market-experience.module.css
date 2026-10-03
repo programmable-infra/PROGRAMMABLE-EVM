@@ -1612,7 +1612,7 @@
       --profile-subtle,
       var(--webde-surface-raised, var(--surface-soft))
     );
-    border-color: var(--border-strong, rgb(255 255 255 / 18%));
+    border-color: var(--border-strong, var(--panel-line));
     color: var(--text, #fff);
   }
 
@@ -1621,7 +1621,7 @@
       --profile-subtle,
       var(--webde-surface-raised, var(--surface-soft))
     );
-    border-color: var(--border-strong, rgb(255 255 255 / 18%));
+    border-color: var(--border-strong, var(--panel-line));
     color: var(--text, #fff);
   }
 

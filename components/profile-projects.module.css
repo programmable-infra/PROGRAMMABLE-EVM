@@ -3,7 +3,7 @@
   --project-row-min-height: 120px;
   --project-list-min-height: var(--project-row-min-height);
   background: var(--webde-surface, var(--profile-panel, #111));
-  border: 1px solid var(--webde-line, var(--profile-line, rgb(255 255 255 / 10%)));
+  border: 1px solid var(--webde-line, var(--profile-line, var(--panel-line)));
   border-radius: var(--webde-radius-card, 17px);
   margin-block: clamp(2rem, 4vw, 3.5rem) 1rem;
   min-width: 0;
@@ -81,7 +81,7 @@
 .openingDialog {
   align-items: center;
   background: var(--panel-fill-dialog);
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--panel-line);
   border-radius: 1rem;
   box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
   display: grid;
@@ -152,7 +152,7 @@
 .openingDialog > button {
   align-items: center;
   background: transparent;
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--panel-line);
   border-radius: 0.55rem;
   color: inherit;
   cursor: pointer;
@@ -340,7 +340,7 @@
 
 .launchType {
   background: var(--profile-subtle, rgb(255 255 255 / 6%));
-  border: 1px solid var(--webde-line, rgb(255 255 255 / 10%));
+  border: 1px solid var(--webde-line, var(--panel-line));
   border-radius: 999px;
   color: var(--text-soft, rgb(255 255 255 / 62%));
   flex: none;
@@ -472,7 +472,7 @@
 .actions a {
   align-items: center;
   background: transparent;
-  border-color: var(--webde-line, rgb(255 255 255 / 14%));
+  border-color: var(--webde-line, var(--panel-line));
   color: var(--text-soft, rgb(255 255 255 / 72%));
   display: inline-flex;
   justify-content: center;
@@ -578,7 +578,7 @@
 
 .receiverDialog {
   background: var(--panel-fill-dialog);
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--panel-line);
   border-radius: 1rem;
   box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
   max-height: calc(100dvh - 2rem);
@@ -591,7 +591,7 @@
 
 .receiverHeader {
   align-items: center;
-  border-block-end: 1px solid rgb(255 255 255 / 10%);
+  border-block-end: 1px solid var(--panel-line);
   display: flex;
   gap: 1rem;
   justify-content: space-between;
@@ -619,7 +619,7 @@
 .receiverHeader button {
   align-items: center;
   background: transparent;
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--panel-line);
   border-radius: 0.6rem;
   color: inherit;
   cursor: pointer;
@@ -651,7 +651,7 @@
 .receiverForm input,
 .receiverForm select {
   background: rgb(255 255 255 / 5%);
-  border: 1px solid rgb(255 255 255 / 15%);
+  border: 1px solid var(--panel-line);
   border-radius: 0.7rem;
   color: inherit;
   font: inherit;
@@ -671,7 +671,7 @@
 
 .currentReceiver {
   background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(255 255 255 / 10%);
+  border: 1px solid var(--panel-line);
   border-radius: 0.75rem;
   display: grid;
   gap: 0.35rem;
@@ -719,7 +719,7 @@
 .receiverActions button {
   align-items: center;
   background: transparent;
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--panel-line);
   border-radius: 0.7rem;
   color: inherit;
   cursor: pointer;
@@ -760,7 +760,7 @@
   .pagination button:not(:disabled):not([aria-disabled="true"]):hover,
   .actions a:hover {
     background: var(--profile-subtle, rgb(255 255 255 / 6%));
-    border-color: var(--webde-line, rgb(255 255 255 / 16%));
+    border-color: var(--webde-line, var(--panel-line));
     color: var(--text, #fff);
   }
 
@@ -768,7 +768,7 @@
   .receiverHeader button:hover,
   .receiverActions button:not(.receiverSubmit):hover {
     background: var(--profile-subtle, rgb(255 255 255 / 6%));
-    border-color: var(--webde-line, rgb(255 255 255 / 18%));
+    border-color: var(--webde-line, var(--panel-line));
     color: var(--text, #fff);
     filter: none;
   }

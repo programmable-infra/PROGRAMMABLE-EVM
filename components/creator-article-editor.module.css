@@ -11,7 +11,7 @@
 
 .dialog {
   background: var(--panel-fill-dialog);
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--panel-line);
   border-radius: 1rem;
   box-shadow: 0 30px 90px rgb(0 0 0 / 55%);
   display: grid;
@@ -32,7 +32,7 @@
 }
 
 .dialogHeader {
-  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  border-bottom: 1px solid var(--panel-line);
   gap: 1rem;
   padding-block: 0.75rem;
 }
@@ -100,7 +100,7 @@
 .coverButton,
 .imageControls button {
   background: transparent;
-  border: 1px solid rgb(255 255 255 / 14%);
+  border: 1px solid var(--panel-line);
   border-radius: 0.55rem;
   color: inherit;
   cursor: pointer;
@@ -137,7 +137,7 @@
 }
 
 .previewPane {
-  border-left: 1px solid rgb(255 255 255 / 10%);
+  border-left: 1px solid var(--panel-line);
 }
 
 .titleField,
@@ -160,7 +160,7 @@
 .titleField input {
   background: transparent;
   border: 0;
-  border-bottom: 1px solid rgb(255 255 255 / 16%);
+  border-bottom: 1px solid var(--panel-line);
   color: inherit;
   font: inherit;
   font-size: clamp(1.8rem, 4vw, 3.5rem);
@@ -216,7 +216,7 @@
 .toolbar {
   align-items: center;
   background: var(--panel-fill-control);
-  border-bottom: 1px solid rgb(255 255 255 / 10%);
+  border-bottom: 1px solid var(--panel-line);
   display: flex;
   flex-wrap: nowrap;
   gap: 0.3rem;
@@ -260,7 +260,7 @@
 .linkControl {
   align-items: center;
   background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(255 255 255 / 12%);
+  border: 1px solid var(--panel-line);
   border-radius: 0.55rem;
   display: flex;
   flex: none;
@@ -411,7 +411,7 @@
 .imageFields input {
   background: transparent;
   border: 0;
-  border-bottom: 1px solid rgb(255 255 255 / 14%);
+  border-bottom: 1px solid var(--panel-line);
   color: inherit;
   font: inherit;
   font-size: 0.78rem;
@@ -419,7 +419,7 @@
 }
 
 .dialogFooter {
-  border-top: 1px solid rgb(255 255 255 / 10%);
+  border-top: 1px solid var(--panel-line);
   gap: 1rem;
 }
 
@@ -491,7 +491,7 @@
 
   .previewPane {
     border-left: 0;
-    border-top: 1px solid rgb(255 255 255 / 10%);
+    border-top: 1px solid var(--panel-line);
   }
 }
 

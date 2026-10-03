@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 import { CODEX_CHART_RANGES, type CodexChart, type CodexChartRange } from "@/lib/market/codex";
 import { codexChartCache } from "@/lib/market/codex-chart-cache";
-import { coinDollars, type RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
+import { coinDollars, coinValuation, type RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
+import { chartMarketCap } from "@/lib/market/chart-presentation";
 import styles from "./robinhood-live-chart.module.css";
 
 const stamp = (time: number) => new Date(time).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
@@ -35,8 +36,9 @@ export function CodexPriceChart({ tokenAddress, chainId, name, market }: { token
   const points = chart?.points ?? [];
   const last = points.at(-1);
   const inspected = hover !== null ? points[hover] : undefined;
-  const shown = inspected ?? last;
-  const price = shown?.price ?? market?.priceUsd;
+  const valuation = coinValuation(market);
+  const marketCap = inspected ? chartMarketCap(inspected.price, market) : valuation.value;
+  const hasLastPrice = market?.priceUsd != null && Number.isFinite(market.priceUsd) && market.priceUsd > 0;
   const high = Math.max(...points.map(point => point.price), 0);
   const low = Math.min(...points.map(point => point.price));
   const relativeLow = high ? low / high : 0;
@@ -45,12 +47,16 @@ export function CodexPriceChart({ tokenAddress, chainId, name, market }: { token
   const coordinates = points.map(point => ({ x: points.length === 1 ? 400 : 16 + (point.time - points[0].time) / (last!.time - points[0].time) * 768,
     y: 16 + (ceiling - point.price / high) / (ceiling - floor) * 288 }));
   const gap = CODEX_CHART_RANGES[range].candleSeconds * 1_000 * 1.5;
-  const path = coordinates.map((point, index) => `${index === 0 || points[index].time - points[index - 1].time > gap ? "M" : "L"}${point.x.toFixed(2)},${point.y.toFixed(2)}`).join(" ");
+  // A quiet interval keeps the last observed close until the next real candle.
+  const path = coordinates.length === 1 ? `M16,${coordinates[0].y.toFixed(2)} L784,${coordinates[0].y.toFixed(2)}` : coordinates.map((point, index) => {
+    const carried = index > 0 && points[index].time - points[index - 1].time > gap;
+    return `${index === 0 ? "M" : carried ? `L${point.x.toFixed(2)},${coordinates[index - 1].y.toFixed(2)} L` : "L"}${point.x.toFixed(2)},${point.y.toFixed(2)}`;
+  }).join(" ");
   const selected = hover !== null ? coordinates[hover] : undefined;
   const failed = state.key === key && state.failed;
   const delayed = chart && now - Date.parse(chart.observedAt) > 180_000;
-  return <figure className={styles.figure} aria-label={`${name} price chart`}>
-    <header className={styles.header}><div><p className={styles.price} aria-label="Price in USD">{price != null ? coinDollars(price, true) : "—"}</p>
+  return <figure className={styles.figure} aria-label={`${name} market cap chart`}>
+    <header className={styles.header}><div><p className={styles.price} aria-label="Market capitalization in USD" title={inspected ? "Based on the current token supply" : valuation.title}>{marketCap != null ? coinDollars(marketCap) : "—"}</p>
       {chart && (failed || delayed) ? <p className={styles.status} role="status">Price updates delayed</p> : null}</div>
       <nav className={styles.ranges} aria-label="Chart period">{(Object.keys(CODEX_CHART_RANGES) as CodexChartRange[]).map(value => <button key={value} type="button" title={CODEX_CHART_RANGES[value].label} aria-pressed={range === value} onClick={() => { setHover(null); setRange(value); }}>{value}</button>)}</nav>
     </header>
@@ -65,8 +71,9 @@ export function CodexPriceChart({ tokenAddress, chainId, name, market }: { token
 
         <path className={styles.line} d={path} vectorEffect="non-scaling-stroke" />
         {selected ? <circle className={styles.point} cx={selected.x} cy={selected.y} r="4" /> : null}
-        {coordinates.map((point, index) => (points.length === 1 || (index === 0 || points[index].time - points[index - 1].time > gap) && (index === points.length - 1 || points[index + 1].time - points[index].time > gap)) ? <circle key={points[index].time} className={styles.point} cx={point.x} cy={point.y} r="3" /> : null)}
-      </svg> : <div className={styles.empty} role="status">{!chart && !failed ? <span className={styles.skeleton} aria-label="Loading price history" /> : failed ? "Chart is temporarily unavailable." : "No trades in this period."}</div>}
+      </svg> : chart && hasLastPrice ? <svg className={styles.svg} viewBox="0 0 800 320" preserveAspectRatio="none" role="img" aria-label={`${name}: last known market capitalization. No trades in this period.`}>
+        <path className={styles.line} d="M16,160 L784,160" vectorEffect="non-scaling-stroke" />
+      </svg> : <div className={styles.empty} role="status">{!chart && !failed ? <span className={styles.skeleton} aria-label="Loading price history" /> : failed ? "Chart is temporarily unavailable." : "No price has been recorded yet."}</div>}
     </div>
   </figure>;
 }

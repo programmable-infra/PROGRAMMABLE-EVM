@@ -1323,7 +1323,7 @@
 }
 
 .modelCard.modelCard:focus-visible {
-  border-color: #fff;
+  border-color: var(--panel-line);
   border-radius: var(--webde-radius-card);
   outline: 2px solid #fff;
   outline-offset: 4px;
@@ -1541,7 +1541,7 @@
 
 .formPage.formPage :global(.classic-launch-button) {
   background: var(--panel-fill-action);
-  border-color: #fff;
+  border-color: var(--panel-line);
   box-shadow: none;
   color: #000;
 }
@@ -1572,7 +1572,7 @@
   :global(.classic-v3-custody input:focus-visible),
 .formPage.formPage[data-launch-model="classic-v3"]
   :global(.meme-dev-buy-input:focus-within) {
-  border-color: #fff;
+  border-color: var(--panel-line);
   box-shadow: none;
   outline: 2px solid #fff;
   outline-offset: 2px;
@@ -1750,7 +1750,7 @@
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background: var(--panel-fill-action);
-  border: 1px solid #fff;
+  border: 1px solid var(--panel-line);
   border-radius: var(--webde-radius-control);
   box-shadow: none;
   color: #000;

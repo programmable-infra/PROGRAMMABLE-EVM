@@ -15,7 +15,7 @@ const readSnapshot = unstable_cache(async () => (await indexStore().read())?.sna
 export async function readRobinhoodLaunches(page = 1, query = "", filters: RobinhoodExploreFilters = DEFAULT_EXPLORE_FILTERS, pageSize: 6 | 8 | 10 | 50 = 50) {
   try {
     const snapshot = await readSnapshot();
-    const visible = exploreCatalog(snapshot);
+    const visible = exploreCatalog(snapshot).filter(row => isDiscoverableRobinhoodToken(row.tokenAddress));
     const markets = await readRobinhoodMarkets(visible).catch(() => new Map<string, RobinhoodCoinMarket>());
     const caps = new Map(Array.from(markets).flatMap(([address, market]) => {
       const value = market.marketCapUsd;
@@ -56,7 +56,9 @@ export async function readRobinhoodTokenPresentation(address: string) {
     const snapshot = await readSnapshot();
     const record = tokenLaunchRecord(snapshot, address);
     if (!record.token) return { ...record, presentation: null };
-    const markets = await readRobinhoodMarkets(exploreCatalog(snapshot)).catch(() => new Map<string, RobinhoodCoinMarket>());
+    const catalog = exploreCatalog(snapshot).filter(row => isDiscoverableRobinhoodToken(row.tokenAddress)
+      || row.tokenAddress.toLowerCase() === record.token!.tokenAddress.toLowerCase());
+    const markets = await readRobinhoodMarkets(catalog).catch(() => new Map<string, RobinhoodCoinMarket>());
     const presentations = await readRobinhoodPresentations([record.token], markets).catch(() => [] as RobinhoodCoinPresentation[]);
     return { ...record, presentation: presentations[0] ?? null };
   } catch {

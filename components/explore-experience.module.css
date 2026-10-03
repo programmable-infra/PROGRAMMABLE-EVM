@@ -6,8 +6,8 @@
   --explore-pink-soft: rgba(248, 240, 233, 0.12);
   --explore-glass: rgba(248, 240, 233, 0.12);
   --explore-glass-strong: rgba(248, 240, 233, 0.18);
-  --explore-glass-border: rgba(248, 240, 233, 0.18);
-  --explore-glass-border-strong: rgba(248, 240, 233, 0.28);
+  --explore-glass-border: var(--panel-line);
+  --explore-glass-border-strong: var(--panel-line-strong);
   color: var(--explore-ivory);
   display: block;
   height: auto;
@@ -114,7 +114,7 @@
 
 .runnersIntro :global(.token-search:focus-within) {
   background: var(--explore-glass-strong);
-  border-color: rgba(255, 253, 249, 0.34);
+  border-color: var(--panel-line);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     0 0 0 3px rgba(248, 240, 233, 0.12),
@@ -165,7 +165,7 @@
 
 .runnersIntro :global(.token-filter[open] summary) {
   background: var(--explore-glass-strong);
-  border-color: rgba(255, 253, 249, 0.34);
+  border-color: var(--panel-line);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.2),
     0 0 0 3px rgba(248, 240, 233, 0.12),
@@ -605,7 +605,7 @@
   align-items: center;
   backdrop-filter: blur(16px) saturate(1.08);
   background: rgba(248, 240, 233, 0.16);
-  border: 1px solid rgba(255, 253, 249, 0.2);
+  border: 1px solid var(--panel-line);
   border-radius: 18px;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.18),
@@ -647,7 +647,7 @@
 
   .emptyAction:hover {
     background: rgba(248, 240, 233, 0.24);
-    border-color: rgba(255, 253, 249, 0.3);
+    border-color: var(--panel-line);
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.24),
       0 14px 34px rgba(1, 5, 20, 0.24);

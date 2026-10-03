@@ -1,7 +1,7 @@
 .page:global(.page-width) {
   --webde-surface: var(--panel-fill);
   --webde-control: var(--panel-fill-control);
-  --webde-line: #383736;
+  --webde-line: var(--panel-line);
   --webde-muted: #b4b1ad;
   --webde-ink: #f5f3ef;
   margin-inline: auto;

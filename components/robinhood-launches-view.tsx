@@ -146,7 +146,6 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
   const [request, setRequest] = useState<Request>(initial?.request ?? { page: 1, q: "", ...defaultFilters });
   const [snapshot, setSnapshot] = useState<Snapshot | null>(initial);
   const [loading, setLoading] = useState(!initial);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [failedRequest, setFailedRequest] = useState<Request | null>(null);
   const [now, setNow] = useState(Date.now);
   const presentations = new Map((snapshot?.data.presentations ?? []).map((item) => [item.tokenAddress.toLowerCase(), item]));
@@ -166,7 +165,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
     let refreshTimer: number | undefined;
     const isVisible = () => document.visibilityState !== "hidden";
     const remembered = readRememberedSnapshot(chainId);
-    let lastAttemptAt = refreshKey === 0 && remembered && sameRobinhoodExploreRequest(remembered.request, request)
+    let lastAttemptAt = remembered && sameRobinhoodExploreRequest(remembered.request, request)
       ? remembered.fetchedAt : 0;
 
     function schedule() {
@@ -240,7 +239,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
       window.clearTimeout(refreshTimer);
       document.removeEventListener("visibilitychange", visibilityChanged);
     };
-  }, [chainId, enabled, request, refreshKey]);
+  }, [chainId, enabled, request]);
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -263,11 +262,6 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
     setRequest((current) => current.page === page ? current : { ...current, page });
   }
 
-  function retry() {
-    setFailedRequest(null);
-    setRefreshKey((current) => current + 1);
-  }
-
   const failed = sameRobinhoodExploreRequest(failedRequest, request);
   const sameRequest = sameRobinhoodExploreRequest(snapshot?.request, request);
   const pending = !sameRequest && !failed;
@@ -285,15 +279,14 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
   const count = data?.page.matchingItems ?? data?.page.totalItems ?? 0;
   const noMatches = Boolean(data && pinned && count === 0 && (request.q || hasFilters));
   const statusText = pending || (loading && !hasRows) ? "Loading results…" : failed
-    ? hasRows ? "Couldn’t refresh. Your last results are still here." : "Couldn’t load launches. Try again."
+    ? hasRows ? "Checking for updates automatically." : "Couldn’t load launches. Checking again automatically."
     : data?.status === "stale" || data?.status === "unavailable"
-      ? hasRows ? "Showing saved results. Try again to update." : "Couldn’t load launches. Try again."
+      ? hasRows ? "Checking for updates automatically." : "Couldn’t load launches. Checking again automatically."
       : data?.status === "partial"
         ? `Some ${data.sources?.classic === "unavailable" ? "Classic" : "Custom"} launches couldn’t load.`
       : data?.status === "syncing"
         ? "Checking for new launches."
         : updatingSearch ? "Searching…" : "";
-  const showNotice = hasRows && !pending && (failed || data?.status === "stale" || data?.status === "unavailable" || data?.status === "partial");
   const emptyTitle = loading
     ? `Loading ${chainName} launches`
     : failed || data?.status === "unavailable"
@@ -353,11 +346,10 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
           </nav>
         </div>
 
-        <p className={showNotice ? styles.status : "sr-only"} id={statusId} role="status">
+        <p className="sr-only" id={statusId} role="status">
           {statusText || (data ? `${count} ${count === 1 ? "launch" : "launches"}. Page ${data.page.number} of ${Math.max(1, data.page.totalPages)}.` : null)}
         </p>
         {noMatches && !loading && !failed ? <p className={styles.status}>No matches.</p> : null}
-        {hasRows && (failed || data?.status === "partial" || data?.status === "stale") ? <button className={styles.retry} type="button" disabled={loading} aria-controls={listId} onClick={retry}>Try again</button> : null}
 
         {hasRows || pending ? (
           <ul className={styles.list} id={listId} aria-label={`${chainName} launches`} aria-busy={pending}>
@@ -368,7 +360,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
               return (
               <li key={launch.tokenAddress.toLowerCase()} className={styles.item}>
                 <article className={styles.row}>
-                <Link className={styles.cardLink} href={`/token/${launch.tokenAddress}${chainId === 1 ? "?chain=1" : ""}`} prefetch={false}>
+                <Link className={styles.cardLink} href={`/token/${launch.tokenAddress}${chainId === 1 ? "?chain=1" : ""}`}>
                   <RobinhoodCoinArtwork
                     eager={index < 5}
                     imageUrl={details?.imageUrl} loading={loading && !details}
@@ -378,8 +370,8 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
                   <div className={styles.identity}>
                     <div className={styles.nameRow}>
                       <strong className={styles.name} title={launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}>{launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}</strong>
+                      {hasAsset ? <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span> : null}
                     </div>
-                    {hasAsset ? <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span> : null}
                     <span className={styles.mode}>{launch.category === "classic" ? "Classic" : isRobinhoodModuleLaunch(launch) ? "Module" : "Custom"}</span>
                   </div>
                   <div className={styles.cardFooter}>
@@ -420,7 +412,6 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
             <p>{loading || data?.status === "syncing" ? "Verified launches will appear here." : !failed && (snapshot?.request.q || hasFilters) && data?.status !== "unavailable" ? "Try another search or change the filters." : failed || data?.status === "unavailable" || data?.status === "stale" || data?.status === "partial" ? "Try again shortly." : `New ${chainName} launches appear after verification.`}</p>
             {!loading && snapshot?.request.q ? <button className={styles.textButton} type="button" onClick={clearSearch}>Clear search</button> : null}
             {!loading && hasFilters ? <button className={styles.textButton} type="button" onClick={() => applyFilters(defaultFilters)}>Clear filters</button> : null}
-            {!loading && (failed || data?.status === "unavailable" || data?.status === "partial" || data?.status === "stale") ? <button className={styles.textButton} type="button" aria-controls={listId} onClick={retry}>Try again</button> : null}
           </div>
         )}
       </section>

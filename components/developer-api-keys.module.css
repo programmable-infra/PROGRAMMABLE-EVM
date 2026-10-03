@@ -6,7 +6,7 @@
   --webde-ink: #f5f3ef;
   --webde-muted: #aaa9a5;
   --webde-dim: #aaa9a5;
-  --webde-line: #30302e;
+  --webde-line: var(--panel-line);
   --api-accent: #e786b2;
   --api-panel: var(--webde-surface);
   --api-line: var(--webde-line);

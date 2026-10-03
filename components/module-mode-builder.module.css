@@ -242,7 +242,7 @@
   .addButton:hover,
   .addedButton:hover,
   .secondaryButton:hover { background: var(--panel-fill-hover); border-color: #82827c; }
-  .primaryButton:hover { background: var(--panel-fill-action-hover); border-color: #fff; }
+  .primaryButton:hover { background: var(--panel-fill-action-hover); border-color: var(--panel-line); }
   .iconButton:hover { background: var(--panel-fill-hover); color: #fff; }
   .advancedToggle:hover .advancedTitle { color: #e9d8cf; }
 }

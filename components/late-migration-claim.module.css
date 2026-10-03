@@ -78,7 +78,7 @@
 .footer a { display: inline-flex; align-items: center; min-height: 44px; text-underline-offset: 4px; }
 .footer > span { display: inline-flex; align-items: center; min-height: 44px; }
 @media (hover: hover) {
-  .primaryAction:not(:disabled):hover { background: var(--panel-fill-action-hover); border-color: #fff; }
+  .primaryAction:not(:disabled):hover { background: var(--panel-fill-action-hover); border-color: var(--panel-line); }
   .maxButton:not(:disabled):hover { background: var(--panel-fill-hover); }
   .walletButton:hover { color: var(--intake-text); }
   .fomoHelp a:hover { color: #fff; }

@@ -40,6 +40,8 @@
 .avatar { border-radius: 8px; flex: none; margin-top: 4px; width: 64px; }
 .identityText { min-width: 0; }
 .nameRow { align-items: center; display: flex; flex-wrap: wrap; gap: 0 12px; }
+.ticker { color: var(--webde-muted); font-size: 18px; white-space: nowrap; }
+.chainLogo { flex: none; object-fit: contain; }
 .nameRow h1 {
   font-size: 30px;
   font-weight: 550;
@@ -98,10 +100,10 @@
 .launchActions { display: flex; flex: none; flex-wrap: wrap; gap: 8px; }
 
 .metrics {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  margin: 24px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  margin: 20px 0;
 }
 .metrics > div { min-width: 0; }
 .metrics dd strong { font: inherit; }
@@ -123,9 +125,9 @@
 .tradingLayout > * { min-width: 0; }
 
 .chart {
-  background: var(--webde-surface);
-  border: 1px solid var(--webde-line);
-  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
   min-height: 520px;
   overflow: hidden;
   position: relative;
@@ -176,13 +178,13 @@
   .avatar { width: 48px; }
   .nameRow { gap: 0 8px; }
   .nameRow h1 { font-size: 24px; line-height: 32px; }
-  .metrics { gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .metrics { gap: 12px 20px; }
   .metrics dd { font-size: 18px; line-height: 28px; }
   .chart { height: 400px; min-height: 400px; }
 }
 
 @media (max-width: 480px) {
-  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metrics { gap: 12px 20px; }
   .headerActions { display: flex; flex-wrap: wrap; width: 100%; }
   .headerActions > * { min-width: 0; }
   .headerActions .secondaryButton { font-size: 12px; gap: 4px; padding-inline: 8px; }
@@ -197,3 +199,11 @@
 .launchProperties { margin-top: 8px; max-width: 100%; width: fit-content; }
 .launchProperties > div { gap: 8px; justify-content: flex-start; }
 .launchProperties dt, .launchProperties dd { font-size: 14px; line-height: 22px; }
+.loadingIdentity { background: var(--panel-fill-control); border-radius: 8px; height: 64px; max-width: 320px; }
+.loadingMetrics { background: var(--panel-fill-control); border-radius: 6px; height: 48px; margin-block: 20px; max-width: 640px; }
+.loadingSwap { background: var(--panel-fill-soft); border-radius: 16px; min-height: 520px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .market { animation: marketEnter 220ms var(--webde-ease) both; }
+  @keyframes marketEnter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+}

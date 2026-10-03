@@ -1,6 +1,6 @@
 .article {
   --article-width: 70rem;
-  border-top: 1px solid color-mix(in srgb, var(--color-border, #ffffff) 16%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--color-border, var(--panel-line)) 16%, transparent);
   margin-block-start: clamp(4rem, 8vw, 8rem);
   padding-block: clamp(1.25rem, 2.5vw, 2rem) clamp(4rem, 8vw, 8rem);
 }
