@@ -67,6 +67,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const errorPanel = Object.keys(errors).some(key => ["name", "symbol", "description", "image", "initialBuy"].includes(key) || key.startsWith("social-")) ? "coin"
     : errors.quoteAsset ? "quote" : errors.creatorFeeBps ? "fees" : errors.modules ? draft.modules[0]?.id ?? "modules" : undefined;
   const panel = errorPanel && errorSignature !== handledErrors ? errorPanel : chosenPanel;
+  const activeMobilePanel = errorPanel && errorSignature !== handledErrors ? "settings" : mobilePanel;
   const selected = catalog.find(item => item.id === panel);
   const selection = draft.modules.find(item => item.id === panel);
   const inspectedSelection = selected ? selection ?? foundationStudioSelection(selected, savedConfigurations[selected.id]) : undefined;
@@ -74,7 +75,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const focusPanel = (id: Panel) => { setHandledErrors(errorSignature); setPanel(id); setMobilePanel("settings"); };
   const closePicker = () => { picker.current?.close(); setPickerOpen(false); };
   const nextPanel = (removed: string) => draft.modules.find(item => item.id !== removed)?.id ?? "coin";
-  const disableQuote = () => { if (draft.quoteAsset) setSavedQuote(draft.quoteAsset); props.onDefaultQuote(); if (panel === "quote") focusPanel(nextPanel("quote")); };
+  const disableQuote = () => { setSavedQuote(draft.quoteAsset); props.onDefaultQuote(); if (panel === "quote") focusPanel(nextPanel("quote")); };
   const enableQuote = () => { if (savedQuote) props.onQuoteChange(savedQuote); else props.onEnableQuote(); focusPanel("quote"); };
   const blockedReason = (descriptor: FoundationModuleDescriptor) => {
     if (!descriptor.available) return descriptor.unavailableReason || "Module unavailable";
@@ -106,10 +107,10 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
     {errors[key] ? <span className={styles.error}>{errors[key]}</span> : null}
   </label>;
 
-  return <form className={styles.studio} ref={formRef} onSubmit={props.onSubmit} noValidate>
+  return <form className={styles.studio} ref={formRef} onSubmit={event => { setHandledErrors(""); props.onSubmit(event); }} noValidate>
     <header className={styles.heading}>{props.preview ? <a className={styles.homeLogo} href="https://programmable.market" aria-label="Programmable home"><Image src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png" alt="" width={42} height={52} unoptimized /></a> : null}<div className={styles.title}><h1>Module Mode</h1><p>Build your coin with the rules you choose</p></div>{props.preview ? <span className={styles.previewTag}>Preview</span> : null}</header>
-    <nav className={styles.mobileNavigation} aria-label="Studio panels">{(["modules", "canvas", "settings"] as const).map(value => <button type="button" key={value} aria-pressed={mobilePanel === value} onClick={() => setMobilePanel(value)}>{value === "canvas" ? "Your coin" : value[0].toUpperCase() + value.slice(1)}</button>)}</nav>
-    <fieldset className={styles.workspace} disabled={disabled} data-mobile-panel={errorPanel && errorSignature !== handledErrors ? "settings" : mobilePanel}>
+    <nav className={styles.mobileNavigation} aria-label="Studio panels">{(["modules", "canvas", "settings"] as const).map(value => <button type="button" key={value} aria-pressed={activeMobilePanel === value} onClick={() => { setPanel(panel); setHandledErrors(errorSignature); setMobilePanel(value); }}>{value === "canvas" ? "Your coin" : value[0].toUpperCase() + value.slice(1)}</button>)}</nav>
+    <fieldset className={styles.workspace} disabled={disabled} data-mobile-panel={activeMobilePanel}>
       <aside id="studio-module-library" tabIndex={-1} className={styles.library} aria-label="Module library">
         <div className={styles.panelHeading}><h2>Modules</h2></div>
         <div className={styles.moduleList} aria-busy={props.modulesLoading || undefined}>

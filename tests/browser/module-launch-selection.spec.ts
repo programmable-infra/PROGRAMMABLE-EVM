@@ -3,6 +3,8 @@ import type { Server } from "node:http";
 import { expect, test } from "@playwright/test";
 // @ts-expect-error Local executable browser fixture with no wallet or RPC calls.
 import { createModuleLaunchSelectionServer } from "./fixtures/module-launch-selection-server.mjs";
+// @ts-expect-error Local executable studio fixture with no wallet or RPC calls.
+import { createModuleStudioServer } from "./fixtures/module-studio-server.mjs";
 
 let server: Server, origin: string;
 test.beforeAll(async () => {
@@ -113,4 +115,79 @@ test("empty and single-template libraries keep irrelevant controls out of the fl
   await page.goto(`${origin}?mode=unknown`); await page.getByRole("button", { name: "Add modules", exact: true }).click();
   await expect(page.getByText("Platform fee unavailable.", { exact: true })).toBeVisible();
   await expect(page.getByRole("dialog")).not.toContainText("0.30%");
+});
+
+test.describe("Module Studio", () => {
+  let studioServer: Server, studioOrigin: string;
+  test.beforeAll(async () => {
+    studioServer = await createModuleStudioServer(); studioServer.listen(0, "127.0.0.1"); await once(studioServer, "listening");
+    const address = studioServer.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
+    studioOrigin = `http://127.0.0.1:${address.port}`;
+  });
+  test.afterAll(async () => { if (studioServer) { studioServer.close(); await once(studioServer, "close"); } });
+
+  test("quote toggle restores a saved choice but respects an explicitly cleared address", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 }); await page.goto(studioOrigin);
+    const toggle = page.getByRole("switch", { name: "Any Quote Pool", exact: true });
+    const address = page.getByLabel("Quote token address", { exact: true });
+    const node = page.locator('[data-node-id="quote"]');
+    await expect(node).toHaveCount(0);
+    await toggle.click(); await address.fill("0x1111111111111111111111111111111111111111");
+    await toggle.click(); await expect(node).toHaveCount(0);
+    await expect(page.locator('[data-node-id="coin"]')).toContainText("$COIN / ETH");
+    await toggle.click(); await expect(address).toHaveValue("0x1111111111111111111111111111111111111111");
+    await address.fill(""); await toggle.click(); await toggle.click();
+    await expect(address).toHaveValue(""); await expect(toggle).toHaveAttribute("aria-checked", "true");
+  });
+
+  for (const width of [390, 320]) {
+    test(`validation highlights the visible panel and still allows navigation at ${width}px`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 }); await page.goto(`${studioOrigin}?mode=error`);
+      const navigation = page.getByRole("navigation", { name: "Studio panels" });
+      const settings = navigation.getByRole("button", { name: "Settings", exact: true });
+      const modules = navigation.getByRole("button", { name: "Modules", exact: true });
+      const canvas = navigation.getByRole("button", { name: "Your coin", exact: true });
+      await expect(settings).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+      await modules.click(); await expect(modules).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("switch", { name: "Any Quote Pool", exact: true })).toBeVisible();
+      await expect(page.getByLabel("Name", { exact: true })).toBeHidden();
+      await canvas.click(); await expect(canvas).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByRole("button", { name: "Edit coin details", exact: true })).toBeVisible();
+      await settings.click(); await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+    });
+  }
+
+  test("resubmitting unchanged validation errors reveals coin details from a module inspector", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 }); await page.goto(`${studioOrigin}?mode=error`);
+    await page.getByRole("switch", { name: "Initial wallet buy limit", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Initial wallet buy limit", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Review coin", exact: true }).click();
+    await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Edit Initial wallet buy limit", exact: true }).click();
+    await page.getByRole("button", { name: "Review coin", exact: true }).click();
+    await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+    await expect(page.getByText("Enter a coin name", { exact: true })).toBeVisible();
+  });
+
+  test("dragging a module flower moves its card and line while the coin stays centered", async ({ page }) => {
+    const errors: string[] = []; page.on("pageerror", error => errors.push(error.message));
+    await page.setViewportSize({ width: 1440, height: 900 }); await page.goto(studioOrigin);
+    await page.getByRole("switch", { name: "Initial wallet buy limit", exact: true }).click();
+    const moduleCard = page.locator('[data-node-id="wallet-cap-fixture"]');
+    const coin = page.locator('[data-node-id="coin"]');
+    await expect(moduleCard).toBeVisible();
+    const before = await moduleCard.boundingBox(), coinBefore = await coin.boundingBox();
+    const flower = await moduleCard.locator('[data-flower]').boundingBox();
+    const line = page.locator('section[aria-label="Coin composition"] svg path').first();
+    await expect(line).toBeVisible(); const pathBefore = await line.getAttribute("d");
+    await page.mouse.move(flower!.x + flower!.width / 2, flower!.y + flower!.height / 2);
+    await page.mouse.down(); await page.mouse.move(flower!.x + flower!.width / 2 + 30, flower!.y + flower!.height / 2 + 150, { steps: 8 }); await page.mouse.up();
+    await expect.poll(async () => (await moduleCard.boundingBox())!.y).toBeGreaterThan(before!.y + 40);
+    const after = await moduleCard.boundingBox(), coinAfter = await coin.boundingBox();
+    expect(coinAfter!.x).toBeCloseTo(coinBefore!.x, 1); expect(coinAfter!.y).toBeCloseTo(coinBefore!.y, 1);
+    expect(after!.x + after!.width <= coinAfter!.x || after!.x >= coinAfter!.x + coinAfter!.width || after!.y + after!.height <= coinAfter!.y || after!.y >= coinAfter!.y + coinAfter!.height).toBe(true);
+    await expect(line).not.toHaveAttribute("d", pathBefore!);
+    expect(errors).toEqual([]);
+  });
 });
