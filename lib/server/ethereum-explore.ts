@@ -126,7 +126,9 @@ export async function readEthereumToken(address: string, dependencies?: Dependen
       token = findToken();
     }
     return { chainId: catalog.chainId, status: catalog.status, sources: catalog.sources, updatedAt: catalog.updatedAt,
-      token };
+      // The verified snapshot uses null-prototype proof records. React requires
+      // plain objects at the client boundary; preserve every proof field in a copy.
+      token: token ? structuredClone(token) : null };
   } catch {
     return { chainId: 1 as const, status: "unavailable" as const, updatedAt: null, token: null };
   }

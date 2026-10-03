@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { canonicalTokenExploreEntryV1 } from "@/lib/explore-entry-v1";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import { parseEthereumExploreQuery } from "@/lib/ethereum-explore";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/market-data/envio-classic-v3-catalog.server", () => ({ readEnvioClassicV3CatalogV1: vi.fn() }));
 vi.mock("@/lib/alchemy/router-custom-public.server", () => ({ readWebsiteRouterCustomIdentitySnapshotV1: vi.fn() }));
@@ -50,6 +51,35 @@ describe("Ethereum verified Explore adapter", () => {
     expect(result.status).toBe("ready");
     expect(result.token?.tokenAddress).toBe(entry(1).tokenAddress);
     expect(classic).toHaveBeenCalledTimes(2);
+  });
+  it("passes verified Custom Graph proof records to React as plain objects without changing their evidence", async () => {
+    function nullPrototypeCopy(value: unknown): unknown {
+      if (Array.isArray(value)) return value.map(nullPrototypeCopy);
+      if (value !== null && typeof value === "object") {
+        return Object.assign(Object.create(null), Object.fromEntries(
+          Object.entries(value).map(([key, child]) => [key, nullPrototypeCopy(child)]),
+        ));
+      }
+      return value;
+    }
+    function expectClientObjects(value: unknown) {
+      if (Array.isArray(value)) value.forEach(expectClientObjects);
+      else if (value !== null && typeof value === "object") {
+        expect(Object.getPrototypeOf(value)).toBe(Object.prototype);
+        Object.values(value).forEach(expectClientObjects);
+      }
+    }
+    const stamp = nullPrototypeCopy(customGraphExploreEntry.launchStampProvenance) as
+      NonNullable<CanonicalTokenExploreEntry["launchStampProvenance"]>;
+    const verified = canonicalTokenExploreEntryV1({ ...customGraphExploreEntry, launchStampProvenance: stamp });
+    expect(Object.getPrototypeOf(verified.launchStampProvenance)).toBeNull();
+    const result = await readEthereumToken(verified.tokenAddress, { classic: source([]), custom: source([verified]) });
+    expect(result.status).toBe("ready");
+    expect(result.token).toEqual(verified);
+    expectClientObjects(result.token);
+    expect(canonicalTokenExploreEntryV1(result.token!)).toEqual(verified);
+    expect(Object.getPrototypeOf(verified.launchStampProvenance)).toBeNull();
+    expect(Object.getPrototypeOf(verified.launchStampProvenance!.components[0])).toBeNull();
   });
   it("bounds recovery and keeps a persistently missing source unavailable", async () => {
     const classic = vi.fn(unavailable);
