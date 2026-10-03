@@ -398,8 +398,10 @@ export async function prepareFoundationTrade(input: { client: PublicClient; bind
     || input.slippageBps < 1 || input.slippageBps > 1_000) throw new Error("Invalid trade amount or slippage.");
   const key = foundationPoolKey(input.pool);
   if (foundationPoolId(key) !== input.pool.poolId) throw new Error("The pool key changed.");
-  const provenance = await assertFoundationPool(client, binding, input.pool, checkpoint.blockNumber);
-  const moduleCount = await client.readContract({ address: input.pool.hook, abi: foundationHookAbi, functionName: "moduleCount", blockNumber: checkpoint.blockNumber });
+  const [provenance, moduleCount] = await Promise.all([
+    assertFoundationPool(client, binding, input.pool, checkpoint.blockNumber),
+    client.readContract({ address: input.pool.hook, abi: foundationHookAbi, functionName: "moduleCount", blockNumber: checkpoint.blockNumber }),
+  ]);
   if (moduleCount > 8n || (moduleCount > 0n && (!input.moduleReview || BigInt(input.moduleReview.selections.length) !== moduleCount))) {
     throw new Error("Verify this pool's original admitted module sources before trading.");
   }
@@ -433,9 +435,12 @@ export async function prepareFoundationTrade(input: { client: PublicClient; bind
   let route = makeRoute(minimumOutput);
   const approvals: FoundationPreparedStep[] = [];
   if (route.approval) {
-    approvals.push(...await erc20Approvals(client, { account, token: currencyIn, spender: route.approval.spender, amount: input.amountIn, blockNumber: checkpoint.blockNumber }));
-    const allowance = await client.readContract({ address: route.approval.spender, abi: foundationPermit2Abi, functionName: "allowance",
-      args: [account, currencyIn, route.approval.permit2Spender], blockNumber: checkpoint.blockNumber });
+    const [tokenApprovals, allowance] = await Promise.all([
+      erc20Approvals(client, { account, token: currencyIn, spender: route.approval.spender, amount: input.amountIn, blockNumber: checkpoint.blockNumber }),
+      client.readContract({ address: route.approval.spender, abi: foundationPermit2Abi, functionName: "allowance",
+        args: [account, currencyIn, route.approval.permit2Spender], blockNumber: checkpoint.blockNumber }),
+    ]);
+    approvals.push(...tokenApprovals);
     if (allowance[0] < input.amountIn || allowance[1] < Number(route.deadline)) approvals.push({ label: "Authorize the Universal Router", kind: "approve",
       transaction: { from: account, to: route.approval.spender, data: encodeFunctionData({ abi: foundationPermit2Abi, functionName: "approve",
         args: [currencyIn, route.approval.permit2Spender, input.amountIn, Number(route.deadline)] }), value: 0n }, gasUsed: 0n,

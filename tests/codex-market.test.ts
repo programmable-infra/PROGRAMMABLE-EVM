@@ -90,15 +90,15 @@ describe("Codex server market adapter", () => {
     await expect(readCodexChart(address, 4663, "unknown")).rejects.toThrow("Invalid chart request");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
-  it("requests a real minute window and accepts a resolution-aligned leading candle", async () => {
+  it("requests thirty minutes of one-minute candles and accepts a resolution-aligned leading candle", async () => {
     vi.stubEnv("CODEX_API_KEY", "test-private-key");
     const now = Math.floor(Date.now() / 1000);
-    const fetcher = vi.fn().mockResolvedValue(Response.json({ data: { getTokenBars: bars({ t: [now - 61, now], c: [.001, .002] }) } }));
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ data: { getTokenBars: bars({ t: [now - 1_860, now], c: [.001, .002] }) } }));
     vi.stubGlobal("fetch", fetcher);
     const values = await Promise.all([readCodexChart(address, 4663, "1m"), readCodexChart(address.toUpperCase(), 4663, "1m")]);
     expect(values[0].points).toHaveLength(2); expect(values[1]).toEqual(values[0]);
     expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(JSON.parse(fetcher.mock.calls[0][1].body).variables).toMatchObject({ from: now - 60, to: now, resolution: "1S" });
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).variables).toMatchObject({ from: now - 1_800, to: now, resolution: "1" });
     expect(JSON.parse(fetcher.mock.calls[0][1].body).query).not.toContain("countback");
   });
   it("backs off a failed provider request instead of repeatedly retrying it", async () => {

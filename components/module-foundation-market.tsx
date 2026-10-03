@@ -115,7 +115,7 @@ export function ModuleFoundationMarket(props: ModuleFoundationMarketProps) {
         if (invalid) throw new Error(invalid);
         setQuotation({ key: quoteKey, review: value!, receivedAt: Date.now() });
       }).catch(caught => { if (active) setQuotation({ key: quoteKey, error: humanError(caught), receivedAt: Date.now() }); });
-    }, 450);
+    }, 250);
     return () => { active = false; clearTimeout(timer); };
   }, [quoteReady, quoteKey, contextKey, availability.chainId, draft, busy, outputAsset.decimals, quote.decimals]);
 

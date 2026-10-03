@@ -2068,8 +2068,10 @@
 }
 
 .modelCard.modelCard {
-  background: var(--webde-surface);
-  border: 1px solid var(--webde-line);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  background: var(--panel-fill-soft);
+  border: 0;
   border-radius: var(--webde-radius-card);
   box-shadow: none;
   min-height: 390px;
@@ -2092,9 +2094,13 @@
 .artImage {
   height: 100% !important;
   inset: 0 !important;
-  object-position: center 60%;
+  object-position: center top;
   transform: none;
   width: 100% !important;
+}
+
+.customArt.customArt {
+  background: #000;
 }
 
 .modelCard[data-launch-model-available="false"] .modelArt img {
