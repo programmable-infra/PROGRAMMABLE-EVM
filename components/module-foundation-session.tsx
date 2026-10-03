@@ -9,6 +9,7 @@ import { ROBINHOOD_BLOCK_EXPLORER_URL } from "@/lib/chains";
 import { createFoundationClient } from "@/lib/module-foundation/client";
 import { fetchFoundationAvailability, FoundationProviderDisagreementError, type FoundationAvailabilityEnvelope } from "@/lib/module-foundation/availability";
 import { bindFoundationCatalogV1 } from "@/lib/module-foundation/catalog";
+import { readFoundationLaunchDisplay, rememberFoundationLaunchDisplay, subscribeFoundationLaunchDisplay } from "@/lib/module-foundation/launch-display-cache";
 import { bindFoundationWalletStep, FOUNDATION_PENDING_EVENT, readFoundationPending, reconcileFoundationPending,
   submitFoundationWalletStep, type FoundationPreparedSequence } from "@/lib/module-foundation/wallet";
 import { acknowledgeFoundationResolution, FOUNDATION_RESOLUTION_EVENT, readFoundationResolution,
@@ -53,6 +54,7 @@ export function useFoundationSession(token?: Address) {
   const targetKey = token?.toLowerCase() ?? "launch";
   const [envelopeState, setEnvelopeState] = useState<{ targetKey: string; refresh: number; value: FoundationAvailabilityEnvelope | null } | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const displayEnvelope = useSyncExternalStore(subscribeFoundationLaunchDisplay, readFoundationLaunchDisplay, () => null);
   const envelope = envelopeState?.targetKey === targetKey && (!token || envelopeState.refresh === refresh) ? envelopeState.value : null;
   const availabilityError = envelopeState?.targetKey === targetKey && envelopeState.refresh === refresh && envelopeState.value === null;
   const [progress, setProgress] = useState("");
@@ -94,7 +96,10 @@ export function useFoundationSession(token?: Address) {
   useEffect(() => {
     const controller = new AbortController();
     void loadFoundationSessionAvailability(controller.signal, token).then(value => {
-      if (!controller.signal.aborted) setEnvelopeState({ targetKey, refresh, value });
+      if (!controller.signal.aborted) {
+        if (!token) rememberFoundationLaunchDisplay(value);
+        setEnvelopeState({ targetKey, refresh, value });
+      }
     }).catch(() => { if (!controller.signal.aborted) setEnvelopeState({ targetKey, refresh, value: null }); });
     return () => controller.abort();
   }, [refresh, token, targetKey]);
@@ -201,7 +206,7 @@ export function useFoundationSession(token?: Address) {
     await acknowledgeFoundationResolution(account, operationId);
     if (resetDraft) setResultGeneration(value => value + 1);
   }
-  return { client, account, walletContext, availability, envelope, contextKey, walletAction, submissionBlocked, preparationBlocked,
+  return { client, account, walletContext, availability, envelope, displayEnvelope: token ? null : displayEnvelope, contextKey, walletAction, submissionBlocked, preparationBlocked,
     pending, resolution, resolutionState, resultGeneration, acknowledgeResult, progress, assertCurrent, resolveAuthority, resolveCatalog, execute, refreshResult,
     retryAvailability: () => setRefresh(value => value + 1) };
 }

@@ -17,6 +17,7 @@ import { PROGRAMMABLE_LAUNCH_STAMP_MANIFEST } from
 import {
   isPublicExploreIdentityV1,
   NON_PUBLIC_EXPLORE_IDENTITIES_V1,
+  OWNER_HIDDEN_EXPLORE_IDENTITIES_V1,
 } from "../lib/explore-public-visibility";
 
 function sorted(values: readonly string[]) {
@@ -54,6 +55,14 @@ describe("public Explore visibility", () => {
       tokenAddress: "0x1111111111111111111111111111111111111111",
     })).toBe(true);
     expect(isPublicExploreIdentityV1({})).toBe(true);
+  });
+
+  it("hides the owner-selected Ethereum launch only from discovery on that chain", () => {
+    const [hidden] = OWNER_HIDDEN_EXPLORE_IDENTITIES_V1;
+    expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity })).toBe(false);
+    expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity.toUpperCase() }, 1)).toBe(false);
+    expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity }, 4663)).toBe(true);
+    expect(isPublicExploreIdentityV1({ tokenAddress: "0x1111111111111111111111111111111111111111" }, 1)).toBe(true);
   });
 
 });

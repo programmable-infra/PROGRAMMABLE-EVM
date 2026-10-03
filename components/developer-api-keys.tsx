@@ -1,6 +1,7 @@
 "use client";
 
 import { Disclosure } from "@/components/disclosure";
+import { StudioAtmosphere } from "@/components/module-studio/studio-atmosphere";
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -14,7 +15,6 @@ import {
   type KeyboardEvent,
 } from "react";
 import {
-  ArrowLeft,
   ArrowRight,
   Check,
   Copy,
@@ -954,26 +954,27 @@ export function DeveloperApiKeysView({
   );
   const activeKey = apiKeys.find((key) => keyStatus(key) === "Active"
     && key.scopes.some((scope) => fixedScopes.includes(scope as typeof fixedScopes[number])));
+  const pendingAuthHeaders = useRef<Promise<Headers> | null>(null);
 
   const getAuthHeaders = useCallback(
     async (json = false) => {
-      // Privy may refresh the identity session while resolving this token.
-      // Read the access token afterwards so both headers describe one session.
-      const identityToken = await getIdentityToken().catch(() => null);
-      const accessToken = await getAccessToken();
-      if (!accessToken) {
-        throw new Error(
-          "Your wallet session expired. Reconnect your wallet and try again.",
-        );
+      if (!pendingAuthHeaders.current) {
+        // Concurrent list/capability reads share one coherent session refresh.
+        // The view is remounted for each wallet; settled credentials are never cached.
+        const pending = (async () => {
+          const identityToken = await getIdentityToken().catch(() => null);
+          const accessToken = await getAccessToken();
+          if (!accessToken) throw new Error("Your wallet session expired. Reconnect your wallet and try again.");
+          const headers = new Headers({ Accept: "application/json", Authorization: `Bearer ${accessToken}` });
+          if (identityToken) headers.set("X-Privy-Identity-Token", identityToken);
+          return headers;
+        })();
+        pendingAuthHeaders.current = pending;
+        void pending.finally(() => {
+          if (pendingAuthHeaders.current === pending) pendingAuthHeaders.current = null;
+        }).catch(() => undefined);
       }
-
-      const headers = new Headers({
-        Accept: "application/json",
-        Authorization: `Bearer ${accessToken}`,
-      });
-      if (identityToken) {
-        headers.set("X-Privy-Identity-Token", identityToken);
-      }
+      const headers = new Headers(await pendingAuthHeaders.current);
       if (json) headers.set("Content-Type", "application/json");
       return headers;
     },
@@ -990,6 +991,7 @@ export function DeveloperApiKeysView({
       const refreshRequest = mode !== "initial";
       try {
         const headers = await getAuthHeaders();
+        signal?.throwIfAborted();
         const query = `?walletAddress=${encodeURIComponent(walletAddress)}`;
         let response = await fetch(`/api/developer/api-keys/v2${query}`, {
           cache: "no-store", headers, signal,
@@ -998,6 +1000,7 @@ export function DeveloperApiKeysView({
         let parsed = response?.ok ? parseApiKeyList(body, walletAddress) : null;
         // Read-only compatibility fallback. Mutation routes never fall back.
         if (!parsed) {
+          signal?.throwIfAborted();
           response = await fetch(`/api/developer/api-keys${query}`, { cache: "no-store", headers, signal });
           body = await readJson(response);
           parsed = response.ok ? parseApiKeyList(body) : null;
@@ -1005,7 +1008,7 @@ export function DeveloperApiKeysView({
         if (!parsed) throw new Error(response?.ok
           ? "Programmable could not verify the API key list. Refresh and try again."
           : response ? readApiError(response, body, "Unable to load API keys.") : "Unable to load API keys.");
-        if (readGeneration !== apiKeyReadGenerationRef.current) return;
+        if (readGeneration !== apiKeyReadGenerationRef.current || signal?.aborted) return;
         setApiKeys((current) => mergeApiKeySummaries(current, parsed));
         setListState("ready");
         if (mode === "refresh") setStatusMessage("API keys refreshed.");
@@ -1128,8 +1131,6 @@ export function DeveloperApiKeysView({
           const guide = guideRef.current;
           if (!guide) return;
           guide.open = true;
-          guide.scrollIntoView({ block: "start" });
-          guide.querySelector("summary")?.focus({ preventScroll: true });
         });
       }
     }, 0);
@@ -1511,6 +1512,8 @@ export function DeveloperApiKeysView({
   };
 
   return (
+    <div className={styles.experience}>
+    <StudioAtmosphere />
     <div className={`${styles.page} page-width`}>
       <p
         className={styles.visuallyHidden}
@@ -1521,19 +1524,12 @@ export function DeveloperApiKeysView({
         {statusMessage}
       </p>
 
-      <nav className={styles.topNavigation} aria-label="Page navigation">
-        <Link className={styles.backLink} href="/">
-          <ArrowLeft aria-hidden="true" size={16} strokeWidth={1.9} />
-          <span>Home</span>
-        </Link>
-      </nav>
-
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
-          <h1>{activeSection === "keys" ? "API keys" : "Your launches"}</h1>
+          <h1>{activeSection === "keys" ? initialGuideOpen ? "Custom Hook" : "API keys" : "Your launches"}</h1>
           <p className={styles.intro}>
             {activeSection === "keys"
-              ? "Create and manage API keys for custom hooks on Robinhood."
+              ? initialGuideOpen ? "Build your coin with your own trading rules" : "Create a key for your builder and manage its access"
               : "Review and sign launches prepared through the API."}
           </p>
         </div>
@@ -1566,11 +1562,10 @@ export function DeveloperApiKeysView({
           data-manifest-digest={launchContractSetup?.manifestDigest}>
           <summary>Build a custom hook <ChevronDown size={16} aria-hidden="true" /></summary>
           <div className={styles.buildGuideBody}>
-            <p>A hook defines your coin’s trading rules. Use a coding assistant or your own code to build it.</p>
             <ol className={styles.buildSteps}>
               <li><strong>Create an API key</strong><span>Connect your wallet and create a key below, or use one you already saved.</span></li>
-              <li><strong>Describe your idea</strong><span>Give the instructions to your builder, then explain what your hook should do. Keep your API key in its secure settings.</span></li>
-              <li><strong>Review and launch</strong><span>Your builder submits the project and gives you a link here for review and any wallet confirmations.</span></li>
+              <li><strong>Build your hook</strong><span>Give your builder the instructions and describe your rules. Save the key in its secure settings.</span></li>
+              <li><strong>Review and launch</strong><span>Your builder sends you a review link. Check the launch here, then confirm its transactions in your wallet.</span></li>
             </ol>
             <button className={styles.secondaryButton} type="button" onClick={() => void copyAgentSetup(activeKey?.scopes)}>
               {setupCopyState === "copied" ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
@@ -2165,9 +2160,11 @@ export function DeveloperApiKeysView({
       )}
 
       <nav className={styles.resourceLinks} aria-label="Developer resources">
-        <a href="https://api.programmable.market/v4/chains/4663/custom-launch-contract/guide.md">Developer docs <ArrowRight size={16} aria-hidden="true" /></a>
+        <a href="https://api.programmable.market/v4/chains/4663/custom-launch-contract/guide.md">Robinhood API guide <ArrowRight size={16} aria-hidden="true" /></a>
+        <Link href="/developer-reference/ethereum-custom-hook">Ethereum launch stamps <ArrowRight size={16} aria-hidden="true" /></Link>
       </nav>
 
+    </div>
     </div>
   );
 }

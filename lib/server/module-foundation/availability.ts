@@ -3,6 +3,7 @@ import { getAddress, type Address } from "viem";
 import { withFoundationOwnerCatalogV1 } from "./owner-catalog";
 
 export class FoundationAvailabilityInputError extends Error {}
+const pendingReads = new WeakMap<typeof fetch, Map<string, Promise<unknown>>>();
 
 export function parseFoundationAvailabilityToken(params: URLSearchParams): Address | undefined {
   if ([...params.keys()].some(key => key !== "token") || params.getAll("token").length > 1) {
@@ -24,7 +25,21 @@ export async function readFoundationAvailabilityResponse(fetcher: typeof fetch =
   const base = new URL(raw);
   if (base.protocol !== "https:" || base.username || base.password || base.search || base.hash) throw new Error("Invalid foundation authority origin.");
   const endpoint = token === undefined ? "/v1/modules/foundation/availability" : `/v1/modules/foundation/availability/token/${token}`;
-  const response = await fetcher(new URL(endpoint, base), {
+  let requests = pendingReads.get(fetcher);
+  if (!requests) { requests = new Map(); pendingReads.set(fetcher, requests); }
+  const key = `${base.href}:${endpoint}:${timeoutMs}`;
+  const existing = requests.get(key);
+  if (existing) return existing;
+  // Share concurrent verification, never a settled authority response. A later
+  // preparation still reads its current runtime, catalog and finality evidence.
+  const pending = readCurrentAvailability(fetcher, new URL(endpoint, base), timeoutMs, token);
+  requests.set(key, pending);
+  try { return await pending; }
+  finally { if (requests.get(key) === pending) requests.delete(key); }
+}
+
+async function readCurrentAvailability(fetcher: typeof fetch, endpoint: URL, timeoutMs: number, token?: Address) {
+  const response = await fetcher(endpoint, {
     cache: "no-store", redirect: "error", signal: AbortSignal.timeout(timeoutMs), headers: { Accept: "application/json" },
   });
   if (!response.ok || response.redirected || !response.headers.get("content-type")?.startsWith("application/json") || !response.body) throw new Error("The foundation authority is unavailable.");

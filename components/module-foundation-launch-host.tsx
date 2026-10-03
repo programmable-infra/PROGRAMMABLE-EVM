@@ -14,7 +14,8 @@ import { bindFoundationCatalogV1 } from "@/lib/module-foundation/catalog";
 import { presentFoundationCatalogV1 } from "@/lib/module-foundation/presentation";
 import { FOUNDATION_HOST_ADAPTER_ID_V1 } from "@/lib/module-foundation/manifest";
 import { parseFoundationAssetPinsV1 } from "@/lib/module-foundation/assets";
-import { foundationMetadata, prepareFoundationLaunch, readFoundationQuote } from "@/lib/module-foundation/client";
+import { createFoundationClient, foundationMetadata, prepareFoundationLaunch } from "@/lib/module-foundation/client";
+import { readFoundationQuoteForDisplay } from "@/lib/module-foundation/launch-display-cache";
 import { isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
 import { readFoundationSuggestedBuy } from "@/lib/module-foundation/first-buy";
 import { retryFoundationReadOnlyPreparation } from "@/lib/module-foundation/preparation-retry";
@@ -69,6 +70,8 @@ export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, sav
 
 export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form" | "studio" } = {}) {
   const router = useRouter(), session = useFoundationSession();
+  // Presentation metadata can share one HTTP batch; preparation uses the session's fresh client.
+  const displayClient = useMemo(() => createFoundationClient({ batchRpc: true }), []);
   const [completedDraft, setCompletedDraft] = useState<string | null>(null);
   const [suggestedInitialBuy, setSuggestedInitialBuy] = useState<string>();
   const suggestedBuyRequest = useRef<Promise<string> | null>(null);
@@ -80,10 +83,11 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
   const launching = useRef(false);
   const [savedLaunchError, setSavedLaunchError] = useState<string | null>(null);
   const [recoveryRetry, setRecoveryRetry] = useState(0);
-  const catalog = useMemo(() => session.envelope ? presentFoundationCatalogV1({
-    catalog: bindFoundationCatalogV1(session.envelope.catalog.document, session.envelope.catalog.authority),
+  const displayEnvelope = session.envelope ?? session.displayEnvelope;
+  const catalog = useMemo(() => displayEnvelope ? presentFoundationCatalogV1({
+    catalog: bindFoundationCatalogV1(displayEnvelope.catalog.document, displayEnvelope.catalog.authority),
     chainId: 4663, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1,
-  }) : [], [session.envelope]);
+  }) : [], [displayEnvelope]);
 
   useEffect(() => {
     const saved = session.resolution;
@@ -112,19 +116,19 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
 
   useEffect(() => {
     let active = true;
-    // A convenience choice from the existing chain asset registry; all displayed metadata is read fresh.
-    void readFoundationQuote(session.client, FOUNDATION_WETH, session.account).then(quote => {
+    // Metadata is display-only and shared across wallet changes. Preparation rereads the exact quote and balance.
+    void readFoundationQuoteForDisplay(displayClient, FOUNDATION_WETH).then(quote => {
       if (!active) return;
       const asset: FoundationQuoteAsset = { address: quote.address, chainId: 4663, name: quote.name, symbol: quote.symbol,
         decimals: quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(quote), ...(quote.balance === null ? {} : { balance: formatUnits(quote.balance, quote.decimals) }) };
       setQuoteState(current => ({ context: session.contextKey, assets: [asset, ...(current.context === session.contextKey ? current.assets.filter(item => item.address !== asset.address) : [])] }));
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [session.client, session.account, session.contextKey]);
+  }, [displayClient, session.contextKey]);
 
   async function resolveQuote(address: Address): Promise<FoundationQuoteAsset> {
     const expectedContext = session.contextKey;
-    const quote = await readFoundationQuote(session.client, getAddress(address), session.account);
+    const quote = await readFoundationQuoteForDisplay(displayClient, getAddress(address));
     if (session.account) session.assertCurrent(session.account, expectedContext);
     const asset: FoundationQuoteAsset = { address: quote.address, chainId: 4663, name: quote.name, symbol: quote.symbol,
       decimals: quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(quote), ...(quote.balance === null ? {} : { balance: formatUnits(quote.balance, quote.decimals) }) };

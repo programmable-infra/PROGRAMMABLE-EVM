@@ -15,8 +15,11 @@ describe("Module Studio interface", () => {
     const availability = { chainId: 4663, chainName: "Robinhood Chain" };
     expect(render({ ...availability, status: "checking" })).toContain("Loading modules…");
     const checking = render({ ...availability, status: "checking" }, [descriptor]);
-    expect(checking).not.toContain('aria-label="Any Quote Pool"');
-    expect(checking).not.toContain('aria-label="Initial wallet buy limit"');
+    expect(checking).toContain('aria-label="Any Quote Pool"');
+    expect(checking).toContain('aria-label="Initial wallet buy limit"');
+    // A recent catalog may be shown while fresh authority is loading, but it cannot launch.
+    expect(checking).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
+    expect(render({ ...availability, status: "checking" })).toContain('aria-label="Any Quote Pool"');
     const ready = render({ ...availability, status: "ready" }, [descriptor]);
     expect(ready).toContain('aria-label="Any Quote Pool"');
     expect(ready).toContain('aria-label="Initial wallet buy limit"');

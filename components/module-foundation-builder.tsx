@@ -326,7 +326,7 @@ export function ModuleFoundationBuilder({ layout = "form", availability, context
     initialBuy={initialBuy} actionLabel={actionLabel} disabled={locked || imagePreparing} busy={busy || walletAction?.busy}
     actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
     error={error || submissionBlocked} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
-    customQuote={customQuote} canResolveQuote={canResolveQuote} modulesLoading={availability.status === "checking"} formRef={form} imageInput={imageInput}
+    customQuote={customQuote} canResolveQuote={canResolveQuote} modulesLoading={availability.status === "checking" && !catalog.length} formRef={form} imageInput={imageInput}
     onSocialChange={updateSocial} onImageError={() => setImageError("The image could not load. Choose another image.")}
     onEnableQuote={() => chooseMarket(true)} onRetryAvailability={availability.status === "unavailable" ? onRetryAvailability : undefined}
     emptyModulesMessage={availability.status === "checking" ? "Loading modules…" : availability.status === "unavailable" ? "Modules could not load." : "No modules available"}

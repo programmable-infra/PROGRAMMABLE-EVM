@@ -3,10 +3,11 @@ import { canonicalTokenExploreEntryV1 } from "@/lib/explore-entry-v1";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import { parseEthereumExploreQuery } from "@/lib/ethereum-explore";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
+import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/market-data/envio-classic-v3-catalog.server", () => ({ readEnvioClassicV3CatalogV1: vi.fn() }));
 vi.mock("@/lib/alchemy/router-custom-public.server", () => ({ readWebsiteRouterCustomIdentitySnapshotV1: vi.fn() }));
-import { readEthereumLaunches, readEthereumToken } from "@/lib/server/ethereum-explore";
+import { readEthereumCustomExploreCatalog, readEthereumLaunches, readEthereumToken } from "@/lib/server/ethereum-explore";
 const hex = (n: number, size: number) => `0x${n.toString(16).padStart(size, "0")}` as `0x${string}`;
 function entry(n: number): CanonicalTokenExploreEntry {
   return canonicalTokenExploreEntryV1({ id: `1:${hex(n,40)}`, name: `Coin ${n}`, symbol: `C${n}`, tokenAddress: hex(n,40),
@@ -19,6 +20,17 @@ const source = (entries: CanonicalTokenExploreEntry[], status: "current" | "last
 const unavailable = async (): Promise<never> => { throw new Error("source unavailable"); };
 
 describe("Ethereum verified Explore adapter", () => {
+  it("hides SHARD from both discovery feeds without dropping its canonical token record or new launches", async () => {
+    const custom = source([shardRouterTradeEntry, customGraphExploreEntry]);
+    const catalog = await readEthereumCustomExploreCatalog({ custom });
+    expect(catalog.status).toBe("ready");
+    expect(catalog.entries.map(item => item.tokenAddress)).toEqual([customGraphExploreEntry.tokenAddress]);
+    const page = await readEthereumLaunches(1, "", undefined, 10, { classic: source([]), custom });
+    expect(page.items.some(item => item.tokenAddress === shardRouterTradeEntry.tokenAddress)).toBe(false);
+    expect(page.items.some(item => item.tokenAddress === customGraphExploreEntry.tokenAddress)).toBe(true);
+    const token = await readEthereumToken(shardRouterTradeEntry.tokenAddress, { classic: source([]), custom });
+    expect(token.token?.tokenAddress).toBe(shardRouterTradeEntry.tokenAddress);
+  });
   it("searches and pages verified launch identities without inventing market values", async () => {
     const entries = Array.from({length:23},(_,i)=>entry(i+1));
     const dependencies = { classic: source(entries), custom: source([]) };
