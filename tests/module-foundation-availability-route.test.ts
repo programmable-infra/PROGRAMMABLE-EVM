@@ -66,6 +66,21 @@ it("retains the shorter default for callers without an explicit deadline", async
   expect(await result).toBe("TimeoutError");
 });
 
+it("shares overlapping authority checks but performs a fresh check after they settle", async () => {
+  const fetcher = vi.fn(() => new Promise<Response>(resolve => {
+    setTimeout(() => resolve(Response.json(availableFixture())), 100);
+  })) as unknown as typeof fetch;
+  const first = readFoundationAvailabilityResponse(fetcher);
+  const second = readFoundationAvailabilityResponse(fetcher);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(await first).toEqual(await second);
+  expect(fetcher).toHaveBeenCalledOnce();
+  const next = readFoundationAvailabilityResponse(fetcher);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(await next).toMatchObject({ available: true });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+});
+
 it("resolves an existing coin through its retained release rather than the active launch default", async () => {
   const token = getAddress("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
   const existing = { ...availableFixture(), token: token.toLowerCase() };

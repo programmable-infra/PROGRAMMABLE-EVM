@@ -27,10 +27,10 @@ import { assertFoundationV2Result, decodeFoundationLaunchResult, foundationFacto
   foundationV2PositionCalls, foundationV2PositionSpecs, verifyFoundationV2PositionData, type FoundationDeploymentBinding } from "./protocol";
 export type { FoundationDeploymentBinding } from "./protocol";
 
-export function createFoundationClient(): PublicClient {
+export function createFoundationClient({ batchRpc = false }: { batchRpc?: boolean } = {}): PublicClient {
   return createPublicClient({ chain: robinhoodChain, transport: fallback([
-    http("https://rpc-robinhood.blockmachine.io", { timeout: 20_000, retryCount: 0 }),
-    http("https://rpc.mainnet.chain.robinhood.com", { timeout: 20_000, retryCount: 0 }),
+    http("https://rpc-robinhood.blockmachine.io", { timeout: 20_000, retryCount: 0, batch: batchRpc ? { batchSize: 10, wait: 8 } : false }),
+    http("https://rpc.mainnet.chain.robinhood.com", { timeout: 20_000, retryCount: 0, batch: batchRpc ? { batchSize: 10, wait: 8 } : false }),
   ], { rank: false, retryCount: 0 }), batch: { multicall: false } });
 }
 

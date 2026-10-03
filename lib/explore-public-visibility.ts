@@ -61,12 +61,19 @@ const NON_PUBLIC_TOKEN_ADDRESSES = new Set(
   NON_PUBLIC_EXPLORE_IDENTITIES_V1.tokens.map(({ identity }) =>
     identity.toLowerCase()),
 );
+
+// Owner-requested discovery exclusions are separate from release canaries.
+// A matching address on another chain and future verified launches stay visible.
+export const OWNER_HIDDEN_EXPLORE_IDENTITIES_V1 = Object.freeze([
+  Object.freeze({ chainId: 1, identity: "0xface73b63787960282f2d4682d3752beb25271ad" }),
+]);
 /**
  * Controls only public discovery. Direct token lookup remains available so
  * historical evidence and exact-address access are preserved.
  */
 export function isPublicExploreIdentityV1(
   identity: Readonly<{ tokenAddress?: string }>,
+  chainId: number = 1,
 ): boolean {
   if (
     typeof identity.tokenAddress === "string" &&
@@ -74,5 +81,7 @@ export function isPublicExploreIdentityV1(
   ) {
     return false;
   }
+  if (OWNER_HIDDEN_EXPLORE_IDENTITIES_V1.some(hidden => hidden.chainId === chainId
+    && hidden.identity === identity.tokenAddress?.toLowerCase())) return false;
   return true;
 }

@@ -9,7 +9,7 @@ import { readLaunchContractSetupV1 } from "@/lib/server/custom-launch/launch-con
 export const metadata: Metadata = {
   title: "Programmable",
   description:
-    "Create and manage API keys for custom hooks on Robinhood.",
+    "Create a key for your builder, manage its access and review custom hook launches.",
   alternates: {
     canonical: "/developers/api-keys",
   },

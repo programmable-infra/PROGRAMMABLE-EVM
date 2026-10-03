@@ -239,7 +239,8 @@ function DesktopNavigation() {
 
 export function SiteHeader() {
   const pathname = usePathname() ?? "/";
-  const moduleMode = pathname === "/launch/modules" || pathname.startsWith("/launch/modules/");
+  const builderWorkspace = pathname === "/launch/modules" || pathname.startsWith("/launch/modules/")
+    || pathname === "/developers/api-keys" || pathname === "/developers/hooks";
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -324,15 +325,15 @@ export function SiteHeader() {
               alt=""
               width={1168}
               height={1536}
-              sizes={moduleMode ? "40px" : "32px"}
+              sizes={builderWorkspace ? "40px" : "32px"}
               priority
             />
           </Link>
         </div>
 
-        {moduleMode ? null : <DesktopNavigation />}
+        {builderWorkspace ? null : <DesktopNavigation />}
 
-        {moduleMode ? null : <Link
+        {builderWorkspace ? null : <Link
           className={styles.mobileLaunch}
           href="/launch"
           prefetch={false}

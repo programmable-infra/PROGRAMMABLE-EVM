@@ -332,14 +332,13 @@ describe("developer API key interface", () => {
   });
 
   it("keeps the first view compact and focused on key management", () => {
-    expect(apiKeysSource).toContain('activeSection === "keys" ? "API keys"');
+    expect(apiKeysSource).toContain('initialGuideOpen ? "Custom Hook" : "API keys"');
     expect(apiKeysSource).toContain('aria-label="Developer access view"');
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "keys"}');
     expect(apiKeysSource).toContain('aria-pressed={activeSection === "history"}');
     expect(apiKeysSource).toContain('activeSection === "keys" ?');
     expect(apiKeysSource).not.toContain("Before anything reaches your wallet");
-    expect(apiKeysSource).toContain('href="/"');
-    expect(apiKeysSource).toContain("<span>Home</span>");
+    expect(apiKeysSource).not.toContain('aria-label="Page navigation"');
     expect(apiKeysSource).not.toContain("Back to profile");
     expect(apiKeysSource).toContain("const API_KEY_PAGE_SIZE = 3");
     expect(apiKeysSource).toContain("visibleApiKeys.map");
@@ -499,7 +498,7 @@ describe("developer API key interface", () => {
     expect(html.indexOf("Build a custom hook")).toBeLessThan(html.indexOf("Connect your wallet"));
     expect(html).toContain("or use one you already saved");
     expect(html).toContain("Developer access view");
-    expect(html).toContain("<h1>API keys</h1>");
+    expect(html).toContain("<h1>Custom Hook</h1>");
     expect(html).not.toContain("Copy prompt");
     expect(html).not.toContain("<textarea");
     const loading = renderToStaticMarkup(createElement(DeveloperApiKeysView, {
