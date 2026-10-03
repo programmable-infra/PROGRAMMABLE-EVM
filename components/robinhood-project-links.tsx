@@ -1,6 +1,7 @@
 import { BookOpen, Globe, Link2, Send } from "lucide-react";
 import { DiscordBrandIcon, XBrandIcon } from "@/components/brand-icons";
 import { isGitHubUrl } from "@/lib/public-link-visibility";
+import { projectLinkLabel } from "@/lib/project-link-label";
 import type { RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import styles from "./robinhood-project-links.module.css";
 
@@ -9,7 +10,8 @@ export function RobinhoodProjectLinks({ links, name, className = "" }: {
   name: string;
   className?: string;
 }) {
-  const visibleLinks = links.filter((link) => link.label === "Other link" || (link.label.toLowerCase() !== "github" && !isGitHubUrl(link.url)));
+  const visibleLinks = links.map(link => link.label === "Project link" ? { ...link, label: projectLinkLabel(link.url) } : link)
+    .filter((link) => link.label === "Other link" || (link.label.toLowerCase() !== "github" && !isGitHubUrl(link.url)));
   if (visibleLinks.length === 0) return null;
   return <nav className={`${styles.links} ${className}`} aria-label={`${name} links`}>
     {visibleLinks.map((link) => <a key={`${link.label}:${link.url}`} href={link.url}

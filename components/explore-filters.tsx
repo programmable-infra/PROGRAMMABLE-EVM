@@ -3,18 +3,20 @@
 import { SlidersHorizontal, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
 import {
-  activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, LAUNCH_MODE_OPTIONS,
+  DEFAULT_EXPLORE_FILTERS, LAUNCH_MODE_OPTIONS,
   type RobinhoodExploreFilters,
 } from "@/lib/robinhood-explore-filters";
 import styles from "./explore-filters.module.css";
 
 export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disabled = false,
-  defaultValue = DEFAULT_EXPLORE_FILTERS, modeOptions = LAUNCH_MODE_OPTIONS }: {
+  defaultValue = DEFAULT_EXPLORE_FILTERS, modeOptions = LAUNCH_MODE_OPTIONS,
+  sortOptions = [{ value: "highest", label: "Market cap" }, { value: "activity", label: "24h volume" }, { value: "newest", label: "Newest" }] }: {
   value?: RobinhoodExploreFilters;
   onApply?: (filters: RobinhoodExploreFilters) => void;
   disabled?: boolean;
   defaultValue?: RobinhoodExploreFilters;
   modeOptions?: readonly { value: NonNullable<RobinhoodExploreFilters["mode"]>; label: string }[];
+  sortOptions?: readonly { value: RobinhoodExploreFilters["sort"]; label: string }[];
 }) {
   const [open, setOpen] = useState(false);
   const [panelOffset, setPanelOffset] = useState(0);
@@ -22,8 +24,7 @@ export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disab
   const triggerRef = useRef<HTMLButtonElement>(null);
   const keyboardOpenRef = useRef(false);
   const panelId = useId();
-  const count = defaultValue === DEFAULT_EXPLORE_FILTERS ? activeExploreFilterCount(value)
-    : Number((value.mode ?? "all") !== (defaultValue.mode ?? "all"));
+  const count = Number((value.mode ?? "all") !== (defaultValue.mode ?? "all")) + Number(value.sort !== defaultValue.sort);
 
   function close(restoreFocus = false) {
     setOpen(false);
@@ -76,10 +77,18 @@ export function ExploreFilters({ value = DEFAULT_EXPLORE_FILTERS, onApply, disab
       <div className={styles.heading}>
         <div className={styles.headingLabel}>
           <h2>Filters</h2>
-          <button className={styles.reset} type="button" onClick={() => onApply?.({ ...value, mode: defaultValue.mode })}>Reset</button>
+          <button className={styles.reset} type="button" onClick={() => onApply?.({ ...defaultValue })}>Reset</button>
         </div>
         <button className={styles.close} type="button" aria-label="Close filters" onClick={() => close(true)}><X size={18} aria-hidden="true" /></button>
       </div>
+      <fieldset className={styles.field}>
+        <legend>Sort by</legend>
+        <div className={`${styles.choices} ${styles.sortChoices}`}>
+          {sortOptions.map(sort => <button type="button" key={sort.value}
+            aria-pressed={value.sort === sort.value}
+            onClick={() => onApply?.({ ...value, sort: sort.value })}>{sort.label}</button>)}
+        </div>
+      </fieldset>
       <fieldset className={styles.field}>
         <legend>Launch type</legend>
         <div className={`${styles.choices} ${styles.modeChoices}`}>

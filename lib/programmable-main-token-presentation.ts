@@ -1,6 +1,6 @@
 export const PROGRAMMABLE_MAIN_TOKEN_PRESENTATION = Object.freeze({
   description:
-    "The Programmable token for custom Uniswap v4 launches and onchain markets.",
+    "Infrastructure for creating and launching customizable tokens with Uniswap V4 hooks",
   imageUrl: "/brand/projects/programmable-main-token-v1.webp",
   links: [
     { kind: "website" as const, url: "https://programmable.market/" },

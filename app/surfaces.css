@@ -7,6 +7,7 @@
   --panel-fill-hover: rgb(38 42 49 / 0.76);
   --panel-fill-selected: rgb(36 51 43 / 0.76);
   --panel-fill-dialog: rgb(16 18 22 / 0.9);
+  --panel-fill-menu: rgb(16 18 22);
   --panel-fill-header: rgb(8 11 15 / 0.68);
   --panel-fill-action: rgb(248 240 233 / 0.9);
   --panel-fill-action-hover: rgb(255 249 242 / 0.94);
@@ -78,6 +79,7 @@ html[data-theme="light"] {
   --panel-fill-hover: rgb(255 253 249 / 0.84);
   --panel-fill-selected: rgb(224 238 228 / 0.8);
   --panel-fill-dialog: rgb(255 253 249 / 0.92);
+  --panel-fill-menu: rgb(255 253 249);
   --panel-fill-header: rgb(248 243 236 / 0.72);
   --panel-line: rgb(16 40 64 / 0.16);
   --panel-line-strong: rgb(16 40 64 / 0.24);
@@ -121,6 +123,7 @@ html[data-theme="light"] {
     --panel-fill-hover: Canvas;
     --panel-fill-selected: Canvas;
     --panel-fill-dialog: Canvas;
+    --panel-fill-menu: Canvas;
     --panel-fill-header: Canvas;
     --panel-fill-action: ButtonFace;
     --panel-fill-action-hover: ButtonFace;

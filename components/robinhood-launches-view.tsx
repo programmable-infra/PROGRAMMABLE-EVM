@@ -338,15 +338,9 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
               </button>
             ) : null}
           </form>
-          <div className={styles.sorts} role="group" aria-label="Sort launches">
-            {(chainId === 4663 ? [
-              { sort: "newest", label: "Newest" }, { sort: "activity", label: "24h volume" }, { sort: "highest", label: "Market cap" },
-            ] as const : [{ sort: "newest", label: "Newest" }, { sort: "oldest", label: "Oldest" }] as const).map(option =>
-              <button key={option.sort} type="button" aria-pressed={request.sort === option.sort} aria-controls={listId}
-                onClick={() => applyFilters({ ...request, sort: option.sort })}>{option.label}</button>)}
-          </div>
           <ExploreFilters value={request} onApply={applyFilters} defaultValue={defaultFilters}
-            modeOptions={chainId === 1 ? ETHEREUM_EXPLORE_MODES : undefined} />
+            modeOptions={chainId === 1 ? ETHEREUM_EXPLORE_MODES : undefined}
+            sortOptions={chainId === 1 ? [{ value: "newest", label: "Newest" }, { value: "oldest", label: "Oldest" }] : undefined} />
           <nav className={styles.pagination} aria-label="Launch pages">
             <button type="button" aria-disabled={!canPrevious} aria-label="Previous page" title="Previous page" aria-controls={listId}
               onClick={() => { if (canPrevious && data) changePage(data.page.number - 1); }}>
