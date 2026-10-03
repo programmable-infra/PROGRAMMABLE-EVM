@@ -210,7 +210,7 @@ describe("wallet recovery state", () => {
     expect(provider).toMatch(/hydrationPending\s*\?\s*"Loading wallet"/u);
     expect(provider).toContain("wallet-button-hydrating");
     expect(navigation).toMatch(
-      /className=\{styles\.headerWalletButton\}[\s\S]{0,600}onFocus=\{preloadWallet\}[\s\S]{0,120}onPointerEnter=\{preloadWallet\}/u,
+      /className=\{styles\.menuWalletButton\}[\s\S]{0,600}onFocus=\{preloadWallet\}[\s\S]{0,120}onPointerEnter=\{preloadWallet\}/u,
     );
     expect(provider).not.toMatch(
       /import\s*\{[\s\S]*?PrivyProvider[\s\S]*?\}\s*from\s*["']@privy-io\/react-auth["']/u,

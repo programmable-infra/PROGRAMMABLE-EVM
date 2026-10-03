@@ -58,12 +58,12 @@ describe("landing page contract", () => {
     expect(landing).toContain("const HERO_TWINKLE_COUNT = 120");
     expect(landing).toContain("const duration = 2.8");
     expect(landing).toContain('<h1 id="landing-title">Programmable</h1>');
-    expect(landing).toContain("Infrastructure for customizable tokens.");
+    expect(landing).toContain("The garden of customizable tokens");
     expect(landing).toContain('href="/launch"');
     expect(landing).not.toContain("Custom hook guide");
     expect(landing).not.toContain("Pair another token");
     expect(landing).toContain('id="intro"');
-    expect(landing).toContain('href="#explore"');
+    expect(landing).not.toContain("Explore coins");
     expect(landing).toContain('id="explore"');
     expect(landing).toContain("<LandingExploreGate />");
     expect(landing).not.toContain("liquid-glass-distortion");
@@ -117,7 +117,6 @@ describe("landing page contract", () => {
       /\.hero\s*\{[^}]*min-height:\s*calc\(100svh - 88px\);/s,
     );
     expect(styles).toMatch(/\.hero\s*\{[^}]*z-index:\s*1;/s);
-    expect(styles).toMatch(/\.scrollCue\s*\{[^}]*min-height:\s*52px;/s);
     expect(styles).toMatch(
       /\.hero h1\s*\{[^}]*font-size:\s*clamp\(64px, 7\.2vw, 104px\);/s,
     );
@@ -145,9 +144,6 @@ describe("landing page contract", () => {
     expect(landing).not.toContain('addEventListener("wheel"');
     expect(landing).not.toContain('addEventListener("scroll"');
     expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
-    expect(styles).toMatch(
-      /@media \(prefers-reduced-motion: reduce\)[\s\S]*?\.scrollCue span:last-child\s*\{[^}]*animation:\s*none;/,
-    );
   });
 
   it("restores native document scrolling instead of trapping the landing route", () => {

@@ -11,7 +11,6 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { WalletIcon } from "@phosphor-icons/react/dist/csr/Wallet";
 import {
   DiscordBrandIcon,
   DuneBrandIcon,
@@ -108,7 +107,7 @@ function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
-function HeaderWalletButton({ onOpen, accountInMenu = false }: Readonly<{ onOpen: () => void; accountInMenu?: boolean }>) {
+function MenuWalletButton({ onOpen }: Readonly<{ onOpen: () => void }>) {
   const { wallet, hasSession, connecting, openingWallet, disconnecting, openWallet, preloadWallet } = useWallet();
   const label = disconnecting
     ? "Disconnecting"
@@ -116,29 +115,25 @@ function HeaderWalletButton({ onOpen, accountInMenu = false }: Readonly<{ onOpen
       ? openingWallet ? "Opening wallet" : "Loading wallet"
       : hasSession ? "Reconnect wallet" : "Connect wallet";
 
-  // Module Mode keeps wallet actions in the menu and the launch action, including during session restoration.
-  if (accountInMenu) return null;
+  if (wallet) return null;
 
-  if (wallet) {
-    return <span className={styles.headerWalletSummary} aria-label={`Connected wallet ${shortenAddress(wallet.account)}`}>
-      {shortenAddress(wallet.account)}
-    </span>;
-  }
-
-  return <button
-    className={styles.headerWalletButton}
-    type="button"
-    disabled={connecting || disconnecting}
-    aria-busy={connecting || disconnecting || undefined}
-    aria-haspopup="dialog"
-    aria-label={label}
-    onFocus={preloadWallet}
-    onPointerEnter={preloadWallet}
-    onClick={() => { onOpen(); openWallet(); }}
-  >
-    <WalletIcon className={styles.headerWalletIcon} size={22} aria-hidden="true" />
-    <span className={styles.headerWalletLabel}>{label}</span>
-  </button>;
+  return (
+    <div className={styles.walletActions} role="group" aria-label="Wallet actions">
+      <button
+        className={styles.menuWalletButton}
+        type="button"
+        disabled={connecting || disconnecting}
+        aria-busy={connecting || disconnecting || undefined}
+        aria-haspopup="dialog"
+        aria-label={label}
+        onFocus={preloadWallet}
+        onPointerEnter={preloadWallet}
+        onClick={() => { onOpen(); openWallet(); }}
+      >
+        {label}
+      </button>
+    </div>
+  );
 }
 
 function HeaderWalletActions({ open, triggerRef, onClose }: Readonly<{
@@ -370,7 +365,6 @@ export function SiteHeader() {
         </Link>}
 
         <div className={`header-actions ${styles.headerActions}`}>
-          <HeaderWalletButton accountInMenu={moduleMode} onOpen={() => setMenuPath(null)} />
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
@@ -407,6 +401,10 @@ export function SiteHeader() {
               open={menuOpen}
               onNavigate={() => setMenuPath(null)}
             />
+            <MenuWalletButton onOpen={() => {
+              setMenuPath(null);
+              menuButtonRef.current?.focus();
+            }} />
             <HeaderWalletActions open={menuOpen} triggerRef={menuButtonRef} onClose={() => setMenuPath(null)} />
             <HeaderSocialLinks mobile />
           </div>

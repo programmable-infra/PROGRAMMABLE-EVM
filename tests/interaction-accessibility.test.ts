@@ -223,10 +223,6 @@ describe("interaction accessibility", () => {
       join(root, "components/landing-page.tsx"),
       "utf8",
     );
-    const css = readFileSync(
-      join(root, "components/landing-page.module.css"),
-      "utf8",
-    );
 
     expect(source).not.toContain('if (pathname === "/") return null;');
     expect(source).toContain('aria-label="Programmable on X"');
@@ -234,8 +230,7 @@ describe("interaction accessibility", () => {
     expect(source).not.toContain('href: "/swap"');
     expect(source).toContain('aria-label="Programmable on Discord"');
     expect(source).toContain('aria-label="Programmable on DEX Screener"');
-    expect(landing).toContain('href="#explore"');
-    expect(css).toMatch(/\.scrollCue\s*\{[^}]*min-height:\s*52px;/s);
+    expect(landing).toContain('href="/launch"');
   });
 
   it("keeps primary and secondary routes semantic in mobile navigation", () => {

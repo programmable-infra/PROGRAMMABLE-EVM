@@ -349,7 +349,10 @@ test("wallet hydration prevents login and linking until the connected wallet lis
   await open(page);
   await scenario(page, "hydrating");
   await expect(inlineWallet(page).getByRole("button", { name: "Loading wallet", exact: true })).toBeDisabled();
-  await expect(page.getByRole("banner").getByRole("button", { name: "Loading wallet", exact: true })).toBeDisabled();
+  const header = page.getByRole("banner");
+  await expect(header.getByRole("button", { name: "Loading wallet", exact: true })).not.toBeVisible();
+  await header.getByRole("button", { name: "Open menu", exact: true }).click();
+  await expect(header.getByRole("group", { name: "Wallet actions", exact: true }).getByRole("button", { name: "Loading wallet", exact: true })).toBeDisabled();
   await expect(page.getByRole("button", { name: "Opening wallet", exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Session ready", { exact: true })).toHaveText("false");
   await expect(page.getByLabel("Wallet opening", { exact: true })).toHaveText("false");

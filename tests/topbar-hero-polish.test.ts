@@ -71,7 +71,7 @@ describe("topbar and Explore hero polish", () => {
     ).toBeLessThan(navigation.indexOf('aria-label="Programmable on Discord"'));
     expect(navigation).not.toContain("ThemeToggle");
     expect(navigation).not.toContain('if (pathname === "/") return null;');
-    expect(navigation).toContain("<HeaderWalletButton");
+    expect(navigation).toContain("<MenuWalletButton");
     expect(navigation).toContain("<DesktopNavigation />");
     expect(navigation).toContain("const mobileNavItems = [desktopNavItems[0], ...menuNavItems];");
     expect(navigation).not.toContain("liquid-glass-surface");
