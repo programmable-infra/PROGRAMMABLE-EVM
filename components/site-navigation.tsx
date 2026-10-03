@@ -352,7 +352,7 @@ export function SiteHeader() {
               alt=""
               width={1168}
               height={1536}
-              sizes="32px"
+              sizes={moduleMode ? "40px" : "32px"}
               priority
             />
           </Link>
@@ -374,6 +374,7 @@ export function SiteHeader() {
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
+            data-site-menu-button
             type="button"
             aria-controls={menuId}
             aria-expanded={menuOpen}
@@ -400,7 +401,7 @@ export function SiteHeader() {
           aria-hidden={!menuOpen}
           inert={menuOpen ? undefined : true}
         >
-          <div className={styles.mobileSheetSurface} id={menuId}>
+          <div className={styles.mobileSheetSurface} id={menuId} data-site-menu-surface>
             <MobileNavigation
               id={menuId}
               open={menuOpen}
