@@ -398,10 +398,9 @@ async function refreshAlchemyExploreRegistryOnce(
     blockNumber: base.snapshot.blockNumber,
     blockHash: base.snapshot.blockHash,
   };
-  const stored = await readAlchemyLaunchRegistry(
-    deployment,
-    initialCursor,
-  );
+  const stored = options.routerOnly
+    ? await readAlchemyLaunchRegistry(deployment, initialCursor, { scope: "router" })
+    : await readAlchemyLaunchRegistry(deployment, initialCursor);
   const baseBlock = BigInt(base.snapshot.blockNumber);
   const storedCursorBlock = BigInt(stored.registry.cursor.blockNumber);
   const compactedTokens = overlayTokensAfterBase(
@@ -468,11 +467,11 @@ async function refreshAlchemyExploreRegistryOnce(
     (options.forcePersist || registryChanged)
   ) {
     try {
-      await writeAlchemyLaunchRegistry(
-        deployment,
-        confirmedRegistry,
-        stored.etag,
-      );
+      if (options.routerOnly) {
+        await writeAlchemyLaunchRegistry(deployment, confirmedRegistry, stored.etag, { scope: "router" });
+      } else {
+        await writeAlchemyLaunchRegistry(deployment, confirmedRegistry, stored.etag);
+      }
       persisted = true;
     } catch (error) {
       if (options.requirePersistence) throw error;

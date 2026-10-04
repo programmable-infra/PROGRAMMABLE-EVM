@@ -49,7 +49,7 @@ describe("native ETH launch funding", () => {
     steps[0].gasUsed = 40_000n;
     await assertFoundationNativeBalance(input.client, account, steps, 100n);
     methods.getBalance.mockResolvedValue(amount + 1n);
-    await expect(assertFoundationNativeBalance(input.client, account, steps, 100n)).rejects.toThrow("all launch network fees");
+    await expect(assertFoundationNativeBalance(input.client, account, steps, 100n)).rejects.toThrow("this transaction and its network fees");
     await assertFoundationWrapRuntime(input.client, steps, 100n);
     methods.getCode.mockResolvedValue("0x6000");
     await expect(assertFoundationWrapRuntime(input.client, steps, 100n)).rejects.toThrow("contract changed");

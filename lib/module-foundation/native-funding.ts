@@ -51,5 +51,5 @@ export async function assertFoundationNativeBalance(client: PublicClient, accoun
   const [balance, gasPrice] = await Promise.all([client.getBalance({ address: account, blockNumber }), client.getGasPrice()]);
   const value = steps.reduce((sum, step) => sum + step.transaction.value, 0n);
   const gas = steps.reduce((sum, step) => sum + step.gasUsed * 120n / 100n + 15_000n, 0n);
-  if (gasPrice <= 0n || balance < value + gas * gasPrice * 2n) throw new Error("Keep enough ETH for the initial buy and all launch network fees. Reduce the initial buy or enter 0.");
+  if (gasPrice <= 0n || balance < value + gas * gasPrice * 2n) throw new Error("Keep enough ETH for this transaction and its network fees. Reduce the amount or add ETH to your wallet.");
 }

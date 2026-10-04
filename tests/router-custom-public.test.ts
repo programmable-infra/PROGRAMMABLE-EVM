@@ -468,6 +468,23 @@ describe("finalized Router Custom public projection", () => {
     expect(mocks.blobPut).not.toHaveBeenCalled();
   });
 
+  it("advances after optional display getters change while preserving every stamped identity", async () => {
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    const current = source([{ ...customGraphToken, name: "Updated coin", symbol: "UPDATED", tokenDecimals: 9 },
+      stampedClassicToken], { blockNumber: "25740200", blockHash: `0x${"ad".repeat(32)}` });
+    const persistDurableSnapshot = vi.fn().mockResolvedValue(undefined);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"),
+      readCurrentSource: vi.fn().mockResolvedValue(current),
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable), persistDurableSnapshot,
+    });
+    await expect(reader()).resolves.toMatchObject({ status: "current", asOfBlock: "25740200",
+      entries: [{ name: "Updated coin", symbol: "UPDATED", tokenDecimals: 9,
+        tokenAddress: customGraphToken.tokenAddress, launchStampProvenance: expect.objectContaining({
+          launchId: customGraphToken.launchStampProvenance!.launchId }) }] });
+    expect(persistDurableSnapshot).toHaveBeenCalledOnce();
+  });
+
   it("accepts a newer boundary only when every finalized identity is unchanged", () => {
     const durable = routerCustomIdentitySnapshotFromSourceV1(source());
     const next = routerCustomIdentitySnapshotFromSourceV1(source(undefined, {

@@ -94,7 +94,17 @@ function requiredRepositoryCommit(
   return value;
 }
 
-function registryPath(repositoryCommit: string) {
+type RegistryOptions = Readonly<{ scope?: "deployment" | "router" }>;
+
+export function canonicalRouterRegistryBlobPathV1() {
+  return ["indexes/mainnet-launch-stamp-router-v1",
+    LAUNCH_STAMP_ROUTER_BINDING.routerAddress.toLowerCase(),
+    LAUNCH_STAMP_ROUTER_BINDING.routerRuntimeCodeHash.toLowerCase(),
+    "launch-registry.json"].join("/");
+}
+
+function registryPath(repositoryCommit: string, options: RegistryOptions = {}) {
+  if (options.scope === "router") return canonicalRouterRegistryBlobPathV1();
   return `${ALCHEMY_LAUNCH_REGISTRY_DIRECTORY}/${repositoryCommit}.json`;
 }
 
@@ -364,11 +374,14 @@ function validateCursor(value: unknown) {
 function validateClassicPayload(
   payload: Record<string, unknown>,
   deployment: ReadyOnchainDeployment,
+  options: RegistryOptions = {},
 ) {
   const repositoryCommit = requiredRepositoryCommit();
   if (
     payload.chainId !== deployment.chainId ||
-    payload.repositoryCommit !== repositoryCommit ||
+    (options.scope === "router"
+      ? typeof payload.repositoryCommit !== "string" || !REPOSITORY_COMMIT.test(payload.repositoryCommit)
+      : payload.repositoryCommit !== repositoryCommit) ||
     typeof payload.generatedAt !== "string" ||
     !Number.isFinite(Date.parse(payload.generatedAt)) ||
     !validateCursor(payload.cursor) ||
@@ -377,6 +390,11 @@ function validateClassicPayload(
     throw new Error("Alchemy launch registry payload is malformed");
   }
   const cursor = payload.cursor as AlchemyLaunchCursor;
+  if (options.scope === "router" && (payload.tokens.length !== 0
+    || cursor.blockNumber !== LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockNumber
+    || !sameHex(cursor.blockHash, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockHash))) {
+    throw new Error("Canonical Router registry cannot contain a Classic slice");
+  }
   const cursorBlock = BigInt(cursor.blockNumber);
   if (
     !payload.tokens.every(
@@ -465,6 +483,7 @@ function validateRouterSlice(value: unknown): AlchemyLaunchStampRouterRegistry {
 export function validateAlchemyLaunchRegistryEnvelope(
   value: unknown,
   deployment: ReadyOnchainDeployment,
+  options: RegistryOptions = {},
 ): AlchemyLaunchRegistry {
   if (
     !isRecord(value) ||
@@ -484,7 +503,10 @@ export function validateAlchemyLaunchRegistryEnvelope(
   ) {
     throw new Error("Alchemy launch registry content hash is invalid");
   }
-  validateClassicPayload(payload, deployment);
+  validateClassicPayload(payload, deployment, options);
+  if (options.scope === "router" && value.schemaVersion !== SCHEMA_VERSION) {
+    throw new Error("Canonical Router registry requires exact Router provenance");
+  }
   if (value.schemaVersion === LEGACY_SCHEMA_VERSION) {
     return {
       ...(payload as unknown as Omit<AlchemyLaunchRegistry, "launchStampRouter">),
@@ -513,12 +535,13 @@ export function validateAlchemyLaunchRegistryEnvelope(
 export async function readAlchemyLaunchRegistry(
   deployment: ReadyOnchainDeployment,
   initialCursor: AlchemyLaunchCursor,
+  options: RegistryOptions = {},
 ): Promise<AlchemyLaunchRegistryRead> {
   const token = resolveDurableExploreBlobToken();
   if (!token) throw new Error("Alchemy launch registry storage is not configured");
   const repositoryCommit = requiredRepositoryCommit();
   const { get } = await import("@vercel/blob");
-  const result = await get(registryPath(repositoryCommit), {
+  const result = await get(registryPath(repositoryCommit, options), {
     access: "private",
     token,
     useCache: false,
@@ -536,28 +559,38 @@ export async function readAlchemyLaunchRegistry(
       etag: null,
     };
   }
+  const text = await new Response(result.stream).text();
+  if (Buffer.byteLength(text, "utf8") > 16 * 1_024 * 1_024) {
+    throw new Error("Alchemy launch registry exceeds its read bound");
+  }
   const registry = validateAlchemyLaunchRegistryEnvelope(
-    JSON.parse(await new Response(result.stream).text()),
+    JSON.parse(text),
     deployment,
+    options,
   );
-  return { registry, etag: normalizeVercelBlobEtag(result.blob.etag) };
+  return { registry: options.scope === "router" ? { ...registry, repositoryCommit } : registry,
+    etag: normalizeVercelBlobEtag(result.blob.etag) };
 }
 
 export async function writeAlchemyLaunchRegistry(
   deployment: ReadyOnchainDeployment,
   registry: AlchemyLaunchRegistry,
   expectedEtag: string | null,
+  options: RegistryOptions = {},
 ) {
   const token = resolveDurableExploreBlobToken();
   if (!token) throw new Error("Alchemy launch registry storage is not configured");
   const repositoryCommit = requiredRepositoryCommit();
+  const storedRegistry = options.scope === "router" ? { ...registry, repositoryCommit,
+    cursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR, tokens: [] } : registry;
   const validated = validateAlchemyLaunchRegistryEnvelope(
     {
       schemaVersion: SCHEMA_VERSION,
-      contentHash: contentHash(registry),
-      payload: registry,
+      contentHash: contentHash(storedRegistry),
+      payload: storedRegistry,
     },
     deployment,
+    options,
   );
   const envelope: AlchemyLaunchRegistryEnvelope = {
     schemaVersion: SCHEMA_VERSION,
@@ -565,7 +598,7 @@ export async function writeAlchemyLaunchRegistry(
     payload: validated,
   };
   const { get, put } = await import("@vercel/blob");
-  const path = registryPath(repositoryCommit);
+  const path = registryPath(repositoryCommit, options);
   try {
     return await put(path, JSON.stringify(envelope), {
       access: "private",

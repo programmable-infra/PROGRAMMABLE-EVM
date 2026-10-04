@@ -409,6 +409,41 @@ describe("Alchemy incremental launch registry", () => {
     );
   });
 
+  it("continues the exact canonical Router cursor across website commits with conditional writes", async () => {
+    const registry = { ...payload([], [routerToken()]), cursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR };
+    const saved = { schemaVersion: "programmable-alchemy-launch-registry-v2",
+      payload: registry, contentHash: keccak256(toBytes(JSON.stringify(registry))) };
+    const etag = '"8e8ed5b7c65cfe481ae32dc684e98710"';
+    blobMocks.get.mockImplementation(async () => ({ statusCode: 200,
+      stream: new Response(JSON.stringify(saved)).body, blob: { etag } }));
+    const before = await readAlchemyLaunchRegistry(deployment, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR, { scope: "router" });
+    process.env.VERCEL_GIT_COMMIT_SHA = "b".repeat(40);
+    const after = await readAlchemyLaunchRegistry(deployment, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR, { scope: "router" });
+    expect(after.registry.launchStampRouter).toEqual(before.registry.launchStampRouter);
+    expect(after.registry.repositoryCommit).toBe("b".repeat(40));
+    expect(blobMocks.get.mock.calls[1]?.[0]).toBe(blobMocks.get.mock.calls[0]?.[0]);
+    expect(() => validateAlchemyLaunchRegistryEnvelope(saved, deployment)).toThrow("payload is malformed");
+    await writeAlchemyLaunchRegistry(deployment, after.registry, after.etag, { scope: "router" });
+    expect(blobMocks.put).toHaveBeenCalledWith(blobMocks.get.mock.calls[0]?.[0], expect.any(String),
+      expect.objectContaining({ allowOverwrite: true, ifMatch: etag }));
+    const written = JSON.parse(blobMocks.put.mock.calls[0]?.[1] as string);
+    expect(validateAlchemyLaunchRegistryEnvelope(written, deployment, { scope: "router" }).launchStampRouter)
+      .toEqual(saved.payload.launchStampRouter);
+  });
+
+  it("rejects unrelated Classic data and changed Router bindings in the shared namespace", () => {
+    expect(() => validateAlchemyLaunchRegistryEnvelope(envelope(), deployment, { scope: "router" }))
+      .toThrow("cannot contain a Classic slice");
+    const original = payload([], [routerToken()]);
+    const registry = { ...original, cursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
+      launchStampRouter: { ...original.launchStampRouter, binding: { ...LAUNCH_STAMP_ROUTER_BINDING,
+        routerRuntimeCodeHash: `0x${"fe".repeat(32)}` } } };
+    const saved = { schemaVersion: "programmable-alchemy-launch-registry-v2",
+      payload: registry, contentHash: keccak256(toBytes(JSON.stringify(registry))) };
+    expect(() => validateAlchemyLaunchRegistryEnvelope(saved, deployment, { scope: "router" }))
+      .toThrow("Router registry is malformed");
+  });
+
   it("normalizes the private Blob weak ETag before a conditional update", async () => {
     blobMocks.get.mockResolvedValueOnce({
       statusCode: 200,
