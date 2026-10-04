@@ -14,6 +14,27 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) { server.close(); await once(server, "close"); } });
 
+test("restoring a completed launch keeps the new draft open without background recovery reads", async ({ page }) => {
+  const studio = await createModuleStudioServer(); studio.listen(0, "127.0.0.1"); await once(studio, "listening");
+  const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
+  const apiCalls: string[] = [];
+  page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/api/")) apiCalls.push(request.url()); });
+  try {
+    const url = `http://127.0.0.1:${address.port}/?mode=restored-launch`;
+    await page.goto(url);
+    await expect(page.getByRole("heading", { name: "Module Mode", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Open your previous coin", exact: true })).toBeVisible();
+    await page.getByLabel("Name", { exact: true }).fill("My next coin");
+    await expect(page).toHaveURL(url);
+    expect(apiCalls).toEqual([]);
+    await page.getByRole("button", { name: "Open your previous coin", exact: true }).click();
+    await expect(page.getByRole("alert")).toHaveText("Your previous launch could not be checked yet. Try opening it again.");
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue("My next coin");
+    await expect(page).toHaveURL(url);
+    expect(apiCalls).toHaveLength(1);
+  } finally { studio.close(); await once(studio, "close"); }
+});
+
 for (const width of [1440, 390, 320]) {
   test(`selection explains fees, keeps button size, and restores settings at ${width}px`, async ({ page }, testInfo) => {
     const errors: string[] = [];

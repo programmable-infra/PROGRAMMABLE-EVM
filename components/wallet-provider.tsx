@@ -1278,6 +1278,7 @@ function PrivyWalletBridge({
   const [sessionSuppressed, setSessionSuppressed] = useState(false);
   const [accountSwitchRequested, setAccountSwitchRequested] = useState(false);
   const [walletAccountMismatch, setWalletAccountMismatch] = useState(false);
+  const [injectedNetwork, setInjectedNetwork] = useState<{ userId: string; chainId: string } | null>(null);
   const [verifiedWalletNetwork, setVerifiedWalletNetwork] = useState<{
     userId: string;
     account: string;
@@ -1597,9 +1598,11 @@ function PrivyWalletBridge({
       && verifiedWalletNetwork.walletSnapshot === connectedWallet;
     return {
       account: connectedWalletAddress,
-      chainId: verified ? verifiedWalletNetwork.chainId : normalizeChainId(connectedWalletChainId),
+      chainId: verified ? verifiedWalletNetwork.chainId
+        : connectedWallet?.walletClientType === "metamask" && injectedNetwork !== null && injectedNetwork.userId === user?.id
+          ? injectedNetwork.chainId : normalizeChainId(connectedWalletChainId),
     };
-  }, [connectedWallet, connectedWalletAddress, connectedWalletChainId, user?.id, verifiedWalletNetwork]);
+  }, [connectedWallet, connectedWalletAddress, connectedWalletChainId, injectedNetwork, user?.id, verifiedWalletNetwork]);
   const walletLinked = Boolean(connectedWallet && ownedWalletAddresses.has(connectedWallet.address.toLowerCase()));
   const walletSessionGenerationRef = useRef(0);
   const walletRequestSessionRef = useRef({
@@ -1634,6 +1637,76 @@ function PrivyWalletBridge({
       walletCapability: null,
     };
   }, []);
+  // Provider events update selection, never account ownership. Only wallets
+  // already linked to the current Privy user can become transaction-capable.
+  const injectedOwnerRef = useRef<string | null>(null);
+  const connectedWalletClientType = connectedWallet?.walletClientType;
+  useEffect(() => {
+    if (!activeAuthenticated || !ready || !walletsReady || !user?.id || disconnecting) {
+      injectedOwnerRef.current = null;
+      return;
+    }
+    if (connectedWalletClientType === "metamask") injectedOwnerRef.current = user.id;
+    else if (connectedWalletClientType) injectedOwnerRef.current = null;
+    if (injectedOwnerRef.current !== user.id) return;
+    const provider = selectInjectedEthereumProvider(window.ethereum);
+    if (!provider?.isMetaMask || !provider.on || !provider.removeListener) return;
+    const owner = user.id;
+    let disposed = false;
+    let accountRevision = 0;
+    const isCurrent = () => {
+      const current = sdkSessionRef.current;
+      return !disposed && current.authenticated && current.userId === owner
+        && !current.disconnecting && !current.sessionSuppressed;
+    };
+    const accountsChanged = (value: unknown) => {
+      if (!isCurrent()) return;
+      accountRevision += 1;
+      const address = Array.isArray(value) && isEthereumAddress(value[0]) ? value[0] : null;
+      const current = walletRequestSessionRef.current;
+      if (address?.toLowerCase() === current.account?.toLowerCase()) return;
+      walletSessionGenerationRef.current += 1;
+      current.authenticated = false;
+      setVerifiedWalletNetwork(null);
+      // An empty provider account list must also clear an old SDK wallet.
+      setSelectedWallet({ userId: owner, address: address ?? "" });
+      const owned = address !== null && ownedWalletAddresses.has(address.toLowerCase());
+      setWalletAccountMismatch(address !== null && !owned);
+      setError(address !== null && !owned
+        ? "Verify this wallet to use it with your account, or sign in with it."
+        : "");
+      setWalletLoginStatus("");
+    };
+    const chainChanged = (value: unknown) => {
+      if (!isCurrent() || typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value)) return;
+      const current = walletRequestSessionRef.current;
+      if (!current.account || !current.walletCapability) return;
+      if (!networkSwitchPendingRef.current) walletSessionGenerationRef.current += 1;
+      setInjectedNetwork({ userId: owner, chainId: normalizeChainId(value) });
+      setVerifiedWalletNetwork({ userId: owner, account: current.account,
+        chainId: normalizeChainId(value), walletSnapshot: current.walletCapability });
+    };
+    provider.on("accountsChanged", accountsChanged);
+    provider.on("chainChanged", chainChanged);
+    // One local read covers events that occurred before hydration. Returning
+    // to the tab rechecks selection without polling or opening a wallet prompt.
+    const readSelectedAccount = () => {
+      if (document.visibilityState === "hidden") return;
+      const revision = accountRevision;
+      void provider.request({ method: "eth_accounts" }).then(accounts => {
+        if (isCurrent() && revision === accountRevision) accountsChanged(accounts);
+      }).catch(() => { /* Reconnect remains available; never prompt from a read. */ });
+    };
+    readSelectedAccount();
+    document.addEventListener("visibilitychange", readSelectedAccount);
+    return () => {
+      disposed = true;
+      document.removeEventListener("visibilitychange", readSelectedAccount);
+      provider.removeListener?.("accountsChanged", accountsChanged);
+      provider.removeListener?.("chainChanged", chainChanged);
+    };
+  }, [activeAuthenticated, connectedWalletClientType, disconnecting,
+    ownedWalletAddresses, ready, user?.id, walletsReady]);
   const providerSettled = isWalletProviderSettled(
     ready && !sessionSuppressed && authenticated === Boolean(user),
     walletsReady,
@@ -2038,6 +2111,7 @@ function PrivyWalletBridge({
     applicantRefreshUserGate.invalidate();
     settleWalletLoginAttempt();
     setDisconnecting(true);
+    setInjectedNetwork(null);
     setVerifiedWalletNetwork(null);
     setError("");
     const markDisconnectFailed = () => {
@@ -2079,8 +2153,67 @@ function PrivyWalletBridge({
     }
   }, [applicantRefreshUserGate, authenticated, logout, settleWalletLoginAttempt, wallets]);
 
+  const accountSelectionPendingRef = useRef(false);
+  const selectAccountWallet = useCallback(async (requestedAccount?: Address) => {
+    if (accountSelectionPendingRef.current || disconnecting || !ownerUserId) return;
+    const owner = ownerUserId;
+    const candidate = requestedAccount
+      ? wallets.find(item => item.address.toLowerCase() === requestedAccount.toLowerCase()
+        && ownedWalletAddresses.has(item.address.toLowerCase())) : connectedWallet;
+    if (!candidate) return;
+    const current = () => {
+      const session = sdkSessionRef.current;
+      return session.ready && session.authenticated && session.userId === owner
+        && !session.sessionSuppressed && !session.disconnecting;
+    };
+    accountSelectionPendingRef.current = true;
+    setAccountSwitchRequested(true);
+    setError("");
+    try {
+      const provider = await candidate.getEthereumProvider();
+      if (!current()) return;
+      if (candidate.walletClientType === "metamask") {
+        let accounts: unknown = requestedAccount ? await provider.request({ method: "eth_accounts" }) : null;
+        if (!current()) return;
+        if (!requestedAccount || !Array.isArray(accounts) || accounts[0]?.toLowerCase() !== requestedAccount.toLowerCase()) {
+          await provider.request({ method: "wallet_requestPermissions", params: [{ eth_accounts: {} }] });
+          if (!current()) return;
+          accounts = await provider.request({ method: "eth_accounts" });
+        }
+        if (!current()) return;
+        const address = Array.isArray(accounts) && isEthereumAddress(accounts[0]) ? accounts[0] : null;
+        if (!address) throw new Error("Select a wallet in MetaMask to continue.");
+        if (requestedAccount && address.toLowerCase() !== requestedAccount.toLowerCase()) {
+          throw new Error(`Select ${shortenAddress(requestedAccount)} in MetaMask to use this wallet.`);
+        }
+        setSelectedWallet({ userId: owner, address });
+        const owned = ownedWalletAddresses.has(address.toLowerCase());
+        setWalletAccountMismatch(!owned);
+        setVerifiedWalletNetwork(null);
+        setError(owned ? "" : "Verify this wallet to use it with your account, or sign in with it.");
+        setDialogOpen(!owned);
+      } else {
+        setSelectedWallet({ userId: owner, address: candidate.address });
+        setWalletAccountMismatch(false);
+        setDialogOpen(false);
+      }
+    } catch (caught) {
+      if (!current()) return;
+      const message = getWalletTransactionErrorMessage(caught);
+      setError(message);
+      setDialogOpen(true);
+    } finally {
+      accountSelectionPendingRef.current = false;
+      setAccountSwitchRequested(false);
+    }
+  }, [connectedWallet, disconnecting, ownedWalletAddresses, ownerUserId, wallets]);
+
   const switchAccount = useCallback(() => {
     if (disconnecting || accountSwitchRequested) return;
+    if (connectedWallet?.walletClientType === "metamask" && !walletAccountMismatch) {
+      void selectAccountWallet();
+      return;
+    }
     walletAccountSelectionRequestedRef.current = connectedWallet?.walletClientType === "metamask";
     setAccountSwitchRequested(true);
     void disconnect().then((succeeded) => {
@@ -2089,7 +2222,7 @@ function PrivyWalletBridge({
         setAccountSwitchRequested(false);
       }
     });
-  }, [accountSwitchRequested, connectedWallet?.walletClientType, disconnect, disconnecting]);
+  }, [accountSwitchRequested, connectedWallet?.walletClientType, disconnect, disconnecting, selectAccountWallet, walletAccountMismatch]);
 
   useEffect(() => {
     // Privy's logout promise can resolve before it clears the current user.
@@ -3391,7 +3524,7 @@ function PrivyWalletBridge({
           hasSession={hasSession}
           hasLinkedWallet={hasLinkedWallet}
           sessionReady={providerSettled}
-          disconnecting={disconnecting}
+          disconnecting={disconnecting || accountSwitchRequested}
           accountMismatch={walletAccountMismatch}
           error={error}
           status={walletLoginStatus}
@@ -3402,12 +3535,7 @@ function PrivyWalletBridge({
           onLogout={disconnect}
           onSwitchAccount={switchAccount}
           onRetryLogin={openWallet}
-          onSelectWallet={(account) => {
-            if (!user) return;
-            setSelectedWallet({ userId: user.id, address: account });
-            setError("");
-            setDialogOpen(false);
-          }}
+          onSelectWallet={(account) => void selectAccountWallet(account)}
         />
       ) : null}
     </>
@@ -3663,9 +3791,14 @@ function WalletDialog({
               : accountMismatch ? onSwitchAccount
                 : wallet ? error ? onReconnectWallet : onAddWallet : connect}
           >
-            {!sessionReady ? "Reload page" : accountMismatch ? "Switch account"
+            {!sessionReady ? "Reload page" : accountMismatch ? "Sign in with this wallet"
               : wallet ? error ? "Reconnect wallet" : "Add wallet" : "Connect wallet"}
           </button>
+          {accountMismatch && sessionReady ? (
+            <button className={styles.signOut} type="button" disabled={disconnecting} onClick={onAddWallet}>
+              Verify this wallet
+            </button>
+          ) : null}
           {accountMismatch && sessionReady ? (
             <button className={styles.signOut} type="button" disabled={disconnecting} onClick={onReconnectWallet}>
               Connect linked wallet

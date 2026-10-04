@@ -62,7 +62,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
           <div className={styles.identityText}>
             <div className={styles.nameRow}>
               <h1>{name}</h1>
-              {hasAsset ? <span className={styles.ticker}>{coinTicker(symbol ?? null)}</span> : null}
+              {hasAsset && (symbol || !loading) ? <span className={styles.ticker}>{coinTicker(symbol ?? null)}</span> : null}
               <Image className={styles.chainLogo} src="/brand/networks/robinhood-feather-white.svg" alt="Robinhood Chain" width={17} height={22} title="Robinhood Chain" />
               {presentation?.links.length ? <RobinhoodProjectLinks links={presentation.links} name={name} /> : null}
             </div>
@@ -97,9 +97,9 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
             {change != null && Number.isFinite(change) ? `${change > 0 ? "+" : ""}${change.toFixed(2)}%` : "—"}
           </dd></div>
         </dl>
-        {delayed ? <p className={styles.notice} role="status">{market ? "Price updates are delayed." : "Market data is temporarily unavailable."}</p> : null}
+        {delayed && !loading ? <p className={styles.notice} role="status">{market ? "Price updates are delayed." : "Market data is temporarily unavailable."}</p> : null}
         <div className={styles.tradingLayout}>
-          {launch?.poolId ? <RobinhoodChart tokenAddress={address} poolId={launch.poolId} name={name} market={market} /> : <div className={styles.chart}><p className={styles.chartState}>No trading market is verified for this coin.</p></div>}
+          {launch?.poolId ? <RobinhoodChart tokenAddress={address} poolId={launch.poolId} name={name} market={market} /> : <div className={styles.chart} aria-busy={loading}><p className={styles.chartState} role="status">{loading ? "Loading chart…" : "No trading market is verified for this coin."}</p></div>}
           <ResponsiveTradePanel symbol={symbol ?? undefined}>{trade}</ResponsiveTradePanel>
         </div>
       </> : <p className={styles.notice}>No primary asset is declared for this launch.</p>}

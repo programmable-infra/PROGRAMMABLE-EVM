@@ -37,7 +37,7 @@ vi.mock("../lib/alchemy/launch-registry.server", () => ({
   writeAlchemyLaunchRegistry: mocks.writeAlchemyLaunchRegistry,
 }));
 
-import { refreshAlchemyExploreRegistry } from "../lib/alchemy/explore.server";
+import { readAlchemyRouterCustomIdentitySourceV1, refreshAlchemyExploreRegistry } from "../lib/alchemy/explore.server";
 import { canonicalTokenExploreEntryV1 } from "../lib/explore-entry-v1";
 import type { LauncherToken } from "../lib/tokens";
 import {
@@ -222,6 +222,15 @@ describe("Alchemy launch overlay refresh", () => {
       }),
       Number.MAX_SAFE_INTEGER,
     );
+  });
+
+  it("indexes Router Custom launches without waiting for unrelated Classic discovery", async () => {
+    mocks.advanceExploreLaunchDiscovery.mockRejectedValue(new Error("Retired Classic discovery is unavailable"));
+    const result = await readAlchemyRouterCustomIdentitySourceV1();
+    expect(result.status).toBe("current");
+    expect(result.slice.cursor.blockNumber).toBe("25717611");
+    expect(mocks.advanceLaunchStampRouterSlice).toHaveBeenCalledOnce();
+    expect(mocks.advanceExploreLaunchDiscovery).not.toHaveBeenCalled();
   });
 
   it("replays the complete refresh on the fixed secondary after primary capacity", async () => {

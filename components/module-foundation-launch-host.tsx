@@ -36,19 +36,6 @@ import styles from "./module-foundation-ui.module.css";
 import studioStyles from "./module-studio/studio.module.css";
 import { StudioAtmosphere } from "./module-studio/studio-atmosphere";
 
-const openedLaunchKey = (account: Address) => `programmable:foundation-launch-opened:v1:${account.toLowerCase()}`;
-const openedLaunches = new Map<string, string>();
-function launchWasOpened(account: Address, transactionHash: Hex) {
-  if (openedLaunches.get(account.toLowerCase()) === transactionHash.toLowerCase()) return true;
-  try { return sessionStorage.getItem(openedLaunchKey(account)) === transactionHash.toLowerCase(); }
-  catch { return false; }
-}
-function rememberOpenedLaunch(account: Address, transactionHash: Hex) {
-  // Display state only: this marker never acknowledges or authorizes a wallet operation.
-  openedLaunches.set(account.toLowerCase(), transactionHash.toLowerCase());
-  try { sessionStorage.setItem(openedLaunchKey(account), transactionHash.toLowerCase()); } catch { /* Navigation still works when storage is unavailable. */ }
-}
-
 /** A saved result is only a locator; recover its exact launch from current authority and canonical chain evidence. */
 export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, saved: FoundationResolution, signal?: AbortSignal) {
   if (saved.status !== "success" || saved.metadata?.stepKind !== "launch" || saved.metadata.operationKind !== "launch" || !saved.metadata.token) {
@@ -82,28 +69,38 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
   const prepared = useRef(new WeakMap<FoundationLaunchReview, Awaited<ReturnType<typeof prepareFoundationLaunch>>>());
   const launching = useRef(false);
   const [savedLaunchError, setSavedLaunchError] = useState<string | null>(null);
-  const [recoveryRetry, setRecoveryRetry] = useState(0);
+  const [openingSavedLaunch, setOpeningSavedLaunch] = useState(false);
+  const recoveryRequest = useRef<AbortController | null>(null);
   const displayEnvelope = session.envelope ?? session.displayEnvelope;
   const catalog = useMemo(() => displayEnvelope ? presentFoundationCatalogV1({
     catalog: bindFoundationCatalogV1(displayEnvelope.catalog.document, displayEnvelope.catalog.authority),
     chainId: 4663, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1,
   }) : [], [displayEnvelope]);
 
-  useEffect(() => {
+  useEffect(() => () => {
+    recoveryRequest.current?.abort();
+    recoveryRequest.current = null;
+  }, [session.account, session.resolution?.operationId]);
+
+  async function openSavedLaunch() {
     const saved = session.resolution;
-    if (launching.current || session.progress || session.pending !== "null" || !session.account || !saved
+    if (recoveryRequest.current || launching.current || session.progress || session.pending !== "null" || !session.account || !saved
       || saved.status !== "success" || saved.metadata?.stepKind !== "launch" || !saved.metadata.token
-      || getAddress(saved.account) !== getAddress(session.account) || launchWasOpened(saved.account, saved.transactionHash)) return;
+      || getAddress(saved.account) !== getAddress(session.account)) return;
     const controller = new AbortController();
-    void verifiedSavedFoundationLaunchUrl(session.client, saved, controller.signal).then(url => {
-      if (controller.signal.aborted || launching.current) return;
-      router.replace(url);
-      rememberOpenedLaunch(saved.account, saved.transactionHash);
-    }).catch(() => {
+    recoveryRequest.current = controller;
+    setOpeningSavedLaunch(true);
+    setSavedLaunchError(null);
+    try {
+      const url = await verifiedSavedFoundationLaunchUrl(session.client, saved, controller.signal);
+      if (!controller.signal.aborted && !launching.current) router.push(url);
+    } catch {
       if (!controller.signal.aborted) setSavedLaunchError(saved.operationId);
-    });
-    return () => controller.abort();
-  }, [session.account, session.client, session.pending, session.progress, session.resolution, recoveryRetry, router]);
+    } finally {
+      if (recoveryRequest.current === controller) recoveryRequest.current = null;
+      setOpeningSavedLaunch(false);
+    }
+  }
 
   const resolveSuggestedInitialBuy = useCallback(() => {
     if (!suggestedBuyRequest.current) suggestedBuyRequest.current = readFoundationSuggestedBuy(session.client)
@@ -211,7 +208,6 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
         expected: { transaction: sequence.steps[outcome.stepIndex].transaction, parameters: sequence.parameters, result: sequence.result, metadataHash: sequence.metadataHash } });
       const tokenUrl = `/modules/${verified.details.token.address}?transaction=${outcome.result.transactionHash}`;
       router.push(tokenUrl);
-      rememberOpenedLaunch(sequence.account, outcome.result.transactionHash);
       return { ...outcome.result, tokenUrl, metadataStatus: "stored", verificationStatus: "verified", operationComplete: true,
         pool: foundationPoolPresentation(verified.details), positions: foundationPositionPresentation(verified.details),
         message: "Your coin is ready." };
@@ -230,9 +226,12 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     return { url: result.uri, sha256: input.image.sha256 };
   }
   return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
-    {savedLaunchError && savedLaunchError === session.resolution?.operationId ? <div className={`${styles.page} ${styles.sessionStatus}`}>
-      <p role="alert">Your saved launch could not be opened yet.</p>
-      <button type="button" className={styles.secondaryButton} onClick={() => { setSavedLaunchError(null); setRecoveryRetry(value => value + 1); }}>Open coin</button>
+    {session.resolution?.status === "success" && session.resolution.metadata?.stepKind === "launch" && session.resolution.metadata.token
+      && session.pending === "null" && !session.progress && completedDraft !== draftKey ? <div className={`${styles.page} ${styles.sessionStatus}`}>
+      <button type="button" className={styles.secondaryButton} disabled={openingSavedLaunch} onClick={() => void openSavedLaunch()}>
+        {openingSavedLaunch ? "Opening your previous coin…" : "Open your previous coin"}
+      </button>
+      {savedLaunchError === session.resolution.operationId ? <p role="alert">Your previous launch could not be checked yet. Try opening it again.</p> : null}
     </div> : null}<ModuleFoundationBuilder key={session.resultGeneration} layout={layout} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}

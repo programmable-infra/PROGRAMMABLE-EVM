@@ -10,6 +10,7 @@ export async function createModuleStudioServer() {
     import React, {useRef, useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {FoundationStudio} from './components/module-studio/studio';
+    import {ModuleFoundationLaunchHost} from './components/module-foundation-launch-host';
     import {SiteHeader} from './components/site-navigation';
     import styles from './components/module-studio/studio.module.css';
     import './app/globals.css'; import './app/interface.css';
@@ -24,6 +25,7 @@ export async function createModuleStudioServer() {
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
+      if(mode==='restored-launch') return <ModuleFoundationLaunchHost layout="studio"/>;
       return <div className="app-frame"><SiteHeader/><main><div className={styles.launchPage}>
         <FoundationStudio draft={draft} catalog={catalog} quoteSymbol={customQuote?'TOKEN':'ETH'} initialBuy={draft.initialBuy}
           actionLabel="Review coin" errors={errors} customQuote={customQuote} canResolveQuote imageInput={imageInput}
@@ -41,9 +43,12 @@ export async function createModuleStudioServer() {
     outdir: "/fixture-output", jsx: "automatic", external: ["/fonts/*", "/brand/*"],
     define: { "process.env.NODE_ENV": '"production"', "process.env": "{}" },
     plugins: [{ name: "module-studio-boundaries", setup(plugin) {
-      plugin.onResolve({ filter: /^(@\/components\/wallet-provider|next\/(navigation|link|image))$/ }, args => ({ path: args.path, namespace: "fixture" }));
+      plugin.onResolve({ filter: /^(@\/components\/(wallet-provider|module-foundation-session)|\.\/module-foundation-session|next\/(navigation|link|image))$/ }, args => ({ path: args.path, namespace: "fixture" }));
       plugin.onLoad({ filter: /.*/, namespace: "fixture" }, args => ({ loader: "tsx", resolveDir: root,
-        contents: args.path === "@/components/wallet-provider" ? `export const useWallet=()=>({wallet:null,authenticated:false,walletLinked:false,authReady:true,sessionReady:true,hasSession:false,openingWallet:false,connecting:false,disconnecting:false,preloadWallet:()=>{},openWallet:()=>{},disconnect:async()=>false});`
+        contents: args.path.endsWith("module-foundation-session") ? `const account='0x'+'aa'.repeat(20); const resolution={status:'success',operationId:'previous',account,metadata:{stepKind:'launch',operationKind:'launch',token:'0x'+'bb'.repeat(20)},transactionHash:'0x'+'cc'.repeat(32)};
+          const session={account,contextKey:'restored',resultGeneration:0,client:{},pending:'null',resolution,progress:'',walletContext:{},envelope:null,displayEnvelope:null,availability:{status:'ready',chainId:4663,chainName:'Robinhood Chain'}};
+          export const useFoundationSession=()=>session; export const FoundationSessionStatus=()=>null;`
+          : args.path === "@/components/wallet-provider" ? `export const useWallet=()=>({wallet:null,authenticated:false,walletLinked:false,authReady:true,sessionReady:true,hasSession:false,openingWallet:false,connecting:false,disconnecting:false,preloadWallet:()=>{},openWallet:()=>{},disconnect:async()=>false});`
           : args.path === "next/navigation" ? `export const usePathname=()=>'/launch/modules/foundation';export const useSearchParams=()=>new URLSearchParams(location.search);export const useRouter=()=>({prefetch:()=>{},push:()=>{},replace:()=>{}});`
           : args.path === "next/link" ? `import React from 'react';export default function Link({prefetch,...props}){return <a {...props}/>}`
           : `import React from 'react';export default function Image({priority,fill,unoptimized,...props}){return <img {...props}/>}` }));

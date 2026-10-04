@@ -62,7 +62,10 @@ async function calls(page: Page) {
 }
 
 async function expectMethods(page: Page, methods: string[]) {
-  await expect.poll(async () => (await calls(page)).map((call) => call.method)).toEqual(methods);
+  // Reading a selected provider account is not a login, link or signature.
+  // Network-authority tests below inspect these read-only calls separately.
+  const sessionCalls = (items: string[]) => items.filter(method => !["getEthereumProvider", "eth_accounts"].includes(method));
+  await expect.poll(async () => sessionCalls((await calls(page)).map(call => call.method))).toEqual(sessionCalls(methods));
 }
 
 test("only the admin wallet gets one dashboard entry, including keyboard and account changes", async ({ page }) => {
@@ -338,7 +341,7 @@ for (const width of [1440, 390, 320]) {
     await expect(page.getByRole("dialog")).toHaveCount(1);
     await page.getByRole("button", { name: "Reject linking foreign account", exact: true }).click();
     await expect(dialog.getByRole("alert")).toHaveText("This wallet is linked to another account. Switch accounts to use it.");
-    await expect(dialog.getByRole("button", { name: "Switch account", exact: true })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Sign in with this wallet", exact: true })).toBeVisible();
     await expect(dialog.getByRole("button", { name: "Connect linked wallet", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
@@ -390,7 +393,7 @@ for (const width of [1440, 390]) {
     await expectMethods(page, ["connectWallet", "refreshUser"]);
     expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
     await page.screenshot({ path: testInfo.outputPath(`wallet-account-recovery-${width}.png`) });
-    await dialog.getByRole("button", { name: "Switch account", exact: true }).click();
+    await dialog.getByRole("button", { name: "Sign in with this wallet", exact: true }).click();
     await expect(page.getByLabel("Session authenticated", { exact: true })).toHaveText("false");
     expect((await calls(page)).filter((call) => call.method === "login")).toHaveLength(0);
     await page.getByRole("button", { name: "Finish logout readback", exact: true }).click();
@@ -463,7 +466,69 @@ test("explicit account selection is restricted to owned wallets and does not sur
   await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
   await page.getByRole("button", { name: "Change SDK user, same linked addresses", exact: true }).click();
   await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  await expectMethods(page, ["getEthereumProvider", "eth_accounts"]);
+});
+
+test("MetaMask account and chain events reuse the linked session without signing", async ({ page }) => {
+  await open(page);
+  await scenario(page, "both-owned");
+  await page.getByRole("button", { name: "MetaMask selects wallet B", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
+  await expect(page.getByLabel("Session authenticated", { exact: true })).toHaveText("true");
+  await page.getByRole("button", { name: "MetaMask selects Ethereum", exact: true }).click();
+  await expect(page.getByLabel("Selected wallet network", { exact: true })).toHaveText("0x1");
+  await page.getByRole("button", { name: "MetaMask selects wallet A", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  await expect(page.getByLabel("Selected wallet network", { exact: true })).toHaveText("0x1");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expectMethods(page, []);
+});
+
+test("a provider event cannot authorize an unlinked wallet or sign it in", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "MetaMask selects wallet B", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText("none");
+  await expect(page.getByLabel("Session authenticated", { exact: true })).toHaveText("true");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "MetaMask selects wallet A", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  await page.getByRole("button", { name: "MetaMask locks", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText("none");
+  await expectMethods(page, []);
+});
+
+test("a restored linked session uses MetaMask's current account even when its event preceded hydration", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Restore linked session with MetaMask B", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
+  await expect(page.getByLabel("Session authenticated", { exact: true })).toHaveText("true");
+  await expectMethods(page, []);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("switching to a previously linked MetaMask account does not log out or sign again", async ({ page }) => {
+  await open(page);
+  await scenario(page, "both-owned");
+  await page.getByRole("button", { name: "Choose wallet B in permissions", exact: true }).click();
+  await page.getByRole("button", { name: "Open account", exact: true }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Switch account", exact: true }).click();
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountB);
+  await expect(page.getByLabel("Session authenticated", { exact: true })).toHaveText("true");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expectMethods(page, ["getEthereumProvider", "wallet_requestPermissions", "eth_accounts"]);
+});
+
+test("an in-flight network request stays obsolete after MetaMask switches accounts and returns", async ({ page }) => {
+  await open(page);
+  await scenario(page, "both-owned");
+  await beginDelayedNetworkSwitch(page);
+  // These controls represent events from MetaMask while the app dialog is open.
+  await page.getByRole("button", { name: "MetaMask selects wallet B", exact: true }).dispatchEvent("click");
+  await page.getByRole("button", { name: "MetaMask selects wallet A", exact: true }).dispatchEvent("click");
+  await page.getByRole("button", { name: "Resolve network switch", exact: true }).dispatchEvent("click");
+  await expectNetworkResults(page, [false]);
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  expect((await calls(page)).filter(call => ["login", "logout", "linkWallet", "forbidden-wallet-operation"].includes(call.method))).toEqual([]);
 });
 
 for (const [sdkScenario, method] of [["anonymous", "login"], ["linked-disconnected", "connectWallet"], ["email-without-wallet", "linkWallet"]]) {
