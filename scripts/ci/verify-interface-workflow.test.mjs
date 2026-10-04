@@ -49,7 +49,7 @@ test("isolated Interface jobs retain every original command and a complete local
   assert.equal(scripts["verify:interface:browser-build:ci"],
     "npm run test:browser:wallet-lock && npm run test:browser:late-migration && npm run build");
   assert.equal(scripts["test:ci-scope"],
-    "node --test scripts/ci/classify-verify-paths.test.mjs scripts/ci/verify-interface-workflow.test.mjs scripts/ci/interface-guidance-scope.test.mjs scripts/ci/interface-presentation-scope.test.mjs");
+    "node --test scripts/ci/classify-verify-paths.test.mjs scripts/ci/verify-interface-workflow.test.mjs scripts/ci/interface-guidance-scope.test.mjs scripts/ci/interface-presentation-scope.test.mjs scripts/test/publish-website-ui.test.mjs");
   assert.equal(scripts["test:interface:ci"],
     "npm run test:gitbook-openapi && npm run verify:candidate-neutrality && npm run verify:service-launch-permit-v2-golden && npm run test:retired-read-model-cutover && node --test scripts/test/verify-candidate-neutral-production.test.mjs scripts/test/verify-service-launch-permit-v2-golden.test.mjs scripts/test/verify-custom-launch-production-bundle.test.mjs scripts/test/smoke-explore-index-reset-public-apis.test.mjs scripts/test/indexed-website-reads.test.mjs && vitest run --exclude tests/classic-v3-deployment-sequence.test.ts --exclude tests/deep-release-verifier.test.ts --exclude tests/deep-v2-release-verifier.test.ts --exclude tests/website-projection-target.test.ts");
   assert.equal(scripts.build,
