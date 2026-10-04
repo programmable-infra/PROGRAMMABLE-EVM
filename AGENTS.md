@@ -13,7 +13,7 @@
 - Every parallel workstream uses its own Git worktree and `codex/` branch.
 - Assign explicit path ownership before implementation. Two active workstreams must not edit the same files.
 - Feature worktrees may produce local or preview builds. They must not deploy production.
-- Only the integration owner may combine workstreams, run the complete release gate, and publish after explicit authorization.
+- Only the integration owner may combine workstreams and publish. Use the release route appropriate to the change below.
 - Product branches target `production`. Contract-only evidence may target `main` only when the task explicitly says so.
 - Handoffs must include the branch, commit, changed paths, checks run, and remaining release blockers.
 
@@ -29,9 +29,18 @@
 
 - `tested`, `deployed`, `source verified`, `lifecycle verified`, and `available` are separate states.
 - Do not describe a model as live from a build, simulation, fork test, source match, or UI implementation alone.
-- Production activation requires exact deployment evidence, runtime checks, provider-backed lifecycle verification, monitoring, and a clean integration build.
+- Contract, wallet, trading, indexer and API activation requires exact deployment evidence, runtime checks, provider-backed lifecycle verification, monitoring, and a clean integration build.
 - Production deploys must use a clean integration worktree at the exact reviewed `production` commit.
 - Never expose secrets, private keys, personal identities, or local environment files in commits, logs, screenshots, or public artifacts.
+
+## Fast website edits
+
+- An owner request to change the website includes publishing routine presentation edits unless the owner asks for a draft or preview. Implement and publish without another confirmation.
+- CSS, images, fonts and TSX copy edits use the presentation lane. The classifier proves that executable code, handlers, links and transaction values are unchanged. The production build and credential scan remain; unrelated unit suites, wallet browser suites and financial lifecycle audits do not run for this lane.
+- Merge one coherent change into `production`. `Publish website UI` builds and publishes it automatically using the existing production configuration. Do not run `npm run verify`, a local production build, the manual staging workflow, or a second deploy for these edits.
+- `npm run ship:ui:plan` shows the outstanding changes since the live deployment. `npm run ship:ui` is the single recovery entry point from a clean production checkout with the existing Vercel and GitHub access.
+- Verify the requested appearance at the relevant viewport. Do not add tests for reversible text, spacing, color or image edits. Do not repeat checks that already passed for the exact commit.
+- Logic, account, signing, fee, contract, route, API, deployment configuration and dependency changes keep their relevant functional release route. The presentation publisher rejects mixed outstanding changes, stale branches and concurrent production changes.
 
 See [docs/PROJECT-STRUCTURE.md](docs/PROJECT-STRUCTURE.md) for the directory map.
 

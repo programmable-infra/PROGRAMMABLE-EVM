@@ -1,5 +1,40 @@
 # CI throughput and unchanged release boundaries
 
+## Routine website edits
+
+Presentation changes use a short route. CSS, images and fonts qualify by their
+paths and regular file modes. Existing TSX files qualify only when their parsed
+code stays identical: visible JSX copy and the fixed text attributes `title`,
+`alt`, `placeholder`, `aria-label` and `aria-description` may change. Imports,
+handlers, URLs, conditional logic, amounts and other values remain unchanged.
+Copy in scripts, form values and custom component props/children does not qualify.
+Missing history or parser, malformed source, executable file modes, unknown
+paths and mixed functional changes select normal verification. The classifier
+is loaded from the trusted base; changes to the classifier pay the previous gate.
+
+The presentation lane keeps the production build and credential scan. It omits
+the global lint/unit batch, wallet and migration browser suites, Chromium install,
+and unrelated V4 release/activation audits. Both Interface workers still finish
+successfully, and the aggregate validates the exclusive presentation scope. The
+existing sixteen-job proof and exact source binding remain unchanged.
+
+After the change merges into `production`, `Publish website UI` publishes it
+automatically. The publisher compares the entire diff from the live deployment
+to the current production commit, then loads that deployed revision's classifier.
+It builds once with the existing production Vercel configuration, waits for the
+exact production Verify run, loads three public pages, confirms the branch and
+live deployment have not moved, promotes the exact candidate once, and confirms
+the production binding. It makes no direct Codex, indexer, wallet or RPC calls.
+The existing Vercel build cache is reused; there is no forced rebuild flag.
+
+`npm run ship:ui:plan` performs only release reads. `npm run ship:ui` recovers the
+same route from a clean production checkout with the existing GitHub and Vercel
+login. Never issue a second deployment while the automatic workflow is running.
+An uncertain deploy or promotion response stops without automatic retry.
+
+Functional changes retain their relevant release route. To initialize this
+workflow, integrate and deploy its control changes once through that route.
+
 ## Interface verification
 
 The stable required `Interface` check aggregates two independent checkouts of the

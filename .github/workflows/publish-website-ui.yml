@@ -1,0 +1,61 @@
+name: Publish website UI
+
+on:
+  push:
+    branches: [production]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: programmable-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository_id == 1314365508
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Check out exact production source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+          cache: npm
+
+      - name: Install pinned Vercel CLI
+        run: npm install --global vercel@54.1.0
+
+      - name: Bind the existing project
+        run: |
+          mkdir -p .vercel
+          printf '%s\n' '{"projectId":"prj_MM8nbhoztJnz1yhimwc9CVFYhAd7","orgId":"team_x9QVubeZTF27TMYRLZWRvltj"}' > .vercel/project.json
+
+      - name: Check all changes since the live deployment
+        id: plan
+        run: node scripts/publish-website-ui.mjs plan
+
+      - name: Install the locked parser for copy changes
+        if: steps.plan.outputs.eligible == 'true'
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build and publish the UI once
+        if: steps.plan.outputs.eligible == 'true'
+        run: node scripts/publish-website-ui.mjs publish
+
+      - name: Leave functional changes to their release route
+        if: steps.plan.outputs.eligible != 'true'
+        run: echo "No outstanding presentation-only release."
