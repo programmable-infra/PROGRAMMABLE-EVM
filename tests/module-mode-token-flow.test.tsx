@@ -81,9 +81,11 @@ describe("Module Mode token identity and navigation", () => {
     expect(launchList(saved, 1, "", now).items).not.toContainEqual(row);
     expect(profileLaunchList(saved, a(90), 1, now).items).not.toContainEqual(row);
   });
-  it("makes stale index status explicit while retaining verified identity", () => {
+  it.each(["ready", "syncing", "stale", "unavailable"] as const)("retains verified identity without a background index notice when %s", status => {
     const token = moduleRow();
-    const html = renderToStaticMarkup(<RobinhoodTokenView address={token.tokenAddress} token={token} status="stale" />);
-    expect(html).toContain("Showing the last verified launch record"); expect(html).toContain("Manage coin");
+    const html = renderToStaticMarkup(<RobinhoodTokenView address={token.tokenAddress} token={token} status={status} />);
+    expect(html).toContain(token.name!);
+    expect(html).toContain("Manage coin");
+    expect(html).not.toMatch(/Showing the last verified launch record|Index updates are temporarily unavailable|New launches are still being checked/);
   });
 });

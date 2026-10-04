@@ -36,7 +36,7 @@ export function RobinhoodTokenView({ address, token, status, initialPresentation
   </div>;
 
   return <RobinhoodMarketView address={address} name={name} symbol={token.symbol} creator={token.creator} launch={token}
-    presentation={details} loading={presentation.loading} delayed={presentation.delayed} status={status} hasAsset={hasAsset}
+    presentation={details} loading={presentation.loading} delayed={presentation.delayed} hasAsset={hasAsset}
     manageHref={moduleLaunch ? robinhoodModuleManageHref(moduleLaunch) : null} fallbackImageUrl={moduleLaunch ? MODULE_TOKEN_FALLBACK_IMAGE : undefined}
     trade={<SwapPanel key={`4663:${address.toLowerCase()}`} embedded initialAddress={address} initialChainId={4663} tokenSymbol={token.symbol ?? undefined} />}>
     {moduleLaunch && !isRobinhoodFoundationLaunch(moduleLaunch) ? <TokenLaunchModules launch={moduleLaunch} /> : null}
