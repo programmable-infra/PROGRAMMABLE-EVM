@@ -46,7 +46,8 @@ export async function syncLaunchProjectionIndex(source: LaunchProjectionSourceV1
     version: 1, sourceUrl: LAUNCH_PROJECTION_FEED_V1, updatedAt: new Date(now()).toISOString(),
     nextCursor: page.nextCursor, items: [...rows.values()],
   } }), saved.etag);
-  return { status: page.nextCursor === null ? "ready" as const : "partial" as const, indexed: rows.size, nextCursor: page.nextCursor };
+  // A continuation cursor means another verified page remains, not a failed proof.
+  return { status: page.nextCursor === null ? "ready" as const : "syncing" as const, indexed: rows.size, nextCursor: page.nextCursor };
 }
 
 /** Backend finality includes the independently verified L1 witness. The Website additionally reads

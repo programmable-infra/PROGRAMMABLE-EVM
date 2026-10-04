@@ -102,7 +102,7 @@ export async function GET(request: Request) {
       foundation = foundationUnavailableSources.length || states.includes("unavailable") ? "unavailable"
         : states.includes("partial") ? "partial" : states.includes("syncing") ? "syncing" : states.length ? "ready" : "disabled";
     }
-    const failed = result === null || result.status === "partial" || launchProjections.status === "unavailable" || launchProjections.status === "partial" || moduleMode.status === "partial" || moduleMode.status === "unavailable"
+    const failed = result === null || result.status === "partial" || launchProjections.status === "unavailable" || moduleMode.status === "partial" || moduleMode.status === "unavailable"
       || foundation === "unavailable" || foundation === "partial" || moduleUnavailableSources.length > 0 || Object.values(moduleSources).some(source => source.status === "partial" || source.status === "unavailable");
     if (failed) console.warn("robinhood-index-incomplete", JSON.stringify({
       elapsedMs: Date.now() - startedAt, custom: result?.status ?? "unavailable", launchProjections: launchProjections.status,

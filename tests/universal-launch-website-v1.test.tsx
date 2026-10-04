@@ -75,6 +75,22 @@ describe("additive universal launch projection", () => {
       verify: async () => { throw new Error("provider unavailable"); } }, store)).rejects.toThrow(/provider/);
     expect(JSON.stringify(saved)).toBe(before);
   });
+  it("resumes verified projection pagination without re-verifying an unchanged launch", async () => {
+    let saved = snapshot(); let version = 0;
+    const verify = vi.fn().mockResolvedValue({ launchedAt: nowIso });
+    const page = vi.fn().mockResolvedValueOnce({ launches: [projectionFixture()], nextCursor: "next-verified-page" })
+      .mockResolvedValueOnce({ launches: [projectionFixture()], nextCursor: null });
+    const store = { read: async () => ({ snapshot: saved, etag: `v${version}` }),
+      write: vi.fn(async (next: RobinhoodSnapshot, etag: string | null) => {
+        expect(etag).toBe(`v${version}`); saved = next; version++;
+      }) };
+    expect(await syncLaunchProjectionIndex({ page, verify }, store)).toEqual({ status: "syncing", indexed: 1, nextCursor: "next-verified-page" });
+    expect(saved.launchProjections?.nextCursor).toBe("next-verified-page");
+    expect(await syncLaunchProjectionIndex({ page, verify }, store)).toEqual({ status: "ready", indexed: 1, nextCursor: null });
+    expect(page.mock.calls).toEqual([[null], ["next-verified-page"]]);
+    expect(verify).toHaveBeenCalledOnce(); expect(store.write).toHaveBeenCalledTimes(2);
+    expect(saved.launchProjections?.items).toHaveLength(1);
+  });
 });
 
 describe("exact wallet transaction review", () => {
