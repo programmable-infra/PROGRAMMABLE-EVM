@@ -141,8 +141,8 @@ export async function discoverFoundationLaunch(input: {
   const { parameters } = decodeFoundationLaunchCall(binding, { data: mined.input, value: mined.value });
   const [predictedToken, predictedHook] = await Promise.all([
     client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "predictTokenAddress",
-      args: [mined.from, parameters.tokenSalt, parameters.metadata], blockNumber: mined.blockNumber }),
-    readFoundationHookPrediction(client, binding, mined.from, token, parameters, "predictHookAddress", mined.blockNumber),
+      args: [mined.from, parameters.tokenSalt, parameters.metadata], blockNumber: observedAt.blockNumber }),
+    readFoundationHookPrediction(client, binding, mined.from, token, parameters, "predictHookAddress", observedAt.blockNumber),
   ]);
   const key = foundationPoolKey({ token, quote: parameters.quote, hook: predictedHook });
   if (!sameAddress(predictedToken, token) || !sameAddress(predictedHook, record.hook) || !sameHex(foundationPoolId(key), record.poolId)) {
@@ -151,7 +151,7 @@ export async function discoverFoundationLaunch(input: {
   const metadataHash = keccak256(encodeAbiParameters(foundationMetadataParameters, [parameters.metadata]));
   const transaction = { from: getAddress(mined.from), to: getAddress(mined.to), data: mined.input, value: mined.value };
   const receipt = await verifyFoundationLaunchReceipt({ client, binding, transactionHash: hash,
-    expected: { transaction, parameters, result: record, metadataHash } });
+    expected: { transaction, parameters, result: record, metadataHash }, verificationBlock: observedAt.blockNumber });
   checkAbort(input.signal);
   await assertCanonical(client, observedAt);
   return { evidence: "canonical-launch-discovery" as const, sourceKind: "module-foundation-v1" as const,

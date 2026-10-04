@@ -36,6 +36,11 @@ const menuNavItems = [
 
 const mobileNavItems = [desktopNavItems[0], ...menuNavItems];
 
+function isBuilderWorkspace(pathname: string) {
+  return pathname === "/launch/modules" || pathname.startsWith("/launch/modules/")
+    || pathname === "/developers/api-keys" || pathname === "/developers/hooks";
+}
+
 function warmNavigationRoute(
   router: ReturnType<typeof useRouter>,
   href: string,
@@ -239,8 +244,7 @@ function DesktopNavigation() {
 
 export function SiteHeader() {
   const pathname = usePathname() ?? "/";
-  const builderWorkspace = pathname === "/launch/modules" || pathname.startsWith("/launch/modules/")
-    || pathname === "/developers/api-keys" || pathname === "/developers/hooks";
+  const builderWorkspace = isBuilderWorkspace(pathname);
   const menuId = useId();
   const headerRef = useRef<HTMLElement>(null);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -421,7 +425,7 @@ export function MobileNavigation({
             key={item.href}
             className={[
               current ? "active" : "",
-              desktopNavItems.includes(item) ? styles.mobilePrimaryLink : "",
+              desktopNavItems.includes(item) && !isBuilderWorkspace(pathname) ? styles.mobilePrimaryLink : "",
             ].filter(Boolean).join(" ") || undefined}
             href={item.href}
             prefetch={false}

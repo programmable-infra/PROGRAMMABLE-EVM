@@ -306,6 +306,9 @@ export interface FoundationExpectedLaunch {
 /** Verifies inclusion and exact intent against the canonical receipt block, without claiming finality. */
 export async function verifyFoundationLaunchReceipt(input: {
   client: PublicClient; binding: FoundationDeploymentBinding; transactionHash: Hex; expected: FoundationExpectedLaunch;
+  /** Discovery can check immutable launch identity at a later canonical state block.
+   * The receipt checkpoint stays bound to the original transaction's block. */
+  verificationBlock?: bigint;
 }) {
   const { client, binding, expected, transactionHash } = input;
   const planned = expected.transaction, p = expected.parameters;
@@ -325,7 +328,18 @@ export async function verifyFoundationLaunchReceipt(input: {
     || transaction.transactionIndex !== receipt.transactionIndex) {
     throw new Error("The mined transaction does not match the expected factory launch.");
   }
-  if (foundationFactoryVersion(binding) !== "v1") return verifyV2LaunchReceipt({ ...input, receipt });
+  let launchCheckpoint: FoundationCheckpoint | undefined;
+  if (input.verificationBlock !== undefined) {
+    if (typeof input.verificationBlock !== "bigint" || input.verificationBlock < receipt.blockNumber) {
+      throw new Error("The verification block precedes this launch receipt.");
+    }
+    const block = await client.getBlock({ blockNumber: receipt.blockNumber });
+    if (block.number !== receipt.blockNumber || !block.hash || !sameHex(block.hash, receipt.blockHash)) {
+      throw new Error("The launch receipt block is no longer canonical.");
+    }
+    launchCheckpoint = { blockNumber: block.number, blockHash: block.hash, timestamp: block.timestamp };
+  }
+  if (foundationFactoryVersion(binding) !== "v1") return verifyV2LaunchReceipt({ ...input, receipt, launchCheckpoint });
   const candidates = receipt.logs.filter(log => sameAddress(log.address, binding.factory.address) && log.topics[0]
     && sameHex(log.topics[0], launchTopic));
   if (candidates.length !== 1) throw new Error("The receipt must contain exactly one launch event emitted by the expected factory.");
@@ -346,8 +360,8 @@ export async function verifyFoundationLaunchReceipt(input: {
     || (p.additionalQuoteAmount > 0n) !== (event.creatorPositionId > 0n)) {
     throw new Error("The launch event differs from the expected metadata, pool, positions or funding.");
   }
-  const details = await readFoundationPoolDetails({ client, binding, token: r.token, blockNumber: receipt.blockNumber });
-  if (!sameHex(details.checkpoint.blockHash, receipt.blockHash) || !sameHex(details.token.metadataHash, event.metadataHash)
+  const details = await readFoundationPoolDetails({ client, binding, token: r.token, blockNumber: input.verificationBlock ?? receipt.blockNumber });
+  if ((!launchCheckpoint && !sameHex(details.checkpoint.blockHash, receipt.blockHash)) || !sameHex(details.token.metadataHash, event.metadataHash)
     || !sameAddress(details.creator, planned.from) || details.initialTick !== p.initialTick || !foundationCreatorFeesEqual(details, p)
     || !sameAddress(details.pool.quote, event.quote) || !sameAddress(details.record.hook, event.hook)
     || !sameAddress(details.record.ledger, event.ledger) || details.record.factoryVersion !== "v1" || !sameAddress(details.record.baseVault, event.baseVault)
@@ -356,12 +370,15 @@ export async function verifyFoundationLaunchReceipt(input: {
     || details.record.initialBuyTokenAmount !== event.initialBuyTokenAmount) {
     throw new Error("The launch receipt disagrees with canonical factory and token state.");
   }
-  return { evidence: "canonical-receipt" as const, transactionHash, checkpoint: details.checkpoint,
+  if (launchCheckpoint) await assertCanonical(client, launchCheckpoint);
+  return { evidence: "canonical-receipt" as const, transactionHash, checkpoint: launchCheckpoint ?? details.checkpoint,
+    ...(launchCheckpoint ? { verificationCheckpoint: details.checkpoint } : {}),
     transactionIndex: receipt.transactionIndex, logIndex: log.logIndex, event: { ...event, factoryVersion: "v1" as const }, details };
 }
 
 async function verifyV2LaunchReceipt(input: {
   client: PublicClient; binding: FoundationDeploymentBinding; transactionHash: Hex; expected: FoundationExpectedLaunch; receipt: TransactionReceipt;
+  verificationBlock?: bigint; launchCheckpoint?: FoundationCheckpoint;
 }) {
   const { client, binding, transactionHash, expected, receipt } = input, p = expected.parameters;
   const factoryVersion = foundationFactoryVersion(binding);
@@ -397,8 +414,8 @@ async function verifyV2LaunchReceipt(input: {
     if (transfers.length !== 1 || !validLog(transfers[0].log) || BigInt(transfers[0].event.from) !== 0n
       || !sameAddress(transfers[0].event.to, FOUNDATION_DEAD_ADDRESS)) throw new Error("Each V2 launch NFT must be minted directly from zero to DEAD in this receipt.");
   }
-  const details = await readFoundationPoolDetails({ client, binding, token: r.token, blockNumber: receipt.blockNumber });
-  if (details.record.factoryVersion === "v1" || details.record.factoryVersion !== factoryVersion || !sameHex(details.checkpoint.blockHash, receipt.blockHash)
+  const details = await readFoundationPoolDetails({ client, binding, token: r.token, blockNumber: input.verificationBlock ?? receipt.blockNumber });
+  if (details.record.factoryVersion === "v1" || details.record.factoryVersion !== factoryVersion || (!input.launchCheckpoint && !sameHex(details.checkpoint.blockHash, receipt.blockHash))
     || !sameAddress(details.creator, expected.transaction.from) || !sameAddress(details.pool.quote, p.quote)
     || details.initialTick !== p.initialTick || !foundationCreatorFeesEqual(details, p)
     || !sameHex(details.token.metadataHash, event.metadataHash) || !sameHex(details.compositionHash, event.compositionHash)
@@ -406,7 +423,9 @@ async function verifyV2LaunchReceipt(input: {
       encodeFunctionResult({ abi: foundationFactoryV2Abi, functionName: "launchOf", result: r }))) {
     throw new Error("The V2 launch receipt disagrees with canonical factory and token state.");
   }
-  return { evidence: "canonical-receipt" as const, transactionHash, checkpoint: details.checkpoint,
+  if (input.launchCheckpoint) await assertCanonical(client, input.launchCheckpoint);
+  return { evidence: "canonical-receipt" as const, transactionHash, checkpoint: input.launchCheckpoint ?? details.checkpoint,
+    ...(input.launchCheckpoint ? { verificationCheckpoint: details.checkpoint } : {}),
     transactionIndex: receipt.transactionIndex, logIndex: log.logIndex,
     event: { ...event, ...r, factoryVersion }, details };
 }

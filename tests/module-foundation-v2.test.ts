@@ -227,6 +227,21 @@ describe("V2 canonical readback and receipt", () => {
     expect(page.entries[0].factoryVersion).toBe("v2");
     expect(page.entries[0]).not.toHaveProperty("baseVault");
   });
+  it("recovers an old V2 launch with current state while retaining its canonical creation block and DEAD mints", async () => {
+    const f = foundationV2Fixture();
+    const originalRead = f.methods.readContract.getMockImplementation()!;
+    f.methods.readContract.mockImplementation(async request => {
+      if (request.blockNumber !== undefined && request.blockNumber < 200n) throw new Error("historical state is not available");
+      return originalRead(request);
+    });
+    f.methods.getBlock.mockImplementation(async request => ({ number: request.blockNumber ?? 216n,
+      hash: v2Hash(Number(request.blockNumber ?? 216n)), timestamp: f.checkpoint.timestamp }));
+    const result = await discoverFoundationLaunch({ client: f.client, binding: f.binding, token: f.token, transactionHash: f.transactionHash });
+    expect(result.checkpoint).toMatchObject({ blockNumber: 100n, blockHash: v2Hash(100) });
+    expect(result.receipt.verificationCheckpoint).toMatchObject({ blockNumber: 200n, blockHash: v2Hash(200) });
+    expect(result.receipt.event.factoryVersion).toBe("v2");
+    expect(result.receipt.details.positions.base.owner).toBe(FOUNDATION_DEAD_ADDRESS);
+  });
   it("rejects a wrong live creator NFT owner during a later read", async () => {
     const f = foundationV2Fixture(); f.state.owner.set(78n, getAddress(v2Address(88)) as Address);
     await expect(readFoundationPoolDetails({ client: f.client, binding: f.binding, token: f.token })).rejects.toThrow("creator launch NFT");
