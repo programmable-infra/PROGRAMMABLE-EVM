@@ -231,6 +231,7 @@ describe("Alchemy launch overlay refresh", () => {
     expect(result.slice.cursor.blockNumber).toBe("25717611");
     expect(mocks.advanceLaunchStampRouterSlice).toHaveBeenCalledOnce();
     expect(mocks.advanceExploreLaunchDiscovery).not.toHaveBeenCalled();
+    expect(mocks.readAlchemyLaunchRegistry).toHaveBeenCalledWith(deployment, expect.any(Object), { scope: "router" });
   });
 
   it("replays the complete refresh on the fixed secondary after primary capacity", async () => {
