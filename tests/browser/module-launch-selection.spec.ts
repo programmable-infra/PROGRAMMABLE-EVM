@@ -23,7 +23,7 @@ test("restoring a completed launch keeps the new draft open without background r
     const url = `http://127.0.0.1:${address.port}/?mode=restored-launch`;
     await page.goto(url);
     await expect(page.getByRole("heading", { name: "Module Mode", exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Open your previous coin", exact: true })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Module library" }).getByRole("button", { name: "Open your previous coin", exact: true })).toBeVisible();
     await page.getByLabel("Name", { exact: true }).fill("My next coin");
     await expect(page).toHaveURL(url);
     expect(apiCalls).toEqual([]);
