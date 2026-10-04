@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import yaml from "js-yaml";
 import { deploymentSource } from "../publish-website-ui.mjs";
@@ -27,4 +31,20 @@ test("automatic UI publication uses only the protected production branch and ser
   assert.equal(job.if, "github.repository_id == 1314365508");
   for (const step of job.steps) assert.equal(step["continue-on-error"], undefined);
   assert.equal(job.steps.find((step) => step.name === "Build and publish the UI once").if, "steps.plan.outputs.eligible == 'true'");
+});
+
+test("local recovery rejects untracked source before contacting a deployment provider", () => {
+  const directory = realpathSync(mkdtempSync(join(tmpdir(), "programmable-ui-clean-source-")));
+  try {
+    execFileSync("git", ["init", "--initial-branch=production"], { cwd: directory, stdio: "ignore" });
+    execFileSync("git", ["remote", "add", "origin", "https://github.com/programmablehq/PROGRAMMABLE.git"], { cwd: directory });
+    writeFileSync(join(directory, "unreviewed-route.ts"), "export const changed = true;\n");
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL("../publish-website-ui.mjs", import.meta.url)), "plan"],
+      { cwd: directory, encoding: "utf8", timeout: 5000, env: { PATH: process.env.PATH } });
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Commit the change before publishing/u);
+    assert.equal(result.stdout, "");
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

@@ -47,7 +47,7 @@ async function source() {
   if (!["https://github.com/programmablehq/programmable", "git@github.com:programmablehq/programmable"].includes(remote)) {
     throw new PublicationError("Use the canonical Programmable repository.");
   }
-  if (await git("status", "--porcelain", "--untracked-files=no")) throw new PublicationError("Commit the change before publishing.");
+  if (await git("status", "--porcelain")) throw new PublicationError("Commit the change before publishing.");
   const head = await git("rev-parse", "HEAD");
   const branch = await git("branch", "--show-current");
   if (branch !== "production" && !(process.env.GITHUB_REF === "refs/heads/production" && process.env.GITHUB_SHA === head)) {
