@@ -25,10 +25,12 @@ describe("launch pages without a primary asset", () => {
     expect(html).not.toMatch(/Ticker unavailable|<dt>Price<|Market Cap|Liquidity|24h volume|24h change|price chart|for this coin/);
   });
 
-  it("describes a syncing assetless record as a launch", () => {
+  it("preserves a syncing assetless launch without a background index notice", () => {
     const token = projectionToRobinhoodLaunch(projectionFixture(), nowIso);
     const html = renderToStaticMarkup(<RobinhoodTokenView address={component} token={token} status="syncing" />);
-    expect(html).toContain("This launch comes from the verified launch index.");
+    expect(html).toContain('aria-label="Unnamed contract launch"');
+    expect(html).toContain("No primary asset is declared for this launch.");
+    expect(html).not.toContain("verified launch index");
     expect(html).not.toContain("This coin");
   });
 
