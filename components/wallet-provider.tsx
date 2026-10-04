@@ -2199,7 +2199,9 @@ function PrivyWalletBridge({
       }
     } catch (caught) {
       if (!current()) return;
-      const message = getWalletTransactionErrorMessage(caught);
+      const message = errorIsExplicitWalletRejection(caught)
+        ? "Wallet selection cancelled."
+        : getWalletTransactionErrorMessage(caught);
       setError(message);
       setDialogOpen(true);
     } finally {
