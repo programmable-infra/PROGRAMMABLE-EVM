@@ -42,6 +42,16 @@ export function deploymentSource(value) {
   return { id: value.id, sha, url: `https://${value.url}` };
 }
 
+export function presentationDeploymentArguments(head) {
+  if (!SHA.test(head)) throw new PublicationError("An exact source commit is required.");
+  // Preserve the runtime identity used by the existing Custom Hook/GitHub
+  // session configuration, without changing project environment or API keys.
+  return ["deploy", "--prod", "--skip-domain", "--archive=tgz", "--yes",
+    "--meta", `githubCommitSha=${head}`, "--meta", "githubCommitRef=production",
+    "--meta", "githubRepo=PROGRAMMABLE", "--meta", "githubOrg=programmablehq",
+    "--env", `VERCEL_GIT_COMMIT_SHA=${head}`, "--env", `PROGRAMMABLE_RELEASE_COMMIT_SHA=${head}`];
+}
+
 async function source() {
   const remote = (await git("remote", "get-url", "origin")).replace(/\.git$/u, "").toLowerCase();
   if (!["https://github.com/programmablehq/programmable", "git@github.com:programmablehq/programmable"].includes(remote)) {
@@ -117,9 +127,7 @@ async function publish(value) {
     return;
   }
   emit({ status: "building", commit: value.head, changedPaths: value.paths });
-  const output = await vercel("deploy", "--prod", "--skip-domain", "--yes",
-    "--meta", `githubCommitSha=${value.head}`, "--meta", "githubCommitRef=production",
-    "--meta", "githubRepo=PROGRAMMABLE", "--meta", "githubOrg=programmablehq");
+  const output = await vercel(...presentationDeploymentArguments(value.head));
   const candidateUrl = output.split(/\s+/u).findLast((word) => /^https:\/\/[A-Za-z0-9.-]+\.vercel\.app$/u.test(word));
   if (!candidateUrl) throw new PublicationError("No staged deployment URL was returned. Inspect Vercel before retrying.");
   const candidate = deploymentSource(await deployment(new URL(candidateUrl).hostname));

@@ -6,10 +6,23 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import yaml from "js-yaml";
-import { deploymentSource } from "../publish-website-ui.mjs";
+import { deploymentSource, presentationDeploymentArguments } from "../publish-website-ui.mjs";
 
 const fixture = { id: "dpl_ABC123", projectId: "prj_MM8nbhoztJnz1yhimwc9CVFYhAd7", readyState: "READY",
   url: "programmable-ui.vercel.app", meta: { githubCommitSha: "a".repeat(40) } };
+
+test("metadata and both runtime identities use the same commit required by Custom Hook sessions", () => {
+  const args = presentationDeploymentArguments(fixture.meta.githubCommitSha);
+  const values = (flag) => args.flatMap((value, index) => value === flag ? [args[index + 1]] : []);
+  const env = Object.fromEntries(values("--env").map((value) => value.split("=")));
+  const meta = Object.fromEntries(values("--meta").map((value) => value.split("=")));
+  assert.equal(env.VERCEL_GIT_COMMIT_SHA, meta.githubCommitSha);
+  assert.equal(env.PROGRAMMABLE_RELEASE_COMMIT_SHA, env.VERCEL_GIT_COMMIT_SHA);
+  assert.equal(env.PROGRAMMABLE_RELEASE_COMMIT_SHA, fixture.meta.githubCommitSha);
+  assert.ok(args.includes("--skip-domain"));
+  assert.equal(args.includes("--force"), false);
+  assert.throws(() => presentationDeploymentArguments("production"));
+});
 
 test("publication binds the deployed project and exact Git source, never a broken or arbitrary deployment", () => {
   assert.equal(deploymentSource(fixture).sha, fixture.meta.githubCommitSha);
