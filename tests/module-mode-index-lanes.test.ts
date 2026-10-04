@@ -93,6 +93,15 @@ describe("Independent canonical Robinhood index lanes", () => {
     expect(f.read()?.cursor).toEqual(point(100)); expect(f.read()?.moduleMode?.cursor).toEqual(point(100));
     expect(JSON.stringify(body)).not.toContain("Private");
   });
+  it("returns success while the verified projection feed continues to its next page", async () => {
+    const f = fixture();
+    mocks.projection.mockResolvedValue({ status: "syncing", indexed: 10, nextCursor: "next-verified-page" });
+    const response = await GET(request()); const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({ status: "ready", custom: { status: "ready" }, moduleMode: { status: "ready" },
+      launchProjections: { status: "syncing", indexed: 10, nextCursor: "next-verified-page" } });
+    expect(f.read()?.cursor).toEqual(point(100)); expect(f.read()?.moduleMode?.cursor).toEqual(point(100));
+  });
   it("advances a historical source when the current release is unavailable", async () => {
     const f = fixture();
     const historical: ModuleModeIndexSource = { sourceKind: "module-native-v1", sourceAddress: a(810), releaseDigest: h(811),
