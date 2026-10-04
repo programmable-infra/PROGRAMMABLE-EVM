@@ -213,13 +213,15 @@ const CUSTOM_V2_EXACT_PATHS = new Set([
   "scripts/test/custom-v2-production-workflow-contract.test.mjs",
 ]);
 
-// This operator only publishes signed Foundation owner records. Its source and journal
-// regression tests run in Interface; it changes no Solidity, backend, DB or indexer.
+// These operators have Interface regression coverage and change no Solidity,
+// backend, database or indexer inputs.
 const OWNER_PUBLICATION_PATHS = new Set([
   "ops/module-owner-publication/main.ts",
   "ops/module-owner-publication/journal.ts",
   "ops/module-owner-publication/operator.mjs",
   "ops/module-owner-publication/README.md",
+  "scripts/publish-website-ui.mjs",
+  "scripts/test/publish-website-ui.test.mjs",
 ]);
 
 function isCustomV2OnlyPath(path) {

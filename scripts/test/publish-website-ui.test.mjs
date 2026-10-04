@@ -6,10 +6,22 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import yaml from "js-yaml";
-import { deploymentSource, presentationDeploymentArguments } from "../publish-website-ui.mjs";
+import { deploymentSource, deploymentUrlFromOutput, presentationDeploymentArguments } from "../publish-website-ui.mjs";
 
 const fixture = { id: "dpl_ABC123", projectId: "prj_MM8nbhoztJnz1yhimwc9CVFYhAd7", readyState: "READY",
   url: "programmable-ui.vercel.app", meta: { githubCommitSha: "a".repeat(40) } };
+
+test("CLI agent JSON and terminal output recover the same candidate without another deployment", () => {
+  const expected = `https://${fixture.url}`;
+  for (const output of [expected, `${expected}/\n`, fixture.url,
+    JSON.stringify({ status: "ok", deployment: { url: expected } }),
+    JSON.stringify({ status: "ok", deployment: { url: fixture.url } }),
+    JSON.stringify({ url: expected })]) assert.equal(deploymentUrlFromOutput(output), expected);
+  for (const output of ["", JSON.stringify({ status: "error", deployment: { url: expected } }),
+    "https://evil.test", "https://example.vercel.app.evil.test", '{"status":"ok"}']) {
+    assert.equal(deploymentUrlFromOutput(output), null);
+  }
+});
 
 test("metadata and both runtime identities use the same commit required by Custom Hook sessions", () => {
   const args = presentationDeploymentArguments(fixture.meta.githubCommitSha);

@@ -52,6 +52,22 @@ export function presentationDeploymentArguments(head) {
     "--env", `VERCEL_GIT_COMMIT_SHA=${head}`, "--env", `PROGRAMMABLE_RELEASE_COMMIT_SHA=${head}`];
 }
 
+export function deploymentUrlFromOutput(output) {
+  const normalize = (value) => {
+    if (typeof value !== "string") return null;
+    const url = value.startsWith("https://") ? value : `https://${value}`;
+    return /^https:\/\/[A-Za-z0-9.-]+\.vercel\.app\/?$/u.test(url) ? url.replace(/\/$/u, "") : null;
+  };
+  try {
+    const result = JSON.parse(output);
+    if (result.status && result.status !== "ok") return null;
+    return normalize(result.deployment?.url) ?? normalize(result.url);
+  } catch {
+    // The CLI uses JSON in agent mode and a plain URL in regular terminals.
+    return output.split(/\s+/u).map(normalize).filter(Boolean).at(-1) ?? null;
+  }
+}
+
 async function source() {
   const remote = (await git("remote", "get-url", "origin")).replace(/\.git$/u, "").toLowerCase();
   if (!["https://github.com/programmablehq/programmable", "git@github.com:programmablehq/programmable"].includes(remote)) {
@@ -128,7 +144,7 @@ async function publish(value) {
   }
   emit({ status: "building", commit: value.head, changedPaths: value.paths });
   const output = await vercel(...presentationDeploymentArguments(value.head));
-  const candidateUrl = output.split(/\s+/u).findLast((word) => /^https:\/\/[A-Za-z0-9.-]+\.vercel\.app$/u.test(word));
+  const candidateUrl = deploymentUrlFromOutput(output);
   if (!candidateUrl) throw new PublicationError("No staged deployment URL was returned. Inspect Vercel before retrying.");
   const candidate = deploymentSource(await deployment(new URL(candidateUrl).hostname));
   if (candidate.sha !== value.head) throw new PublicationError("The staged deployment source changed.");
