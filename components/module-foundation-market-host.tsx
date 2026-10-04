@@ -159,8 +159,8 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
   }
 
   if (!details) return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} />
-    <RobinhoodMarketView address={token} name={initialName || "Coin"} symbol={initialLaunch?.symbol} creator={initialLaunch?.creator}
-      launch={initialLaunch} presentation={coinPresentation} loading={presentation.loading} delayed={presentation.delayed}
+    <RobinhoodMarketView address={token} name={initialName || "Loading coin…"} symbol={initialLaunch?.symbol} creator={initialLaunch?.creator}
+      launch={initialLaunch} presentation={coinPresentation} loading={presentation.loading || !error && session.availability.status !== "unavailable"} delayed={presentation.delayed}
       fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE}
       trade={<div className={`${styles.marketScope} ${tradeStyles.embedded}`}><section className={tradeStyles.card} aria-label="Trade loading">
         <p className={tradeStyles.note} role="status">{error || session.availability.status === "unavailable" ? "Trading is temporarily unavailable." : "Loading trade…"}</p>

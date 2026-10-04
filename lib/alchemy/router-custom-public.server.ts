@@ -690,6 +690,9 @@ export function createRouterCustomIdentitySnapshotReaderV1(
       if (currentError instanceof RouterCustomSnapshotConflictError) {
         throw currentError;
       }
+      console.warn("Router Custom current source unavailable", {
+        name: currentError instanceof Error ? currentError.name : "RouterCustomSourceReadError",
+      });
       if (cached) {
         return cacheSnapshot(
           lastKnownGoodRouterCustomSnapshotV1(cached.snapshot),

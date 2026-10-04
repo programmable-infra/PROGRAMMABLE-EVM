@@ -37,6 +37,7 @@ type FixtureState = {
   delayedNetworkSwitch: boolean;
   waitingNetworkSwitches: number;
   providerAccountOverride: string | null;
+  providerLocked: boolean;
   providerChainOverride: string | number | null;
   refreshedUser: FixtureUser | null;
   delayedUserRefresh: boolean;
@@ -60,6 +61,27 @@ const forbidden = async (): Promise<never> => {
 };
 
 const pendingNetworkSwitches: { resolve: () => void; reject: (error: Error) => void }[] = [];
+const injectedListeners = new Map<string, Set<(value: unknown) => void>>();
+const injectedProvider = {
+  isMetaMask: true,
+  on(event: string, listener: (value: unknown) => void) {
+    if (!injectedListeners.has(event)) injectedListeners.set(event, new Set());
+    injectedListeners.get(event)!.add(listener);
+  },
+  removeListener(event: string, listener: (value: unknown) => void) {
+    injectedListeners.get(event)?.delete(listener);
+  },
+  request: async (input: { method: string; params?: unknown[] }) => {
+    const active = state.wallets.find(candidate => candidate.address === state.user?.wallet?.address) ?? state.wallets[0];
+    if (!active && input.method === "eth_accounts") return [];
+    if (!active) return forbidden();
+    return (await active.getEthereumProvider()).request(input);
+  },
+};
+Object.defineProperty(window, "ethereum", { configurable: true, value: injectedProvider });
+function emitInjected(event: string, value: unknown) {
+  injectedListeners.get(event)?.forEach(listener => listener(value));
+}
 
 function wallet(address: string, linked = true, connectedAt = 1, initialChain = "eip155:4663"): FixtureWallet {
   let networkChain = initialChain;
@@ -68,7 +90,8 @@ function wallet(address: string, linked = true, connectedAt = 1, initialChain = 
       record(method, { address });
       if (method === "eth_chainId") return state.providerChainOverride
         ?? `0x${Number(networkChain.slice("eip155:".length)).toString(16)}`;
-      if (method === "eth_accounts") return [state.providerAccountOverride ?? address];
+      if (method === "eth_accounts") return state.providerLocked ? [] : [state.providerAccountOverride ?? address];
+      if (method === "wallet_requestPermissions") return [];
       if (method === "wallet_switchEthereumChain") {
         const chainId = (params?.[0] as { chainId: string }).chainId;
         networkChain = `eip155:${Number(chainId)}`;
@@ -119,7 +142,7 @@ let state: FixtureState = {
   wallets: [wallet(accountB, false, 900), wallet(accountA)],
   isOpen: false, calls: [], delayedLocks: false, waitingLocks: 0,
   delayedNetworkSwitch: false, waitingNetworkSwitches: 0,
-  providerAccountOverride: null, providerChainOverride: null,
+  providerAccountOverride: null, providerChainOverride: null, providerLocked: false,
   refreshedUser: null, delayedUserRefresh: false,
   publishNetworkChanges: true,
   delayedLogoutReadback: false,
@@ -267,7 +290,7 @@ export function useLoginWithSiwe() { return { generateSiweMessage: forbidden, lo
 function chooseScenario(scenario: string) {
   const base = {
     ready: true, authenticated: true, walletsReady: true, isOpen: false, calls: [],
-    providerAccountOverride: null, providerChainOverride: null,
+    providerAccountOverride: null, providerChainOverride: null, providerLocked: false,
     refreshedUser: null, delayedUserRefresh: false,
     publishNetworkChanges: true,
     delayedLogoutReadback: false,
@@ -303,7 +326,7 @@ function chooseScenario(scenario: string) {
 }
 
 function completeLogin() {
-  update({ authenticated: true, user: alphaBoth, wallets: [wallet(accountA), wallet(accountB, true, 900)], isOpen: false });
+  update({ authenticated: true, user: alphaBoth, wallets: [wallet(accountA), wallet(accountB, true, 900)], providerAccountOverride: accountB, isOpen: false });
   loginCallbacks.onComplete({ user: alphaBoth, loginAccount: { type: "wallet", address: accountB } });
 }
 
@@ -330,7 +353,7 @@ export function FixtureControls() {
     </select></label>
     <button onClick={() => update({ walletsReady: true })}>Finish wallet hydration</button>
     <button onClick={() => update({ authenticated: true, user: betaC })}>Change SDK user, keep old wallets</button>
-    <button onClick={() => update({ authenticated: true, user: betaBoth })}>Change SDK user, same linked addresses</button>
+    <button onClick={() => update({ authenticated: true, user: betaBoth, providerAccountOverride: null })}>Change SDK user, same linked addresses</button>
     <button onClick={() => update({ authenticated: true, user: alpha, wallets: [wallet(accountA)] })}>Restore SDK session</button>
     <button onClick={() => update({ authenticated: true, user: alpha, wallets: [wallet(accountA)], isOpen: false })}>Restore session without login callback</button>
     <button onClick={() => loginCallbacks.onError("unknown_auth_error")}>Report prior login failure</button>
@@ -378,6 +401,21 @@ export function FixtureControls() {
       pending?.reject(Object.assign(new Error("User rejected network switch"), { code: 4001 }));
     }}>Reject network switch</button>
     <button onClick={() => update({ providerAccountOverride: accountC })}>Return a different provider account</button>
+    <button onClick={() => {
+      update({ providerAccountOverride: accountB, providerLocked: false });
+      emitInjected("accountsChanged", [accountB]);
+    }}>MetaMask selects wallet B</button>
+    <button onClick={() => {
+      update({ providerAccountOverride: accountA, providerLocked: false });
+      emitInjected("accountsChanged", [accountA]);
+    }}>MetaMask selects wallet A</button>
+    <button onClick={() => { update({ providerLocked: true }); emitInjected("accountsChanged", []); }}>MetaMask locks</button>
+    <button onClick={() => {
+      update({ providerChainOverride: "0x1" });
+      emitInjected("chainChanged", "0x1");
+    }}>MetaMask selects Ethereum</button>
+    <button onClick={() => update({ providerAccountOverride: accountB })}>Choose wallet B in permissions</button>
+    <button onClick={() => update({ user: alphaBoth, wallets: [wallet(accountA), wallet(accountB)], providerAccountOverride: accountB })}>Restore linked session with MetaMask B</button>
     <button onClick={() => update({ providerChainOverride: "0x1237" })}>Return the wrong provider network</button>
     <button onClick={() => update({ providerChainOverride: "0x1" })}>Simulate stale Robinhood cache</button>
     <button onClick={() => update({ providerChainOverride: "0x1237", publishNetworkChanges: false })}>Keep the SDK network label stale</button>

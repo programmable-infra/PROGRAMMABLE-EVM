@@ -146,6 +146,7 @@ export async function readAlchemyRouterCustomIdentitySourceV1(): Promise<
   const refreshed = await refreshAlchemyExploreRegistry({
     includeLatest: false,
     requirePersistence: false,
+    routerOnly: true,
   });
   return Object.freeze({
     generatedAt: refreshed.registryGeneratedAt,
@@ -162,6 +163,8 @@ type AlchemyRegistryRefreshOptions = Readonly<{
   includeLatest?: boolean;
   persist?: boolean;
   requirePersistence?: boolean;
+  /** Custom Hook discovery does not depend on retired Classic launch readers. */
+  routerOnly?: boolean;
 }>;
 
 type ReadyExploreModel = Extract<ExploreReadModel, { status: "ready" }>;
@@ -416,7 +419,7 @@ async function refreshAlchemyExploreRegistryOnce(
       blockHash: cursor.blockHash,
     },
   };
-  const confirmed = hasDurableClassicBase
+  const confirmed = hasDurableClassicBase && !options.routerOnly
     ? await advanceExploreLaunchDiscovery(
       deployment,
       cursorModel,
@@ -476,7 +479,7 @@ async function refreshAlchemyExploreRegistryOnce(
       console.warn("Alchemy registry persistence failed", safeAlchemyError(error));
     }
   }
-  const servedCursorModel = options.includeLatest === false ||
+  const servedCursorModel = options.routerOnly || options.includeLatest === false ||
       !hasDurableClassicBase
     ? confirmed
     : await advanceExploreLaunchDiscovery(deployment, confirmed, "latest");

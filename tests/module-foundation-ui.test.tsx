@@ -97,7 +97,7 @@ describe("Module foundation UI financial and lifecycle boundaries", () => {
   });
   it("offers a base coin without an editable starting valuation", () => {
     const html = renderToStaticMarkup(<ModuleFoundationBuilder availability={availability} contextKey="fixture" catalog={[]} quoteAssets={[quote]} suggestedInitialBuy="0.001167" onResolveQuote={vi.fn()} {...actions} />);
-    for (const label of ["Ticker", "Add More Links", "Creator fees", "Add module", "First buy", "Create Launch"]) expect(html).toContain(label);
+    for (const label of ["Ticker", "Add More Links", "Creator fees", "Add module", "First buy", "Launch coin"]) expect(html).toContain(label);
     expect(html).not.toContain('name="startValuationQuote"');
     expect(html).not.toContain("Starting valuation");
     expect(html).not.toContain("foundation-valuation");

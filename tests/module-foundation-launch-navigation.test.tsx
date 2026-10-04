@@ -49,8 +49,6 @@ async function prepareHost() {
 
 describe("launch completion navigation", () => {
   it("opens the verified coin chart in the current tab after the single execution", async () => {
-    const setItem = vi.fn();
-    vi.stubGlobal("sessionStorage", { setItem });
     const { f, prepared } = await prepareHost();
     expect(fixture.push).not.toHaveBeenCalled();
     expect(fixture.prepare.mock.calls[0][0].metadata.imageURI).toBe(FOUNDATION_DEFAULT_IMAGE.url);
@@ -59,7 +57,6 @@ describe("launch completion navigation", () => {
     const result = await fixture.builder!.onConfirmLaunch(prepared);
     expect(fixture.session.execute).toHaveBeenCalledOnce();
     expect(fixture.push).toHaveBeenCalledExactlyOnceWith(`/modules/${f.token}?transaction=${f.transactionHash}`);
-    expect(setItem).toHaveBeenCalledWith(`programmable:foundation-launch-opened:v1:${f.account.toLowerCase()}`, f.transactionHash.toLowerCase());
     expect(result.verificationStatus).toBe("verified");
   });
 

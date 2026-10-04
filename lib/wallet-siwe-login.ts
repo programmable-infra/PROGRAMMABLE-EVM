@@ -3,6 +3,8 @@ import { bytesToHex, getAddress } from "viem";
 export type InjectedEthereumProvider = Readonly<{
   isMetaMask?: boolean;
   providers?: readonly unknown[];
+  on?: (event: string, listener: (value: unknown) => void) => unknown;
+  removeListener?: (event: string, listener: (value: unknown) => void) => unknown;
   request: (input: Readonly<{
     method: string;
     params?: readonly unknown[];
