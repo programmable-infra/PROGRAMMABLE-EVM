@@ -18,7 +18,7 @@ const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 /** Shared market presentation; each launch family supplies its own verified trade adapter. */
 export function RobinhoodMarketView({ address, name, symbol, creator, launch, presentation, loading = false,
-  delayed = false, status = "ready", hasAsset = true, manageHref, fallbackImageUrl, trade, children }: {
+  delayed = false, hasAsset = true, manageHref, fallbackImageUrl, trade, children }: {
   address: string;
   name: string;
   symbol?: string | null;
@@ -27,7 +27,6 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
   presentation?: RobinhoodCoinPresentation | null;
   loading?: boolean;
   delayed?: boolean;
-  status?: "ready" | "syncing" | "stale" | "unavailable";
   hasAsset?: boolean;
   manageHref?: string | null;
   fallbackImageUrl?: string;
@@ -82,10 +81,6 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
       {copyState === "failed" ? <p className={styles.notice} role="status">Could not copy. <a href={explorerHref} target="_blank" rel="noreferrer">View the address on Explorer.</a></p> : null}
 
       {manageHref ? <div className={styles.launchActions}><Link className={styles.secondaryButton} href={manageHref} prefetch={false} aria-label="Manage coin">Manage <ArrowRight aria-hidden="true" size={16} /></Link></div> : null}
-      {status !== "ready" ? <p className={styles.notice} role="status">{status === "syncing"
-        ? `New launches are still being checked. This ${hasAsset ? "coin" : "launch"} comes from the verified launch index.`
-        : "Showing the last verified launch record. Index updates are temporarily unavailable."}</p> : null}
-
       {hasAsset ? <>
         <dl className={styles.metrics}>
           <Metric label="Price" value={coinDollars(market?.priceUsd, true)} />
