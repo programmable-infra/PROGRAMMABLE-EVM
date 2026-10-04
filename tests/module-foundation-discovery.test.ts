@@ -179,7 +179,25 @@ describe("canonical transaction discovery", () => {
     expect(result.receipt.evidence).toBe("canonical-receipt");
     expect(result.checkpoint.blockNumber).toBe(100n);
     expect(result.observedAt.blockNumber).toBe(200n);
-    expect(f.readContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: "predictTokenAddress", args: [creator, parameters.tokenSalt, metadata], blockNumber: 100n }));
+    expect(f.readContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: "predictTokenAddress", args: [creator, parameters.tokenSalt, metadata], blockNumber: 200n }));
+  });
+
+  it("opens an old launch without historical state and keeps its original receipt checkpoint", async () => {
+    const f = fixture(request => {
+      if (request.blockNumber < 200n) throw new Error("historical state is not available");
+    });
+    const result = await discoverFoundationLaunch({ client: f.client, binding, token, transactionHash: txHash });
+    expect(result.checkpoint).toMatchObject({ blockNumber: 100n, blockHash: hash(100) });
+    expect(result.receipt.verificationCheckpoint).toMatchObject({ blockNumber: 200n, blockHash: hash(200) });
+    expect(f.readContract.mock.calls.every(([request]) => request.blockNumber === 200n)).toBe(true);
+  });
+
+  it.each([0, 1])("rejects a launch block reorg before or during current-state readback (%s)", async validReads => {
+    const f = fixture();
+    let receiptBlockReads = 0;
+    f.getBlock.mockImplementation(async ({ blockNumber }) => ({ number: blockNumber,
+      hash: hash(blockNumber === 100n && receiptBlockReads++ >= validReads ? 101n : blockNumber), timestamp: blockNumber * 10n }));
+    await expect(discoverFoundationLaunch({ client: f.client, binding, token, transactionHash: txHash })).rejects.toThrow("no longer canonical");
   });
 
   it("accepts a candidate from a bounded index without contacting the explorer", async () => {

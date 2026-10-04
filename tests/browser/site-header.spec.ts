@@ -29,6 +29,13 @@ test("Module Mode keeps navigation and the connected account inside its menu", a
   await header.getByRole("button", { name: "Open menu", exact: true }).click();
   await expect(header.getByRole("group", { name: "Wallet actions", exact: true })).toContainText("Connected wallet");
   await expect(header.getByRole("button", { name: "Disconnect", exact: true })).toBeVisible();
+  await expect(header.getByRole("navigation", { name: "Menu navigation" }).getByRole("link", { name: "Explore", exact: true })).toBeVisible();
+  await header.getByRole("link", { name: "Explore", exact: true }).click();
+  await expect(page).toHaveURL(`${origin}/explore`);
+  await page.goBack();
+  await expect(page).toHaveURL(`${origin}/launch/modules/foundation`);
+  await expect(header.getByRole("navigation", { name: "Primary navigation" })).toHaveCount(0);
+  await expect(header.getByRole("button", { name: "Open menu", exact: true })).toHaveAttribute("aria-expanded", "false");
 });
 
 test("one navigation menu includes the connected profile; Escape, outside click and focus work", async ({page}) => {
