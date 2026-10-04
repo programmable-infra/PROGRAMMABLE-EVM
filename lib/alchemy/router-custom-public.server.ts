@@ -268,10 +268,9 @@ function immutableRouterCustomIdentityV1(entry: CanonicalTokenExploreEntry) {
   void _finalizedAtBlockHash;
   return {
     id: entry.id,
-    name: entry.name,
-    symbol: entry.symbol ?? null,
+    // Optional display getters can change without changing the stamped launch.
+    // They must not prevent the verified discovery cursor from advancing.
     tokenAddress: entry.tokenAddress.toLowerCase(),
-    tokenDecimals: entry.tokenDecimals ?? null,
     hookAddress: entry.hookAddress.toLowerCase(),
     poolId: entry.poolId.toLowerCase(),
     creatorAddress: entry.creatorAddress?.toLowerCase() ?? null,
