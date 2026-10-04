@@ -13,6 +13,7 @@ import { StudioCanvas } from "./studio-canvas";
 import styles from "./studio.module.css";
 
 export interface FoundationStudioProps {
+  previousLaunchAction?: ReactNode;
   draft: FoundationStudioDraft;
   catalog: readonly FoundationModuleDescriptor[];
   imageSource?: string;
@@ -120,7 +121,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       <aside id="studio-module-library" tabIndex={-1} className={styles.library} aria-label="Module library">
         <div className={styles.panelHeading}><h2>Modules</h2></div>
         <div className={styles.moduleList} aria-busy={props.modulesLoading || undefined}>
-          {props.canResolveQuote ? <button type="button" className={styles.moduleCard} data-active={props.customQuote} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}>
+          {props.canResolveQuote && !props.modulesLoading ? <button type="button" className={styles.moduleCard} data-active={props.customQuote} role="switch" aria-label="Any Quote Pool" aria-checked={props.customQuote} onClick={() => props.customQuote ? disableQuote() : enableQuote()}>
             <span className={styles.moduleName}><ModuleLogo quote /><span>Any Quote Pool</span></span>
             <span className={styles.toggle} data-checked={props.customQuote} aria-hidden="true"><span /></span>
           </button> : null}
@@ -132,6 +133,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
           {!catalog.length ? <div className={styles.emptyCard}>{props.emptyModulesMessage || "No modules available"}</div> : null}
           </>}
         </div>
+        {props.previousLaunchAction ? <div className={styles.libraryFooter}>{props.previousLaunchAction}</div> : null}
       </aside>
 
       <section className={styles.market} aria-label="Coin composition">

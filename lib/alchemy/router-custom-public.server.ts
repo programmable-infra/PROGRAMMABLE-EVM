@@ -1,5 +1,7 @@
 import "server-only";
 
+import { after } from "next/server";
+
 import { canonicalTokenExploreEntryV1 } from "../explore-entry-v1";
 import type {
   CanonicalTokenExploreEntry,
@@ -40,6 +42,7 @@ export const ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS = 15_000;
 export const ROUTER_CUSTOM_SNAPSHOT_MAX_IDENTITIES = 10_000;
 export const ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_BYTES = 16 * 1_024 * 1_024;
 export const ROUTER_CUSTOM_SNAPSHOT_CURRENT_READ_TIMEOUT_MS = 3_000;
+const ROUTER_CUSTOM_SNAPSHOT_SOURCE_REFRESH_TIMEOUT_MS = 30_000;
 const ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_FUTURE_SKEW_MS = 60_000;
 const ROUTER_CUSTOM_SNAPSHOT_DURABLE_READ_TIMEOUT_MS = 2_000;
 const ROUTER_CUSTOM_SNAPSHOT_PERSIST_TIMEOUT_MS = 2_000;
@@ -87,6 +90,7 @@ export type RouterCustomIdentitySnapshotDependenciesV1 = Readonly<{
   now?: () => number;
   currentReadTimeoutMs?: number;
   readCurrentSource?: () => Promise<AlchemyRouterCustomIdentitySourceV1>;
+  keepRefreshAlive?: (task: Promise<RouterCustomIdentitySnapshotV1>) => void;
   readDurableSnapshot?: () => Promise<RouterCustomIdentitySnapshotV1>;
   persistDurableSnapshot?: (
     snapshot: RouterCustomIdentitySnapshotV1,
@@ -556,6 +560,8 @@ export function createRouterCustomIdentitySnapshotReaderV1(
     snapshot: RouterCustomIdentitySnapshotV1;
   }> | null = null;
   let inFlight: Promise<RouterCustomIdentitySnapshotV1> | null = null;
+  let snapshotConflict: RouterCustomSnapshotConflictError | null = null;
+  const latestCachedSnapshot = () => cached?.snapshot;
 
   const cacheSnapshot = (snapshot: RouterCustomIdentitySnapshotV1) => {
     cached = Object.freeze({
@@ -572,7 +578,7 @@ export function createRouterCustomIdentitySnapshotReaderV1(
         : null;
       const source = await withinDuration(
         readCurrentSource,
-        currentReadTimeoutMs,
+        ROUTER_CUSTOM_SNAPSHOT_SOURCE_REFRESH_TIMEOUT_MS,
       );
       const snapshot = routerCustomIdentitySnapshotFromSourceV1(source);
       try {
@@ -666,6 +672,7 @@ export function createRouterCustomIdentitySnapshotReaderV1(
           return cacheSnapshot(previous);
         }
       }
+      snapshotConflict = null;
       cacheSnapshot(snapshot);
       try {
         await withinDuration(
@@ -688,8 +695,11 @@ export function createRouterCustomIdentitySnapshotReaderV1(
       return snapshot;
     } catch (currentError) {
       if (currentError instanceof RouterCustomSnapshotConflictError) {
+        snapshotConflict = currentError;
+        cached = null;
         throw currentError;
       }
+      if (snapshotConflict) throw snapshotConflict;
       console.warn("Router Custom current source unavailable", {
         name: currentError instanceof Error ? currentError.name : "RouterCustomSourceReadError",
       });
@@ -723,17 +733,40 @@ export function createRouterCustomIdentitySnapshotReaderV1(
   return async function readFinalizedRouterCustomIdentitySnapshotV1(
     options: RouterCustomReadOptionsV1 = {},
   ) {
-    if (cached && cached.expiresAt > now()) return cached.snapshot;
-    const flight = inFlight ?? refresh().finally(() => {
-      inFlight = null;
-    });
-    inFlight = flight;
+    if (!snapshotConflict && cached && cached.expiresAt > now()) return cached.snapshot;
+    let flight = inFlight;
+    if (!flight) {
+      flight = refresh().finally(() => { inFlight = null; });
+      inFlight = flight;
+      dependencies.keepRefreshAlive?.(flight);
+    }
     try {
-      return await withinReadBoundary(() => flight, options);
+      const task = flight;
+      const snapshot = await withinReadBoundary(
+        () => withinDuration(() => task, currentReadTimeoutMs), options,
+      );
+      if (snapshotConflict) throw snapshotConflict;
+      return snapshot;
     } catch (error) {
       if (error instanceof RouterCustomSnapshotConflictError) throw error;
+      if (snapshotConflict) throw snapshotConflict;
       if (cached) {
         return lastKnownGoodRouterCustomSnapshotV1(cached.snapshot);
+      }
+      if (error instanceof DOMException && error.name === "TimeoutError") {
+        const durable = lastKnownGoodRouterCustomSnapshotV1(await withinDuration(
+          readDurableSnapshot, ROUTER_CUSTOM_SNAPSHOT_DURABLE_READ_TIMEOUT_MS,
+        ));
+        const ageMs = now() - Date.parse(durable.generatedAt);
+        if (!Number.isFinite(ageMs) || ageMs < -ROUTER_CUSTOM_SNAPSHOT_MAXIMUM_FUTURE_SKEW_MS) {
+          throw new Error("Router Custom durable snapshot timestamp is invalid");
+        }
+        if (snapshotConflict) throw snapshotConflict;
+        // A late current read may have published while the saved read ran.
+        // Never replace that validated result with the older saved snapshot.
+        const latest = latestCachedSnapshot();
+        if (latest) return latest;
+        return cacheSnapshot(durable);
       }
       throw error;
     }
@@ -760,7 +793,18 @@ async function withinDuration<T>(
 }
 
 const readProductionRouterCustomIdentitySnapshotV1 =
-  createRouterCustomIdentitySnapshotReaderV1();
+  createRouterCustomIdentitySnapshotReaderV1({
+    keepRefreshAlive(task) {
+      after(async () => {
+        try { await task; }
+        catch (error) {
+          console.warn("Router Custom background refresh failed", {
+            name: error instanceof Error ? error.name : "RouterCustomSourceReadError",
+          });
+        }
+      });
+    },
+  });
 
 export async function readFinalizedRouterCustomIdentitySnapshotCoreV1(
   options: RouterCustomReadOptionsV1 = {},

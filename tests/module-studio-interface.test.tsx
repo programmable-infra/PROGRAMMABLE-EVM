@@ -19,7 +19,7 @@ describe("Module Studio interface", () => {
     expect(checking).toContain('aria-label="Initial wallet buy limit"');
     // A recent catalog may be shown while fresh authority is loading, but it cannot launch.
     expect(checking).toMatch(/<button[^>]*type="submit"[^>]*disabled=""/);
-    expect(render({ ...availability, status: "checking" })).toContain('aria-label="Any Quote Pool"');
+    expect(render({ ...availability, status: "checking" })).not.toContain('aria-label="Any Quote Pool"');
     const ready = render({ ...availability, status: "ready" }, [descriptor]);
     expect(ready).toContain('aria-label="Any Quote Pool"');
     expect(ready).toContain('aria-label="Initial wallet buy limit"');

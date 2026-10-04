@@ -1609,6 +1609,7 @@ function PrivyWalletBridge({
     authenticated: activeAuthenticated && ready && walletsReady && !disconnecting,
     privyUserId: user?.id ?? null,
     account: wallet?.account ?? null,
+    chainId: wallet?.chainId ?? null,
     walletCapability: connectedWallet ?? null,
   });
   useLayoutEffect(() => {
@@ -1617,6 +1618,7 @@ function PrivyWalletBridge({
       authenticated: activeAuthenticated && ready && walletsReady && !disconnecting,
       privyUserId: user?.id ?? null,
       account: wallet?.account ?? null,
+      chainId: wallet?.chainId ?? null,
       walletCapability: connectedWallet ?? null,
     };
     if (previous.authenticated !== current.authenticated
@@ -1627,13 +1629,14 @@ function PrivyWalletBridge({
       walletSessionGenerationRef.current += 1;
     }
     walletRequestSessionRef.current = current;
-  }, [activeAuthenticated, connectedWallet, disconnecting, ready, user?.id, wallet?.account, walletsReady]);
+  }, [activeAuthenticated, connectedWallet, disconnecting, ready, user?.id, wallet?.account, wallet?.chainId, walletsReady]);
   useLayoutEffect(() => () => {
     walletSessionGenerationRef.current += 1;
     walletRequestSessionRef.current = {
       authenticated: false,
       privyUserId: null,
       account: null,
+      chainId: null,
       walletCapability: null,
     };
   }, []);
@@ -1681,10 +1684,13 @@ function PrivyWalletBridge({
       if (!isCurrent() || typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value)) return;
       const current = walletRequestSessionRef.current;
       if (!current.account || !current.walletCapability) return;
+      const chainId = normalizeChainId(value);
+      if (current.chainId === chainId) return;
+      current.chainId = chainId;
       if (!networkSwitchPendingRef.current) walletSessionGenerationRef.current += 1;
-      setInjectedNetwork({ userId: owner, chainId: normalizeChainId(value) });
+      setInjectedNetwork({ userId: owner, chainId });
       setVerifiedWalletNetwork({ userId: owner, account: current.account,
-        chainId: normalizeChainId(value), walletSnapshot: current.walletCapability });
+        chainId, walletSnapshot: current.walletCapability });
     };
     provider.on("accountsChanged", accountsChanged);
     provider.on("chainChanged", chainChanged);

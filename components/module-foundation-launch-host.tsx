@@ -225,14 +225,16 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     uploads.current.set(`${account.toLowerCase()}:${result.uri}`, input.image.sha256);
     return { url: result.uri, sha256: input.image.sha256 };
   }
-  return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
-    {session.resolution?.status === "success" && session.resolution.metadata?.stepKind === "launch" && session.resolution.metadata.token
-      && session.pending === "null" && !session.progress && completedDraft !== draftKey ? <div className={`${styles.page} ${styles.sessionStatus}`}>
+  const previousLaunchAction = session.resolution?.status === "success" && session.resolution.metadata?.stepKind === "launch" && session.resolution.metadata.token
+    && session.pending === "null" && !session.progress && completedDraft !== draftKey ? <>
       <button type="button" className={styles.secondaryButton} disabled={openingSavedLaunch} onClick={() => void openSavedLaunch()}>
         {openingSavedLaunch ? "Opening your previous coin…" : "Open your previous coin"}
       </button>
       {savedLaunchError === session.resolution.operationId ? <p role="alert">Your previous launch could not be checked yet. Try opening it again.</p> : null}
-    </div> : null}<ModuleFoundationBuilder key={session.resultGeneration} layout={layout} availability={session.availability} contextKey={session.contextKey}
+    </> : null;
+  return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
+    {layout !== "studio" && previousLaunchAction ? <div className={`${styles.page} ${styles.sessionStatus}`}>{previousLaunchAction}</div> : null}
+    <ModuleFoundationBuilder key={session.resultGeneration} layout={layout} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
     onPrepareLaunch={prepare} onConfirmLaunch={async review => { const sequence = prepared.current.get(review);

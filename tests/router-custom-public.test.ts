@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
+vi.mock("next/server", () => ({ after: (task: () => Promise<void>) => { void task(); } }));
 
 const mocks = vi.hoisted(() => ({
   blobGet: vi.fn(),
@@ -635,6 +636,7 @@ describe("finalized Router Custom public projection", () => {
   });
 
   it("falls back durably when the cold current read never settles", async () => {
+    vi.useFakeTimers();
     const durable = routerCustomIdentitySnapshotFromSourceV1(source());
     const reader = createRouterCustomIdentitySnapshotReaderV1({
       now: () => Date.parse("2026-08-25T06:01:00.000Z"),
@@ -644,10 +646,65 @@ describe("finalized Router Custom public projection", () => {
       persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
     });
 
-    await expect(reader()).resolves.toMatchObject({
-      status: "last-known-good",
-      entries: [customGraphExploreEntry],
+    try {
+      const pending = reader();
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(pending).resolves.toMatchObject({
+        status: "last-known-good",
+        entries: [customGraphExploreEntry],
+      });
+      await vi.advanceTimersByTimeAsync(30_000);
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("publishes a slow verified refresh after a fast saved response without starting another source read", async () => {
+    vi.useFakeTimers();
+    let now = Date.parse("2026-08-25T06:01:00.000Z");
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    let finish!: (value: ReturnType<typeof source>) => void;
+    const readCurrentSource = vi.fn(() => new Promise<ReturnType<typeof source>>(resolve => { finish = resolve; }));
+    const kept: Promise<unknown>[] = [];
+    const persistDurableSnapshot = vi.fn().mockResolvedValue(undefined);
+    const reader = createRouterCustomIdentitySnapshotReaderV1({ now: () => now,
+      currentReadTimeoutMs: 10, readCurrentSource,
+      keepRefreshAlive: task => { kept.push(task); },
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable), persistDurableSnapshot });
+    try {
+      const first = reader();
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(first).resolves.toMatchObject({ status: "last-known-good", asOfBlock: "25740001" });
+      now += ROUTER_CUSTOM_SNAPSHOT_CACHE_TTL_MS + 1;
+      const second = reader();
+      finish(source(undefined, { blockNumber: "25740200", blockHash: `0x${"ad".repeat(32)}` }));
+      await expect(second).resolves.toMatchObject({ status: "current", asOfBlock: "25740200" });
+      await expect(reader()).resolves.toMatchObject({ status: "current", asOfBlock: "25740200" });
+      expect(readCurrentSource).toHaveBeenCalledOnce();
+      expect(kept).toHaveLength(1);
+      expect(persistDurableSnapshot).toHaveBeenCalledOnce();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it("invalidates saved fallback data when a late refresh reveals a finalized boundary conflict", async () => {
+    vi.useFakeTimers();
+    const durable = routerCustomIdentitySnapshotFromSourceV1(source());
+    let finish!: (value: ReturnType<typeof source>) => void;
+    const delayed = new Promise<ReturnType<typeof source>>(resolve => { finish = resolve; });
+    const kept: Promise<unknown>[] = [];
+    const reader = createRouterCustomIdentitySnapshotReaderV1({
+      now: () => Date.parse("2026-08-25T06:01:00.000Z"), currentReadTimeoutMs: 10,
+      readCurrentSource: vi.fn(() => delayed), keepRefreshAlive: task => { kept.push(task); },
+      readDurableSnapshot: vi.fn().mockResolvedValue(durable),
+      persistDurableSnapshot: vi.fn().mockResolvedValue(undefined),
     });
+    try {
+      const first = reader();
+      await vi.advanceTimersByTimeAsync(10);
+      await expect(first).resolves.toMatchObject({ status: "last-known-good" });
+      const conflict = expect(kept[0]).rejects.toThrow("snapshots conflict at one boundary");
+      finish(source(undefined, { blockHash: `0x${"ad".repeat(32)}` }));
+      await conflict;
+      await expect(reader()).rejects.toThrow("snapshots conflict at one boundary");
+    } finally { vi.useRealTimers(); }
   });
 
   it("does not substitute a Classic cursor for an empty Router cursor", () => {
