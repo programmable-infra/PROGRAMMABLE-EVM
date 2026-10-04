@@ -7,6 +7,7 @@ paths and regular file modes. Existing TSX files qualify only when their parsed
 code stays identical: visible JSX copy and the fixed text attributes `title`,
 `alt`, `placeholder`, `aria-label` and `aria-description` may change. Imports,
 handlers, URLs, conditional logic, amounts and other values remain unchanged.
+Copy in scripts, form values and custom component props/children does not qualify.
 Missing history or parser, malformed source, executable file modes, unknown
 paths and mixed functional changes select normal verification. The classifier
 is loaded from the trusted base; changes to the classifier pay the previous gate.

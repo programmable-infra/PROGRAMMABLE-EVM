@@ -99,12 +99,30 @@ function presentationCodeShape(source) {
   const file = ts.createSourceFile("ui.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   if (file.parseDiagnostics.length) throw new Error("Invalid TSX");
   const copyAttributes = new Set(["title", "alt", "placeholder", "aria-label", "aria-description"]);
+  const copyContainers = new Set(["a", "article", "aside", "b", "button", "caption", "dd", "details",
+    "div", "dt", "em", "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+    "header", "i", "label", "legend", "li", "main", "nav", "ol", "p", "section", "small", "span",
+    "strong", "summary", "td", "th", "ul"]);
+  function isDisplayCopy(node, attribute = false) {
+    const owner = ts.isJsxAttribute(node.parent) ? node.parent.parent.parent : node.parent;
+    const element = ts.isJsxExpression(owner) ? owner.parent : owner;
+    const tag = ts.isJsxElement(element) ? element.openingElement.tagName
+      : ts.isJsxOpeningElement(element) || ts.isJsxSelfClosingElement(element) ? element.tagName : null;
+    const name = tag?.getText(file);
+    // Script text is executable; option/textarea text can be a form value.
+    // Custom component props and children may be transaction inputs.
+    if (!copyContainers.has(name) && !(attribute && ["img", "input", "textarea"].includes(name))) return false;
+    for (let parent = element.parent; parent; parent = parent.parent) {
+      if (ts.isJsxElement(parent) && !copyContainers.has(parent.openingElement.tagName.getText(file))) return false;
+    }
+    return true;
+  }
   function shape(node) {
-    if (ts.isJsxText(node)) return [node.kind, "copy"];
+    if (ts.isJsxText(node) && isDisplayCopy(node)) return [node.kind, "copy"];
     if (ts.isStringLiteral(node) && (
-      (ts.isJsxAttribute(node.parent) && copyAttributes.has(node.parent.name.getText(file)))
+      (ts.isJsxAttribute(node.parent) && copyAttributes.has(node.parent.name.getText(file)) && isDisplayCopy(node, true))
       || (ts.isJsxExpression(node.parent) && node.parent.expression === node
-        && (ts.isJsxElement(node.parent.parent) || ts.isJsxFragment(node.parent.parent)))
+        && isDisplayCopy(node))
     )) return [node.kind, "copy"];
     const children = [];
     node.forEachChild((child) => { children.push(shape(child)); });

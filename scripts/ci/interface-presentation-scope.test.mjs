@@ -37,6 +37,13 @@ test("copy coverage never erases imports, handlers, links, signing inputs, opera
     before.replace("Buy token", "{`Buy ${amount}`}"),
     before.replace("</button>", ""),
   ]) assert.equal(classify([file], after), false, after);
+  for (const [oldSource, newSource] of [
+    ['const App = () => <script>sendFunds(1)</script>;', 'const App = () => <script>sendFunds(2)</script>;'],
+    ['const App = () => <option>ETH</option>;', 'const App = () => <option>OTHER</option>;'],
+    ['const App = () => <textarea>1</textarea>;', 'const App = () => <textarea>2</textarea>;'],
+    ['const App = () => <Transaction title="one" />;', 'const App = () => <Transaction title="two" />;'],
+    ['const App = () => <Transaction><span>one</span></Transaction>;', 'const App = () => <Transaction><span>two</span></Transaction>;'],
+  ]) assert.equal(classify([file], newSource, { readChange: () => [oldSource, newSource] }), false);
   const expression = 'export const Card = () => <span>{"Buy"}</span>;';
   assert.equal(classify([file], expression.replace('"Buy"', '"Sell"'), {
     readChange: () => [expression, expression.replace('"Buy"', '"Sell"')],
