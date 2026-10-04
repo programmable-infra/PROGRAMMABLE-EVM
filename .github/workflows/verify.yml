@@ -26,7 +26,7 @@ jobs:
   scope:
     name: Change scope
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 5
     outputs:
       contracts: ${{ steps.scope.outputs.contracts }}
       custom_v2: ${{ steps.scope.outputs.custom_v2 }}
@@ -35,6 +35,7 @@ jobs:
       indexer: ${{ steps.scope.outputs.indexer }}
       interface: ${{ steps.scope.outputs.interface }}
       interface_guidance_only: ${{ steps.scope.outputs.interface_guidance_only }}
+      interface_presentation_only: ${{ steps.scope.outputs.interface_presentation_only }}
       read_model: ${{ steps.scope.outputs.read_model }}
       robinhood_phase_b_evidence: ${{ steps.scope.outputs.robinhood_phase_b_evidence }}
       robinhood_phase_b_evidence_exact: ${{ steps.scope.outputs.robinhood_phase_b_evidence_exact }}
@@ -46,6 +47,12 @@ jobs:
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           fetch-depth: 0
+
+      - name: Set up the locked copy parser runtime
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24.14.0
+          cache: npm
 
       - name: Classify changed paths
         id: scope
@@ -89,6 +96,16 @@ jobs:
           # full Interface coverage, including the change introducing it.
           if ! grep -Eq '^interface_guidance_only=(true|false)$' "$RUNNER_TEMP/verify-scope.txt"; then
             echo 'interface_guidance_only=false' >> "$RUNNER_TEMP/verify-scope.txt"
+          fi
+          # The trusted classifier can prove TSX copy edits with the unchanged
+          # locked parser. CSS and images need no dependency installation here.
+          if grep -q '^interface_presentation_candidate=true$' "$RUNNER_TEMP/verify-scope.txt" &&
+            ! grep -q '^interface_presentation_only=true$' "$RUNNER_TEMP/verify-scope.txt"; then
+            npm ci --ignore-scripts --no-audit --no-fund
+            node "$RUNNER_TEMP/classify-verify-paths.mjs" "$RUNNER_TEMP/changed-paths.txt" > "$RUNNER_TEMP/verify-scope.txt"
+          fi
+          if ! grep -Eq '^interface_presentation_only=(true|false)$' "$RUNNER_TEMP/verify-scope.txt"; then
+            echo 'interface_presentation_only=false' >> "$RUNNER_TEMP/verify-scope.txt"
           fi
           if ! grep -Eq '^robinhood_phase_b_evidence=(true|false)$' "$RUNNER_TEMP/verify-scope.txt"; then
             echo 'robinhood_phase_b_evidence=false' >> "$RUNNER_TEMP/verify-scope.txt"
@@ -230,6 +247,7 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        if: needs.scope.outputs.interface_presentation_only != 'true'
         run: npm ci --no-audit --no-fund
 
       - name: Audit production dependencies
@@ -239,7 +257,7 @@ jobs:
           npm run audit:prod
 
       - name: Verify interface quality and tests
-        if: needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true'
+        if: needs.scope.outputs.interface_presentation_only != 'true' && (needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true')
         env:
           PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -251,6 +269,10 @@ jobs:
           PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run verify:interface:guidance:ci
+
+      - name: Use build coverage for presentation changes
+        if: needs.scope.outputs.interface_presentation_only == 'true'
+        run: echo "Only styles, images or copy changed. No unrelated interface test suites required."
 
   interface-browser-build:
     # Browser fixtures and the production build share mutable local output.
@@ -281,11 +303,11 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Install pinned Chromium for wallet interaction tests
-        if: needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true'
+        if: needs.scope.outputs.interface_presentation_only != 'true' && (needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true')
         run: npx playwright install --with-deps chromium
 
       - name: Verify interface browser interactions and production build
-        if: needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true'
+        if: needs.scope.outputs.interface_presentation_only != 'true' && (needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true')
         env:
           PROGRAMMABLE_CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -298,8 +320,12 @@ jobs:
           PROGRAMMABLE_CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: npm run build
 
+      - name: Build presentation changes
+        if: needs.scope.outputs.interface_presentation_only == 'true'
+        run: npm run build
+
       - name: Require complete Git history for the V4 release audit
-        if: needs.scope.outputs.interface == 'true'
+        if: needs.scope.outputs.interface_presentation_only != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -309,11 +335,11 @@ jobs:
           test "$(git rev-parse --is-shallow-repository)" = false
 
       - name: Verify V4 clean-room no-broadcast release gate
-        if: needs.scope.outputs.interface == 'true'
+        if: needs.scope.outputs.interface_presentation_only != 'true'
         run: npm run release:custom-launch:v4:clean-room:test
 
       - name: Verify V4 public API activation evidence
-        if: needs.scope.outputs.interface == 'true'
+        if: needs.scope.outputs.interface_presentation_only != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -321,7 +347,7 @@ jobs:
           node scripts/programmable-v4-api-activation.mjs audit --repository-root "$GITHUB_WORKSPACE"
 
       - name: Verify V4.1 public API activation evidence
-        if: needs.scope.outputs.interface == 'true'
+        if: needs.scope.outputs.interface_presentation_only != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -359,6 +385,7 @@ jobs:
           INTERFACE_REQUIRED: ${{ needs.scope.outputs.interface }}
           READ_MODEL_REQUIRED: ${{ needs.scope.outputs.read_model }}
           GUIDANCE_ONLY: ${{ needs.scope.outputs.interface_guidance_only }}
+          PRESENTATION_ONLY: ${{ needs.scope.outputs.interface_presentation_only }}
           FUNCTIONAL_SCOPES: ${{ needs.scope.outputs.contracts }},${{ needs.scope.outputs.custom_v2 }},${{ needs.scope.outputs.database }},${{ needs.scope.outputs.dependencies }},${{ needs.scope.outputs.indexer }},${{ needs.scope.outputs.read_model }}
           QUALITY_RESULT: ${{ needs.interface-quality.result }}
           BROWSER_BUILD_RESULT: ${{ needs.interface-browser-build.result }}
@@ -366,6 +393,15 @@ jobs:
         run: |
           set -euo pipefail
           test "$SCOPE_RESULT" = success
+          case "$PRESENTATION_ONLY" in
+            true)
+              test "$INTERFACE_REQUIRED" = true
+              test "$GUIDANCE_ONLY" = false
+              test "$FUNCTIONAL_SCOPES" = false,false,false,false,false,false
+              ;;
+            false) ;;
+            *) echo "Interface presentation scope is missing or invalid." >&2; exit 1 ;;
+          esac
           case "$GUIDANCE_ONLY" in
             true)
               test "$INTERFACE_REQUIRED" = true

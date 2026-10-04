@@ -49,7 +49,7 @@ test("isolated Interface jobs retain every original command and a complete local
   assert.equal(scripts["verify:interface:browser-build:ci"],
     "npm run test:browser:wallet-lock && npm run test:browser:late-migration && npm run build");
   assert.equal(scripts["test:ci-scope"],
-    "node --test scripts/ci/classify-verify-paths.test.mjs scripts/ci/verify-interface-workflow.test.mjs scripts/ci/interface-guidance-scope.test.mjs");
+    "node --test scripts/ci/classify-verify-paths.test.mjs scripts/ci/verify-interface-workflow.test.mjs scripts/ci/interface-guidance-scope.test.mjs scripts/ci/interface-presentation-scope.test.mjs");
   assert.equal(scripts["test:interface:ci"],
     "npm run test:gitbook-openapi && npm run verify:candidate-neutrality && npm run verify:service-launch-permit-v2-golden && npm run test:retired-read-model-cutover && node --test scripts/test/verify-candidate-neutral-production.test.mjs scripts/test/verify-service-launch-permit-v2-golden.test.mjs scripts/test/verify-custom-launch-production-bundle.test.mjs scripts/test/smoke-explore-index-reset-public-apis.test.mjs scripts/test/indexed-website-reads.test.mjs && vitest run --exclude tests/classic-v3-deployment-sequence.test.ts --exclude tests/deep-release-verifier.test.ts --exclude tests/deep-v2-release-verifier.test.ts --exclude tests/website-projection-target.test.ts");
   assert.equal(scripts.build,
@@ -73,7 +73,7 @@ test("quality and browser/build run independently in separate locked checkouts o
       "actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444");
     assert.deepEqual(setupNode.with, { "node-version": "24.14.0", cache: "npm" });
     assert.equal(step(job, "Install dependencies").run, "npm ci --no-audit --no-fund");
-    assert.equal(step(job, "Install dependencies").if, undefined);
+    assert.equal(step(job, "Install dependencies").if, job === quality ? "needs.scope.outputs.interface_presentation_only != 'true'" : undefined);
     assert.equal(job.steps.some((entry) => /artifact|actions\/cache/u.test(entry.uses ?? "")), false);
     for (const entry of job.steps) {
       assert.equal(entry["continue-on-error"], undefined, entry.name);
@@ -85,7 +85,7 @@ test("quality and browser/build run independently in separate locked checkouts o
   assert.equal(qualityRun.run, "npm run verify:interface:quality:ci");
   assert.equal(browserRun.run, "npm run verify:interface:browser-build:ci");
   for (const verification of [qualityRun, browserRun]) {
-    assert.equal(verification.if, "needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true'");
+    assert.equal(verification.if, "needs.scope.outputs.interface_presentation_only != 'true' && (needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true')");
     assert.deepEqual(verification.env, {
       PROGRAMMABLE_CI_BASE_SHA: "${{ github.event.pull_request.base.sha || github.event.before }}",
       PROGRAMMABLE_CI_HEAD_SHA: "${{ github.event.pull_request.head.sha || github.sha }}",
@@ -110,6 +110,7 @@ test("the built checkout retains full-history release, both activation, and read
   const requiredOrder = [
     "Verify interface browser interactions and production build",
     "Build the complete production interface for guide URL changes",
+    "Build presentation changes",
     "Require complete Git history for the V4 release audit",
     "Verify V4 clean-room no-broadcast release gate",
     "Verify V4 public API activation evidence",
@@ -118,21 +119,21 @@ test("the built checkout retains full-history release, both activation, and read
   ];
   const names = browserBuild.steps.map((entry) => entry.name);
   assert.deepEqual(names.slice(names.indexOf(requiredOrder[0])), requiredOrder);
-  const history = step(browserBuild, requiredOrder[2]);
-  assert.equal(history.if, "needs.scope.outputs.interface == 'true'");
+  const history = step(browserBuild, requiredOrder[3]);
+  assert.equal(history.if, "needs.scope.outputs.interface_presentation_only != 'true'");
   assert.match(history.run, /git fetch --unshallow --no-tags origin/u);
   assert.match(history.run, /test "\$\(git rev-parse --is-shallow-repository\)" = false/u);
-  const cleanRoom = step(browserBuild, requiredOrder[3]);
-  assert.equal(cleanRoom.if, "needs.scope.outputs.interface == 'true'");
+  const cleanRoom = step(browserBuild, requiredOrder[4]);
+  assert.equal(cleanRoom.if, "needs.scope.outputs.interface_presentation_only != 'true'");
   assert.equal(cleanRoom.run, "npm run release:custom-launch:v4:clean-room:test");
-  for (const [version, name] of [["v4", requiredOrder[4]], ["v41", requiredOrder[5]]]) {
+  for (const [version, name] of [["v4", requiredOrder[5]], ["v41", requiredOrder[6]]]) {
     const activation = step(browserBuild, name);
-    assert.equal(activation.if, "needs.scope.outputs.interface == 'true'");
+    assert.equal(activation.if, "needs.scope.outputs.interface_presentation_only != 'true'");
     assert.deepEqual(activation.env, { GH_TOKEN: "${{ github.token }}" });
     assert.equal(activation.run.trim(),
       `node --test scripts/test/programmable-${version}-api-activation.test.mjs\nnode scripts/programmable-${version}-api-activation.mjs audit --repository-root "$GITHUB_WORKSPACE"`);
   }
-  const readModel = step(browserBuild, requiredOrder[6]);
+  const readModel = step(browserBuild, requiredOrder[7]);
   assert.equal(readModel.if, "needs.scope.outputs.read_model == 'true'");
   assert.equal(readModel.run, "npm run perf:read-model:ops-gate");
 });
@@ -183,6 +184,7 @@ test("the stable Interface result remains an always-run dependency of release pr
     INTERFACE_REQUIRED: "${{ needs.scope.outputs.interface }}",
     READ_MODEL_REQUIRED: "${{ needs.scope.outputs.read_model }}",
     GUIDANCE_ONLY: "${{ needs.scope.outputs.interface_guidance_only }}",
+    PRESENTATION_ONLY: "${{ needs.scope.outputs.interface_presentation_only }}",
     FUNCTIONAL_SCOPES: "${{ needs.scope.outputs.contracts }},${{ needs.scope.outputs.custom_v2 }},${{ needs.scope.outputs.database }},${{ needs.scope.outputs.dependencies }},${{ needs.scope.outputs.indexer }},${{ needs.scope.outputs.read_model }}",
     QUALITY_RESULT: "${{ needs.interface-quality.result }}",
     BROWSER_BUILD_RESULT: "${{ needs.interface-browser-build.result }}",
@@ -261,6 +263,7 @@ function aggregateResult(overrides = {}) {
       INTERFACE_REQUIRED: "true",
       READ_MODEL_REQUIRED: "false",
       GUIDANCE_ONLY: "false",
+      PRESENTATION_ONLY: "false",
       FUNCTIONAL_SCOPES: "false,false,false,false,false,false",
       QUALITY_RESULT: "success",
       BROWSER_BUILD_RESULT: "success",
@@ -305,7 +308,7 @@ test("the real aggregate shell rejects missing or failed classification and miss
   assert.equal(aggregateResult({ READ_MODEL_REQUIRED: "true" }), 0);
   assert.notEqual(aggregateResult({ READ_MODEL_REQUIRED: "true", INTERFACE_REQUIRED: "false",
     QUALITY_RESULT: "skipped", BROWSER_BUILD_RESULT: "skipped" }), 0);
-  for (const name of ["SCOPE_RESULT", "INTERFACE_REQUIRED", "READ_MODEL_REQUIRED", "GUIDANCE_ONLY", "QUALITY_RESULT", "BROWSER_BUILD_RESULT"]) {
+  for (const name of ["SCOPE_RESULT", "INTERFACE_REQUIRED", "READ_MODEL_REQUIRED", "GUIDANCE_ONLY", "PRESENTATION_ONLY", "QUALITY_RESULT", "BROWSER_BUILD_RESULT"]) {
     assert.notEqual(aggregateResult({ [name]: undefined }), 0, name);
   }
 });
@@ -319,7 +322,7 @@ test("guidance coverage keeps the full build and rejects every functional mixed 
   assert.equal(guidance.run, "npm run verify:interface:guidance:ci");
   assert.equal(build.run, "npm run build");
   assert.equal(step(browserBuild, "Install pinned Chromium for wallet interaction tests").if,
-    "needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true'");
+    "needs.scope.outputs.interface_presentation_only != 'true' && (needs.scope.outputs.interface_guidance_only != 'true' || needs.scope.outputs.custom_v2 == 'true')");
   assert.equal(scripts["verify:interface:guidance:ci"],
     "npm run test:ci-scope && eslint lib/custom-launch/v4-public-contract-discovery.ts tests/public-robinhood-v41-agent-docs.test.ts && npm run test:interface:guidance:ci");
   assert.equal(scripts["test:interface:guidance:ci"].split(" && vitest run ")[0],
@@ -352,4 +355,17 @@ test("guidance coverage keeps the full build and rejects every functional mixed 
   }
   assert.notEqual(aggregateResult({ GUIDANCE_ONLY: "true", INTERFACE_REQUIRED: "false",
     QUALITY_RESULT: "skipped", BROWSER_BUILD_RESULT: "skipped" }), 0);
+});
+
+test("presentation changes build once and cannot share any functional or guidance scope", () => {
+  assert.equal(step(browserBuild, "Build presentation changes").run, "npm run build");
+  assert.equal(step(browserBuild, "Build presentation changes").if, "needs.scope.outputs.interface_presentation_only == 'true'");
+  assert.equal(aggregateResult({ PRESENTATION_ONLY: "true" }), 0);
+  assert.notEqual(aggregateResult({ PRESENTATION_ONLY: "true", GUIDANCE_ONLY: "true" }), 0);
+  for (let index = 0; index < 6; index++) {
+    const scopes = Array(6).fill("false");
+    scopes[index] = "true";
+    assert.notEqual(aggregateResult({ PRESENTATION_ONLY: "true", FUNCTIONAL_SCOPES: scopes.join(",") }), 0);
+  }
+  assert.notEqual(aggregateResult({ PRESENTATION_ONLY: "true", BROWSER_BUILD_RESULT: "skipped" }), 0);
 });

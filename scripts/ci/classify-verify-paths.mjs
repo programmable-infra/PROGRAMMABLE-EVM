@@ -1,5 +1,7 @@
 import { readFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const EMPTY_SCOPE = Object.freeze({
@@ -74,6 +76,65 @@ function readGitChange(file, { baseSha, headSha }) {
     }
     return text(git(["show", `${sha}:${file}`]));
   });
+}
+
+function isPresentationPath(file) {
+  return /^(?:app|components)\/(?!api\/).*\.css$/u.test(file)
+    || /^(?:app|components)\/(?!api\/).*\.tsx$/u.test(file)
+    || /^(?:assets|public)\/.*\.(?:avif|gif|ico|jpe?g|png|svg|webp|woff2?)$/u.test(file)
+    || /^public\/developers\/[^/]+\.md$/u.test(file);
+}
+
+export function isInterfacePresentationCandidate(paths, scope = classifyVerifyPaths(paths)) {
+  return paths.length > 0 && new Set(paths).size === paths.length
+    && scope.interface === true
+    && Object.entries(scope).every(([key, value]) => key === "interface" || value === false)
+    && paths.every(isPresentationPath);
+}
+
+function presentationCodeShape(source) {
+  // The locked parser is needed only for TSX copy edits. Code, imports, event
+  // handlers, URLs and transaction values retain their exact syntax tree.
+  const ts = createRequire(resolve("package.json"))("typescript");
+  const file = ts.createSourceFile("ui.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  if (file.parseDiagnostics.length) throw new Error("Invalid TSX");
+  const copyAttributes = new Set(["title", "alt", "placeholder", "aria-label", "aria-description"]);
+  function shape(node) {
+    if (ts.isJsxText(node)) return [node.kind, "copy"];
+    if (ts.isStringLiteral(node) && (
+      (ts.isJsxAttribute(node.parent) && copyAttributes.has(node.parent.name.getText(file)))
+      || (ts.isJsxExpression(node.parent) && node.parent.expression === node
+        && (ts.isJsxElement(node.parent.parent) || ts.isJsxFragment(node.parent.parent)))
+    )) return [node.kind, "copy"];
+    const children = [];
+    node.forEachChild((child) => { children.push(shape(child)); });
+    return [node.kind, children.length ? children : node.getText(file)];
+  }
+  return JSON.stringify(shape(file));
+}
+
+export function isInterfacePresentationOnlyChange(paths, {
+  baseSha, headSha, scope = classifyVerifyPaths(paths), readChange = readGitChange,
+  validateFile = (file) => {
+    for (const sha of [baseSha, headSha]) {
+      const entry = execFileSync("git", ["ls-tree", "-z", sha, "--", file], { encoding: "utf8" });
+      if (entry && !entry.startsWith("100644 blob ")) throw new Error("Regular UI files required");
+    }
+  },
+} = {}) {
+  if (!/^[a-f0-9]{40}$/u.test(baseSha ?? "") || !/^[a-f0-9]{40}$/u.test(headSha ?? "")
+    || baseSha === headSha || !isInterfacePresentationCandidate(paths, scope)) return false;
+  try {
+    for (const file of paths) {
+      validateFile(file);
+      if (!file.endsWith(".tsx")) continue;
+      const [before, after] = readChange(file, { baseSha, headSha });
+      if (before === after || presentationCodeShape(before) !== presentationCodeShape(after)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function isInterfaceGuidanceOnlyChange(paths, {
@@ -374,6 +435,10 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
         .map((path) => path.trim())
         .filter(Boolean);
   const scope = classifyVerifyPaths(paths, { forceAll, customV2Release });
-  printGithubOutputs({ ...scope, interface_guidance_only: !forceAll && !customV2Release
+  printGithubOutputs({ ...scope,
+    interface_presentation_candidate: !forceAll && !customV2Release && isInterfacePresentationCandidate(paths, scope),
+    interface_presentation_only: !forceAll && !customV2Release
+      && isInterfacePresentationOnlyChange(paths, { scope, baseSha: process.env.BASE_SHA, headSha: process.env.HEAD_SHA }),
+    interface_guidance_only: !forceAll && !customV2Release
     && isInterfaceGuidanceOnlyChange(paths, { scope, baseSha: process.env.BASE_SHA, headSha: process.env.HEAD_SHA }) });
 }
