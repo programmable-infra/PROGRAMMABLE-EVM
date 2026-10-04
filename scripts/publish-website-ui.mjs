@@ -76,10 +76,8 @@ async function provePresentation(value) {
     const file = join(directory, "trusted-classifier.mjs");
     await writeFile(file, classifier, { mode: 0o600 });
     const trusted = await import(pathToFileURL(file).href);
-    if (typeof trusted.isInterfacePresentationOnlyChange !== "function"
-      || !trusted.isInterfacePresentationOnlyChange(value.paths, { baseSha: value.live.sha, headSha: value.head })) {
-      throw new PublicationError("This change needs the functional release route. UI publication cannot change behavior or release controls.");
-    }
+    return typeof trusted.isInterfacePresentationOnlyChange === "function"
+      && trusted.isInterfacePresentationOnlyChange(value.paths, { baseSha: value.live.sha, headSha: value.head });
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
@@ -114,7 +112,10 @@ async function smoke(origin) {
 
 async function publish(value) {
   if (!value.eligible) throw new PublicationError("Use the functional release route for this change.");
-  await provePresentation(value);
+  if (!await provePresentation(value)) {
+    emit({ status: "functional-release-required", commit: value.head });
+    return;
+  }
   emit({ status: "building", commit: value.head, changedPaths: value.paths });
   const output = await vercel("deploy", "--prod", "--skip-domain", "--yes",
     "--meta", `githubCommitSha=${value.head}`, "--meta", "githubCommitRef=production",
