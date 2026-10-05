@@ -1,0 +1,128 @@
+{
+  "schemaVersion": "programmable.ethereum-module-deployment-evidence.v1",
+  "chainId": 1,
+  "state": "deployed-source-matched-not-activated",
+  "sourceCommit": "92ff1f513c47fe94ddc1022babffdf95ad47d76b",
+  "canonicalStamp": {
+    "router": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
+    "graphFactory": "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887"
+  },
+  "contracts": [
+    {
+      "status": "deployed-runtime-verified",
+      "chainId": 1,
+      "contract": "FoundationEthereumGraphLaunchV1",
+      "address": "0x487E8A196812fEC534f2D2514bfdc7c609EBAe35",
+      "deployer": "0x9e1339Eaed0EfF31Eda7D714A341Eb09a7e4513e",
+      "transactionHash": "0x7cdd27a31d16179f9fb19573d20751baece76f38f499c06b610f12774f0eed61",
+      "sourceCommit": "92ff1f513c47fe94ddc1022babffdf95ad47d76b",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "compilationTarget": "src/module-foundation/FoundationEthereumGraphLaunchV1.sol:FoundationEthereumGraphLaunchV1",
+      "constructorArguments": [
+        "0x000000000004444c5dc75cB358380D2e3dE08A90",
+        "0xbd216513d74c8cf14cf4747e6aaa6420ff64ee9e",
+        "0x4c82d1fbfe28c977cbb58d8c7ff8fcf9f70a2cca",
+        "0x000000000022D473030F116dDEE9F6B43aC78BA3",
+        "0xB012e4A8F2c5FC4E8E4faCA9D5Ad6FfF13FBA887",
+        [
+          "0x785f1014552b7ce7d5fb7d0c970ca60edee94fd00425d7ca21609acac7ce1293",
+          "0x77e36c08b19959a30dde46dec9abe6208e371ff2f56884a56fe1e1a53615528b",
+          "0x70c9ea2b275087aea3d57ae48e2d30e272a07ff5b6c7974bd47c21478b37face",
+          "0xc67d1657868aa5146eaf24fb879fb1fdec3d2d493b3683a61c9c2f4fb2851131",
+          "0xd23692fae59331592048e71a96d4963e170ee56e449683dc9f7fa3f9470018b8"
+        ]
+      ],
+      "creationCodeHash": "0x01356948ed16747990f070f06a9a89aa9329ddbee919f2cefd2772bb63e8fe3e",
+      "runtimeCodeHash": "0x4013d721f43d3061e4593c5da8e1dfa64a943573240c7e247905c3a1986dbbec",
+      "evidence": [
+        {
+          "blockNumber": "26125550",
+          "blockHash": "0x7e0d7581a7aa8c489e35c151ae0117de0b7129dd3048302c62abc5a4ab154ebd",
+          "runtimeCodeHash": "0x4013d721f43d3061e4593c5da8e1dfa64a943573240c7e247905c3a1986dbbec",
+          "gasUsed": "4817358",
+          "feeWei": "532358023801968"
+        },
+        {
+          "blockNumber": "26125550",
+          "blockHash": "0x7e0d7581a7aa8c489e35c151ae0117de0b7129dd3048302c62abc5a4ab154ebd",
+          "runtimeCodeHash": "0x4013d721f43d3061e4593c5da8e1dfa64a943573240c7e247905c3a1986dbbec",
+          "gasUsed": "4817358",
+          "feeWei": "532358023801968"
+        }
+      ],
+      "sourceVerification": {
+        "provider": "sourcify",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x487E8A196812fEC534f2D2514bfdc7c609EBAe35",
+        "matchId": "54649769",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "verifiedAt": "2026-10-05T10:24:17Z",
+        "match": "match",
+        "chainId": "1",
+        "address": "0x487E8A196812fEC534f2D2514bfdc7c609EBAe35"
+      },
+      "available": false,
+      "finality": {
+        "observedHead": "26125562",
+        "finalizedBlock": "26125488",
+        "confirmations": "12",
+        "finalized": false
+      }
+    },
+    {
+      "status": "deployed-runtime-verified",
+      "chainId": 1,
+      "contract": "LaunchWalletCapEthereumFactoryV1",
+      "address": "0x2960751d51a6559D630F9Fa9D94CD0011816d5D2",
+      "deployer": "0x9e1339Eaed0EfF31Eda7D714A341Eb09a7e4513e",
+      "transactionHash": "0x228134c7d610c6a952c2cd12b99710b1dabff4a6d2be0ca06db21503b3ed3ed5",
+      "sourceCommit": "92ff1f513c47fe94ddc1022babffdf95ad47d76b",
+      "compilerVersion": "0.8.26+commit.8a97fa7a",
+      "compilationTarget": "src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapEthereumFactoryV1.sol:LaunchWalletCapEthereumFactoryV1",
+      "constructorArguments": [],
+      "creationCodeHash": "0x73bf4ceda587fcd82d7366ba92ba9f1dbb5d88ac7714f4a4a67a042f3307d434",
+      "runtimeCodeHash": "0x984c80e16fa4da55c7f1c69ca25a3fa4e60206aa1d67c73d5c0eb9849dabf39a",
+      "evidence": [
+        {
+          "blockNumber": "26125551",
+          "blockHash": "0xddb850fc7c54b6b1138e011258ecff8181cbec820b079ad61c6c1d1eb1d75201",
+          "runtimeCodeHash": "0x984c80e16fa4da55c7f1c69ca25a3fa4e60206aa1d67c73d5c0eb9849dabf39a",
+          "gasUsed": "874262",
+          "feeWei": "99891824510948"
+        },
+        {
+          "blockNumber": "26125551",
+          "blockHash": "0xddb850fc7c54b6b1138e011258ecff8181cbec820b079ad61c6c1d1eb1d75201",
+          "runtimeCodeHash": "0x984c80e16fa4da55c7f1c69ca25a3fa4e60206aa1d67c73d5c0eb9849dabf39a",
+          "gasUsed": "874262",
+          "feeWei": "99891824510948"
+        }
+      ],
+      "sourceVerification": {
+        "provider": "sourcify",
+        "url": "https://sourcify.dev/server/v2/contract/1/0x2960751d51a6559D630F9Fa9D94CD0011816d5D2",
+        "matchId": "54649782",
+        "creationMatch": "match",
+        "runtimeMatch": "match",
+        "verifiedAt": "2026-10-05T10:24:42Z",
+        "match": "match",
+        "chainId": "1",
+        "address": "0x2960751d51a6559D630F9Fa9D94CD0011816d5D2"
+      },
+      "available": false,
+      "finality": {
+        "observedHead": "26125562",
+        "finalizedBlock": "26125488",
+        "confirmations": "11",
+        "finalized": false
+      }
+    }
+  ],
+  "activation": {
+    "available": false,
+    "permitAuthorityIntegrated": false,
+    "walletFlowIntegrated": false,
+    "indexerSourceIntegrated": false,
+    "liveLifecycleVerified": false
+  }
+}
