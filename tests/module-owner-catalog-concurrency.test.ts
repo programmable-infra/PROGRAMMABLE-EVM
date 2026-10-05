@@ -27,3 +27,30 @@ it("checks independent modules in bounded parallel batches, preserves order and 
   expect(result.catalog.document.entries.map(e => e.manifest.packageId)).toEqual(valid.map(p => p.manifest.packageId));
   expect(result.catalog.authority.admissions).toHaveLength(8);
 });
+
+it.each([false, true])("replaces a seeded family only for new launches (token recovery: %s)", async tokenRecovery => {
+  const previous = { manifest: { packageId: "previous", familyId: "wallet-cap" } };
+  const unrelated = { manifest: { packageId: "unrelated", familyId: "other" } };
+  const availability = { available: true, binding: { releaseDigest: "host" },
+    ...(tokenRecovery ? { token: "existing-token" } : {}),
+    catalog: { document: { entries: [previous, unrelated] }, authority: { admissions: [], releases: [] } },
+  } as unknown as FoundationAvailabilityEnvelope;
+  const publication = { protocolReleaseDigest: "host", manifest: { packageId: "current", familyId: "wallet-cap" },
+    publishedAt: "2026-10-05T00:00:00Z", release: { chainId: 4663 } };
+  const result = await withFoundationOwnerCatalogV1(availability, { read: async () => [publication], client: {} as PublicClient });
+  expect(result.catalog.document.entries.map(e => e.manifest.packageId)).toEqual(tokenRecovery
+    ? ["previous", "unrelated", "current"] : ["unrelated", "current"]);
+  expect(availability.catalog.document.entries).toEqual([previous, unrelated]);
+});
+
+it("keeps the seeded family if its proposed replacement fails verification", async () => {
+  const previous = { manifest: { packageId: "previous", familyId: "wallet-cap" } };
+  const availability = { available: true, binding: { releaseDigest: "host" },
+    catalog: { document: { entries: [previous] }, authority: { admissions: [], releases: [] } },
+  } as unknown as FoundationAvailabilityEnvelope;
+  const result = await withFoundationOwnerCatalogV1(availability, { read: async () => [{ invalid: true,
+    protocolReleaseDigest: "host", manifest: { packageId: "current", familyId: "wallet-cap" },
+    publishedAt: "2026-10-05T00:00:00Z", release: { chainId: 4663 },
+  }], client: {} as PublicClient });
+  expect(result.catalog.document.entries).toEqual([previous]);
+});
