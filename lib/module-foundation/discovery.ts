@@ -1,4 +1,6 @@
 import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
+import { decodeFoundationEthereumTransaction } from "./ethereum-graph";
+import { readFoundationMinedCall } from "./mined-call";
 import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import { foundationBindingChainId } from "./chains";
 import { assertFoundationLaunchFinality } from "./finality";
@@ -8,7 +10,7 @@ import {
   getAbiItem, getAddress, isHex, keccak256, parseAbiParameters,
   type Address, type Hex, type PublicClient,
 } from "viem";
-import { foundationFactoryV2Abi, foundationFactoryV3Abi, foundationMetadataParameters, foundationTokenAbi } from "./abi";
+import { foundationFactoryV2Abi, foundationFactoryV3Abi, foundationHookAbi, foundationMetadataParameters, foundationTokenAbi } from "./abi";
 import { assertFoundationInfrastructure, type FoundationCheckpoint, type FoundationDeploymentBinding } from "./client";
 import { FOUNDATION_LP_CUSTODY_DEAD_ID } from "./constants";
 import { foundationReadbackAbi, verifyFoundationLaunchReceipt } from "./readback";
@@ -120,7 +122,7 @@ async function assertCanonical(client: PublicClient, checkpoint: FoundationCheck
   }
 }
 
-/** Restore generic selections from a direct, successful factory launch. Internal calls need separate trace evidence. */
+/** Restore selections from a successful launch, including traced Ethereum smart-wallet calls. */
 export async function discoverFoundationLaunch(input: {
   client: PublicClient; binding: FoundationDeploymentBinding; token: Address;
   locator?: FoundationLaunchLocator; transactionHash?: Hex; signal?: AbortSignal;
@@ -138,15 +140,20 @@ export async function discoverFoundationLaunch(input: {
   if (candidate === null) throw new Error("No creation transaction was found. A bounded recent launch lookup can supply another candidate.");
   const hash = transactionHash(candidate);
   const mined = await client.getTransaction({ hash });
-  if (!sameHex(mined.hash, hash) || !mined.to || !sameAddress(mined.to, binding.ethereumGraph ? getAddress(ethereum.canonicalStamp.router.address) : binding.factory.address) || BigInt(mined.from) === 0n
+  if (!sameHex(mined.hash, hash) || !mined.to || (!binding.ethereumGraph && !sameAddress(mined.to, binding.factory.address)) || BigInt(mined.from) === 0n
     || mined.blockNumber === null || !mined.blockHash || mined.blockNumber < binding.startBlock
     || mined.blockNumber > observedAt.blockNumber || mined.input.length > MAX_CALLDATA_BYTES * 2 + 2) {
     throw new Error("The candidate is not a mined transaction to the selected foundation factory.");
   }
-  const { parameters } = decodeFoundationLaunchCall(binding, { data: mined.input, value: mined.value });
+  const transaction = binding.ethereumGraph ? await readFoundationMinedCall(client, mined, {
+    account: await client.readContract({ address: record.hook, abi: foundationHookAbi, functionName: "creator", blockNumber: observedAt.blockNumber }),
+    target: getAddress(ethereum.canonicalStamp.router.address),
+    accepts(call) { try { return sameAddress(decodeFoundationEthereumTransaction(call).token, token); } catch { return false; } },
+  }) : { from: getAddress(mined.from), to: getAddress(mined.to), data: mined.input, value: mined.value };
+  const { parameters } = decodeFoundationLaunchCall(binding, transaction);
   await assertFoundationLaunchFinality(client, foundationBindingChainId(binding), mined.blockNumber, observedAt.blockNumber);
   const graph = binding.ethereumGraph ? (await assertFoundationEthereumTransaction({ source: binding.ethereumGraph,
-    transaction: { from: mined.from, to: mined.to, data: mined.input, value: mined.value }, signal: input.signal })).graph : null;
+    transaction, signal: input.signal })).graph : null;
   if (graph && graph.engine !== getAddress(binding.factory.address)) throw new Error("The Ethereum module launch account changed.");
   const [predictedToken, predictedHook] = graph ? [graph.token, graph.hook] : await Promise.all([
     client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "predictTokenAddress",
@@ -158,7 +165,6 @@ export async function discoverFoundationLaunch(input: {
     throw new Error("The candidate launch parameters belong to a different token or pool.");
   }
   const metadataHash = keccak256(encodeAbiParameters(foundationMetadataParameters, [parameters.metadata]));
-  const transaction = { from: getAddress(mined.from), to: getAddress(mined.to), data: mined.input, value: mined.value };
   const receipt = await verifyFoundationLaunchReceipt({ client, binding, transactionHash: hash,
     expected: { transaction, parameters, result: record, metadataHash }, verificationBlock: observedAt.blockNumber });
   checkAbort(input.signal);

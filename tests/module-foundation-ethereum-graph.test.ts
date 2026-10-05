@@ -8,6 +8,7 @@ import {
 } from "@/lib/module-foundation/ethereum-graph";
 import { foundationPoolId } from "@/lib/module-foundation/route";
 import type { LaunchStampProvenanceV1 } from "@/lib/tokens";
+import { selectFoundationMinedCall } from "@/lib/module-foundation/mined-call";
 
 const hash = (value: string) => keccak256(stringToHex(value));
 
@@ -50,6 +51,17 @@ function candidate() {
 }
 
 describe("Ethereum Module Mode canonical graph readback", () => {
+  it("decodes the same source-bound launch inside a smart-wallet transaction", () => {
+    const input = candidate(), original = input.transaction;
+    const outer = { hash: original.hash, from: getAddress("0x0000000000000000000000000000000000000001"),
+      to: getAddress("0x0000000000000000000000000000000000000002"), input: "0xabcd" as Hex, value: 0n,
+      blockNumber: BigInt(input.provenance.blockNumber), blockHash: input.provenance.blockHash, transactionIndex: 0 };
+    const traced = selectFoundationMinedCall({ type: "CALL", from: outer.from, to: outer.to, input: outer.input, value: "0x0",
+      calls: [{ type: "CALL", from: original.from, to: original.to, input: original.data, value: `0x${original.value.toString(16)}` }] },
+    outer, { account: original.from, target: original.to, accepts: () => true });
+    expect(decodeFoundationEthereumGraphLaunch({ ...input, transaction: { hash: original.hash, ...traced } }).token)
+      .toBe(getAddress(input.provenance.tokenProof.tokenAddress));
+  });
   it("restores the exact modules and metadata from call bytes exercised on the Ethereum fork", () => {
     const input = candidate(), decoded = decodeFoundationEthereumGraphLaunch(input);
     expect(decoded.engine).toBe(getAddress(input.graph.expectedOutputs[0].account));
