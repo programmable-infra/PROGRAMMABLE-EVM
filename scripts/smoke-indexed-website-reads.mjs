@@ -271,7 +271,7 @@ export function validateIndexedWebsiteList({ body, response, route, pageNumber, 
     presented.add(item.tokenAddress.toLowerCase());
     for (const link of item.links) validateChainLink(link?.url, route);
     if (item.market !== null) {
-      check(route.chainId === 4663 && record(item.market), "market source");
+      check([1, 4663].includes(route.chainId) && record(item.market), "market source");
       validateChainLink(item.market.sourceUrl, route);
     }
   }

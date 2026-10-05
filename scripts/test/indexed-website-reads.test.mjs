@@ -649,6 +649,31 @@ test("count corruption, duplicate pages and crossed presentation identities fail
   }
 });
 
+test("both indexed chains accept optional market presentations and retain source link checks", async () => {
+  for (const chain of ["ethereum", "robinhood"]) {
+    for (const sourceUrl of ["https://www.codex.io/", `https://dexscreener.com/${chain}/${HASH(1)}`]) {
+      const f = fixture(({ url, spec }) => {
+        if (url.pathname === `/api/explore/${chain}`) {
+          spec.body.presentations[0].market = { source: sourceUrl.includes("codex") ? "codex" : "dexscreener",
+            poolId: HASH(1), priceUsd: 0.01, marketCapUsd: 10_000, liquidityUsd: 1_000,
+            volume24hUsd: 100, change24hPercent: 0, observedAt: UPDATED, sourceUrl };
+        }
+      });
+      const result = await runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl }));
+      assert.equal(result.chains.find(item => item.chainId === (chain === "ethereum" ? 1 : 4663))?.totalItems,
+        chain === "ethereum" ? 51 : 1);
+    }
+    for (const market of [undefined, [], {},
+      { sourceUrl: `https://dexscreener.com/${chain === "ethereum" ? "robinhood" : "ethereum"}/${HASH(1)}` },
+      { sourceUrl: "javascript:alert(1)" }, { sourceUrl: "https://user:password@www.codex.io/" }]) {
+      const f = fixture(({ url, spec }) => {
+        if (url.pathname === `/api/explore/${chain}`) spec.body.presentations[0].market = market;
+      });
+      await assert.rejects(runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl })), /indexed website/u);
+    }
+  }
+});
+
 test("Robinhood source checkpoints, exact source bindings and market chain are checked", async () => {
   for (const mutate of [
     body => { body.sourceEvidence.router.sourceAddress = ADDRESS(567); },
