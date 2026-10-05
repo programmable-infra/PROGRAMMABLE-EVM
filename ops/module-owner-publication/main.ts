@@ -168,7 +168,7 @@ export async function publishCatalogBatch(batch: FoundationOwnerPublicationV1[],
       publications = old.publications; etag = existing.blob.etag;
     }
     const alreadyStored = batch.every(p => publications.some(old => old.publicationDigest === p.publicationDigest));
-    if (batch.length === 1 && publications.some(p => p.manifest.familyId === publication.manifest.familyId && p.release.chainId !== publication.release.chainId)) throw Error("This module requires a shared two-chain publication.");
+    if (batch.length === 1 && publications.some(p => p.release.chainId === 1 || (p.manifest.familyId === publication.manifest.familyId && p.release.chainId !== publication.release.chainId))) throw Error("This module requires a shared two-chain publication.");
     if (!alreadyStored) publications = [...publications.filter(old => !batch.some(p => old.manifest.packageId === p.manifest.packageId && old.release.chainId === p.release.chainId && old.release.hostAdapterId === p.release.hostAdapterId)), ...batch];
     await save("publication-intent.json", { publicationDigest, priorEtag: etag ?? null }).catch(async error => {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;

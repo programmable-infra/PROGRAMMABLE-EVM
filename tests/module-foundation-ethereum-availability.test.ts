@@ -13,3 +13,12 @@ it("binds Ethereum graph availability to installed source without inventing an i
     expect(() => parseFoundationAvailability({ ...value, ...change })).toThrow();
   }
 });
+
+it("keeps pending index reads non-authorizing and specific to an Ethereum token", () => {
+  const pending = { schemaVersion: FOUNDATION_AVAILABILITY_SCHEMA_V5, chainId: 1, available: false, reason: "MODULE_INDEX_PENDING" };
+  const parsed = parseFoundationAvailability({ ...pending, token: "0x1111111111111111111111111111111111111111" });
+  expect(parsed.indexPending).toBe(true);
+  expect(parsed.available).toBe(false);
+  expect(parsed.binding).toBeNull();
+  expect(parseFoundationAvailability(pending).indexPending).toBeUndefined();
+});

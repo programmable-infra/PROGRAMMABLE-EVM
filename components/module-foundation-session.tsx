@@ -32,7 +32,7 @@ export async function loadFoundationSessionAvailability(signal: AbortSignal, tok
     try {
       const value = await (chainId === 4663 ? fetchFoundationAvailability(signal, token) : fetchFoundationAvailability(signal, token, chainId));
       signal.throwIfAborted();
-      if (value.available || (!token && !value.providerDisagreement) || attempt === attempts - 1) return value;
+      if (value.available || value.indexPending || (!token && !value.providerDisagreement) || attempt === attempts - 1) return value;
     } catch (error) {
       signal.throwIfAborted();
       if (!token || attempt === attempts - 1) throw error;
@@ -56,6 +56,7 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
   const targetKey = `${chainId}:${token?.toLowerCase() ?? "launch"}`;
   const [envelopeState, setEnvelopeState] = useState<{ targetKey: string; refresh: number; value: FoundationAvailabilityEnvelope | null } | null>(null);
   const [refresh, setRefresh] = useState(0);
+  const indexRetries = useRef({ targetKey, count: 0 });
   const displayEnvelope = useSyncExternalStore(subscribeFoundationLaunchDisplay, useCallback(() => readFoundationLaunchDisplay(Date.now(), chainId), [chainId]), () => null);
   const envelope = envelopeState?.targetKey === targetKey && (!token || envelopeState.refresh === refresh) ? envelopeState.value : null;
   const availabilityError = envelopeState?.targetKey === targetKey && envelopeState.refresh === refresh && envelopeState.value === null;
@@ -105,6 +106,18 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
     }).catch(() => { if (!controller.signal.aborted) setEnvelopeState({ targetKey, refresh, value: null }); });
     return () => controller.abort();
   }, [refresh, token, targetKey, chainId]);
+  useEffect(() => {
+    if (indexRetries.current.targetKey !== targetKey) indexRetries.current = { targetKey, count: 0 };
+    if (chainId !== 1 || !token || !envelope?.indexPending || indexRetries.current.count >= 20) return;
+    // Finality takes minutes. Do not repeat rapid provider reads or poll background tabs.
+    const timer = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      indexRetries.current.count++;
+      window.clearInterval(timer);
+      setRefresh(value => value + 1);
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [chainId, token, targetKey, envelope?.indexPending]);
   const availability: FoundationAvailability = { status: availabilityError ? "unavailable" : !envelope ? "checking" : envelope.available ? "ready" : "unavailable",
     chainId, chainName: profile.name, reason: availabilityError ? "Launch availability could not be checked. Retry to keep working with this release." : envelope?.reason ?? undefined };
   const contextKey = `${account ?? "disconnected"}:${wallet?.chainId ?? "none"}:${authenticated}:${sessionReady}:${targetKey}:${envelope?.binding?.releaseDigest ?? "unavailable"}`;

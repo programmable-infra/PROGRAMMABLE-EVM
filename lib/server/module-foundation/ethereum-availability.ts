@@ -43,7 +43,8 @@ async function current(token?: Address) {
     const entry = snapshot.entries.find(e => e.tokenAddress.toLowerCase() === token.toLowerCase());
     const p = entry?.launchStampProvenance;
     const deployment = getOnchainDeployment("production");
-    if (!p || deployment.status !== "ready") throw new Error("This Ethereum module launch is not indexed yet.");
+    if (deployment.status !== "ready") throw new Error("The Ethereum deployment is unavailable.");
+    if (!p) return { ...unavailableFoundation(FOUNDATION_AVAILABILITY_SCHEMA_V5, 1), token: token.toLowerCase(), reason: "MODULE_INDEX_PENDING" };
     const checked = await readFoundationEthereumGraphLaunch({ client: clients[0], deployment, source: ETHEREUM_MODULE_SOURCE,
       anchor: { launchId: p.launchId, token, hook: p.poolKey.hooks, poolManager: p.poolManagerAddress,
         poolId: p.poolId, stampHash: p.stampHash, blockNumber: BigInt(p.blockNumber), blockHash: p.blockHash,

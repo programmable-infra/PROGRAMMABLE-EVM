@@ -21,6 +21,8 @@ export interface FoundationAvailabilityEnvelope {
   token?: Address;
   /** An exact backend provider disagreement is retryable; it never authorizes a launch. */
   providerDisagreement?: boolean;
+  /** Token absent from the finalized index; never grants transaction authority. */
+  indexPending?: boolean;
 }
 export class FoundationProviderDisagreementError extends Error {
   constructor() { super("Launch checks are temporarily out of sync."); }
@@ -56,7 +58,8 @@ export function parseFoundationAvailability(value: unknown, now = Date.now()): F
   if (r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V5) {
     if (r.chainId !== 1) throw new Error("This graph release belongs only to Ethereum.");
     const token = r.token === undefined ? undefined : tokenAddress(r.token).toLowerCase() as Address;
-    if (r.available !== true) return { ...unavailableFoundation(FOUNDATION_AVAILABILITY_SCHEMA_V5, 1), ...(token ? { token } : {}) };
+    if (r.available !== true) return { ...unavailableFoundation(FOUNDATION_AVAILABILITY_SCHEMA_V5, 1), ...(token ? { token } : {}),
+      ...(token && r.reason === "MODULE_INDEX_PENDING" ? { indexPending: true, reason: "Waiting for this launch to appear in the index." } : {}) };
     const b = record(r.binding), e = record(r.evidence);
     if (e.kind !== "owner-source-runtime-v1" || e.releaseDigest !== ETHEREUM_MODULE_SOURCE.releaseDigest
       || typeof e.checkedAt !== "string" || !Number.isFinite(Date.parse(e.checkedAt))

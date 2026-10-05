@@ -1,3 +1,4 @@
+import ethereumRelease from "@/contracts/deployments/ethereum-module-release-v1.json";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createPublicClient, http } from "viem";
@@ -35,6 +36,19 @@ export async function run(args: string[], repositoryRoot: string) {
     publications.push(publication);
   }
   if (job.activate !== true) return;
+  const ethereum = publications.find(publication => publication.release.chainId === 1)!;
+  if (ethereum.protocolReleaseDigest !== ethereumRelease.releaseDigest || !ethereumRelease.payload.modules.some(module =>
+    module.factory.toLowerCase() === ethereum.release.factory.toLowerCase()
+    && module.factoryCodeHash === ethereum.release.factoryCodeHash && module.moduleCodeHash === ethereum.release.moduleCodeHash
+    && module.descriptorHash === ethereum.release.descriptorHash)) throw Error("The Ethereum host release must admit this module before joint publication.");
+  // Staging can precede a host rollout. Activation must use the live host on both networks.
+  await Promise.all(publications.map(async publication => {
+    const response = await fetch(`https://programmable.market/api/module-foundation?chainId=${publication.release.chainId}`,
+      { cache: "no-store", signal: AbortSignal.timeout(60_000), redirect: "error" });
+    if (!response.ok) throw Error("The target host is not live.");
+    const current = await response.json();
+    if (!current.available || current.binding?.releaseDigest !== publication.protocolReleaseDigest) throw Error("The live target host differs from the staged module binding.");
+  }));
   const storage = JSON.parse(await readFile(flags.get("--storage-file")!, "utf8"));
   await publishCatalogBatch(publications, storage.token, (name, value) => writeFile(path.join(output, name), JSON.stringify(value, null, 2), { flag: "wx", mode: 0o600 }));
 }

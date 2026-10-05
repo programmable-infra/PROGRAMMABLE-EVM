@@ -1,3 +1,4 @@
+import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
 import "server-only";
 
 import { readRobinhoodExploreCatalog } from "./robinhood-index/read";
@@ -35,7 +36,7 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
   const rhRows = rh.items.map(row => ({ ...row, chainId: 4663 as const,
     mode: isRobinhoodModuleSourceKind(row.sourceKind) ? "module" as const : "custom" as const }));
   const ethRows = eth.entries.map(entry => ({
-    chainId: 1 as const, mode: "custom" as const, category: "custom" as const,
+    chainId: 1 as const, mode: isEthereumModuleLaunchCandidate(entry) ? "module" as const : "custom" as const, category: "custom" as const,
     launchId: entry.launchStampProvenance?.launchId ?? entry.id, tokenAddress: entry.tokenAddress,
     hookAddress: entry.hookAddress, creator: entry.creatorAddress, transactionHash: entry.launchTransactionHash,
     blockNumber: entry.launchBlockNumber, launchedAt: entry.launchedAt, name: entry.name, symbol: entry.symbol,
