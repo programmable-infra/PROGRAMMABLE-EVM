@@ -246,7 +246,7 @@ describe("unreleased launch model gating", () => {
     );
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
     const modulesCard = html.match(/<a[^>]*data-launch-model-option="modules"[^>]*>/u)?.[0];
-    expect(modulesCard).toContain('href="/launch/modules/foundation"');
+    expect(modulesCard).toContain('href="/launch/modules/foundation?chainId=4663"');
     expect(modulesCard).not.toContain("disabled");
     expect(modulesCard).not.toContain("data-launch-model-available");
     expect(modulesCard).toContain('data-launch-model-entry="foundation"');
@@ -273,10 +273,16 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Build or resume");
   });
 
+  it("keeps Ethereum selected when opening its Module Mode draft", () => {
+    const html = renderToStaticMarkup(createElement(ModuleFoundationLaunchCard, { chainId: 1 }));
+    expect(html).toContain('href="/launch/modules/foundation?chainId=1"');
+    expect(html).toContain('data-launch-model-launchable="false"');
+  });
+
   it("renders Foundation draft navigation before hydration without claiming launch authority", () => {
     const open = renderToStaticMarkup(createElement(ModuleFoundationLaunchCard));
     const modulesCard = open.match(/<a[^>]*data-launch-model-option="modules"[^>]*>/u)?.[0];
-    expect(modulesCard).toContain('href="/launch/modules/foundation"');
+    expect(modulesCard).toContain('href="/launch/modules/foundation?chainId=4663"');
     expect(modulesCard).not.toContain("data-launch-model-available");
     expect(modulesCard).toContain('data-launch-model-entry="foundation"');
     expect(modulesCard).toContain('data-launch-model-launchable="false"');

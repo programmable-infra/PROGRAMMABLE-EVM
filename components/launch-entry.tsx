@@ -38,7 +38,7 @@ function LaunchArtworkImage() {
 }
 
 /** Opening a draft is always available; the builder checks authority before review and submission. */
-export function ModuleFoundationLaunchCard() {
+export function ModuleFoundationLaunchCard({ chainId = DEFAULT_VIEW_CHAIN_ID }: { chainId?: ViewChainId } = {}) {
   const cardProps = {
     className: `launch-model-card ${launchExperience.modelCard} liquid-glass-surface`,
     "data-launch-model-option": "modules",
@@ -63,7 +63,7 @@ export function ModuleFoundationLaunchCard() {
       </span>
     </span>
   </>;
-  return <Link {...cardProps} href="/launch/modules/foundation">{content}</Link>;
+  return <Link {...cardProps} href={`/launch/modules/foundation?chainId=${chainId}`}>{content}</Link>;
 }
 
 export function LaunchExperience({
@@ -295,7 +295,7 @@ export function LaunchModelPicker({
             </span>
           </button>
         ) : (
-          <ModuleFoundationLaunchCard />
+          <ModuleFoundationLaunchCard chainId={chainId} />
         )}
 
         <Link

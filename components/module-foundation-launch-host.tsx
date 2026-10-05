@@ -7,7 +7,7 @@ import { foundationCreatorFeeFields, foundationCreatorFeeRates } from "@/lib/mod
 import { foundationParseAmount } from "@/lib/module-foundation/price";
 import type { FoundationFundingHop } from "@/lib/module-foundation/atomic-launch";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatUnits, getAddress, keccak256, toHex, type Address, type Hex, type PublicClient } from "viem";
 import { ModuleFoundationBuilder } from "./module-foundation-builder";
@@ -38,6 +38,7 @@ import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, type Fo
 import styles from "./module-foundation-ui.module.css";
 import studioStyles from "./module-studio/studio.module.css";
 import { StudioAtmosphere } from "./module-studio/studio-atmosphere";
+import { ChainMark } from "./chain-mark";
 
 /** A saved result is only a locator; recover its exact launch from current authority and canonical chain evidence. */
 export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, saved: FoundationResolution, signal?: AbortSignal) {
@@ -62,6 +63,7 @@ export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, sav
 export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: { layout?: "form" | "studio"; chainId?: FoundationChainId } = {}) {
   const profile = foundationChainProfile(chainId), FOUNDATION_INFRASTRUCTURE = profile.infrastructure, FOUNDATION_WETH = profile.wrappedEth.address;
   const router = useRouter(), session = useFoundationSession(undefined, chainId);
+  const [changingNetwork, startNetworkChange] = useTransition();
   // Presentation metadata can share one HTTP batch; preparation uses the session's fresh client.
   const displayClient = useMemo(() => createFoundationClient({ batchRpc: true, chainId }), [chainId]);
   const [completedDraft, setCompletedDraft] = useState<string | null>(null);
@@ -249,7 +251,17 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
     </> : null;
   return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
     {layout !== "studio" && previousLaunchAction ? <div className={`${styles.page} ${styles.sessionStatus}`}>{previousLaunchAction}</div> : null}
-    <ModuleFoundationBuilder key={`${chainId}:${session.resultGeneration}`} layout={layout} networkControl={<label className={styles.networkChoice}><span className="sr-only">Launch network</span><select aria-label="Launch network" value={chainId} disabled={Boolean(session.progress) || launchBusy} onChange={event => router.push(`/launch/modules/foundation?chainId=${event.target.value}`)}><option value="4663">Robinhood</option><option value="1">Ethereum</option></select></label>} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
+    <ModuleFoundationBuilder key={`${chainId}:${session.resultGeneration}`} layout={layout} networkControl={
+      <fieldset className={styles.networkChoice} disabled={Boolean(session.progress) || launchBusy || changingNetwork} aria-busy={changingNetwork}>
+        <legend className="sr-only">Launch network</legend>
+        {([{ id: 4663, name: "Robinhood" }, { id: 1, name: "Ethereum" }] as const).map(network =>
+          <label key={network.id}>
+            <input type="radio" name="launch-network" value={network.id} checked={chainId === network.id}
+              onChange={() => startNetworkChange(() => router.push(`/launch/modules/foundation?chainId=${network.id}`, { scroll: false }))} />
+            <span><span aria-hidden="true"><ChainMark chainId={network.id} /></span>{network.name}</span>
+          </label>)}
+      </fieldset>
+    } previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
     onWarmLaunch={session.account && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}

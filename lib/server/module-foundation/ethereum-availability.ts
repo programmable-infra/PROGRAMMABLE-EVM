@@ -24,8 +24,9 @@ async function current(token?: Address) {
   const pair = productionMainnetRpcPair();
   const clients = [pair.primary.url, pair.secondary.url].map(url => createFoundationClient({ chainId: 1, rpcUrls: [url], batchRpc: true }));
   const heads = await Promise.all(clients.map(async client => {
-    if (await client.getChainId() !== 1) throw new Error("The module RPC is not Ethereum.");
-    return client.getBlock({ blockTag: "finalized" });
+    const [chainId, head] = await Promise.all([client.getChainId(), client.getBlock({ blockTag: "finalized" })]);
+    if (chainId !== 1) throw new Error("The module RPC is not Ethereum.");
+    return head;
   }));
   const number = heads[0].number < heads[1].number ? heads[0].number : heads[1].number;
   if (number < ETHEREUM_MODULE_SOURCE.startBlock) throw new Error("The Ethereum module deployment is not finalized.");

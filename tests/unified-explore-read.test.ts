@@ -32,6 +32,22 @@ beforeEach(() => {
 });
 
 describe("Unified verified source adapter", () => {
+  it("starts a ready network's market batch without waiting for the other catalog", async () => {
+    const slowCatalog = Promise.withResolvers<unknown>();
+    const marketStarted = Promise.withResolvers<void>();
+    sources.eth.mockReturnValue(slowCatalog.promise);
+    sources.rhMarkets.mockImplementation(async () => {
+      marketStarted.resolve();
+      return new Map([[address, market(20)]]);
+    });
+    const result = readUnifiedLaunches();
+    await marketStarted.promise;
+    expect(sources.ethMarkets).not.toHaveBeenCalled();
+    slowCatalog.resolve({ status: "ready", entries: [eth], updatedAt: null, sourceEvidence: {} });
+    expect((await result).items).toHaveLength(2);
+    expect(sources.rhMarkets).toHaveBeenCalledTimes(1);
+    expect(sources.ethMarkets).toHaveBeenCalledTimes(1);
+  });
   it("keeps a selected Classic launch's category and existing artwork and links", async () => {
     const classic = { ...eth, name: "Helix", symbol: "HELIX", imageUrl: "https://helixlev.fun/brand/helix-logo.png",
       links: [{ kind: "website", url: "https://helixlev.fun/" }, { kind: "x", url: "https://x.com/Helixlevdotfun" }],
