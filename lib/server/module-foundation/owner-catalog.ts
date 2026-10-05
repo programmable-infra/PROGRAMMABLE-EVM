@@ -74,6 +74,12 @@ export async function withFoundationOwnerCatalogV1(availability: FoundationAvail
     families.add(p.manifest.familyId);
     if (ids.has(p.manifest.packageId)) continue;
     ids.add(p.manifest.packageId);
+    if (!availability.token) {
+      for (let index = entries.length - 1; index >= 0; index--) {
+        const manifest = entries[index].manifest;
+        if (manifest.familyId === p.manifest.familyId && manifest.packageId !== p.manifest.packageId) entries.splice(index, 1);
+      }
+    }
     const reference = foundationOwnerReferenceV1(p), entry = { manifest: p.manifest, review: reference, release: p.release };
     const index = entries.findIndex(e => e.manifest.packageId === p.manifest.packageId);
     if (index < 0) entries.push(entry); else entries[index] = entry;
