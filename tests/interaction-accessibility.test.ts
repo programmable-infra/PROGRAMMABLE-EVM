@@ -311,15 +311,14 @@ describe("interaction accessibility", () => {
     );
   });
 
-  it("fails the public Classic launch card closed when its verified release is unavailable", () => {
+  it("keeps unavailable Classic launches closed while offering the Module Mode draft", () => {
     const source = readFileSync(
       join(root, "components/launch-entry.tsx"),
       "utf8",
     );
 
-    expect(source).toContain(
-      "disabled={!classicV3LaunchAvailable || preparingModel !== null}",
-    );
+    expect(source).not.toContain('data-launch-model-option="classic"');
+    expect(source).toContain('"data-launch-model-launchable": "false"');
     expect(source).toContain(
       'model === "classic-v3" && !classicV3LaunchAvailable',
     );
