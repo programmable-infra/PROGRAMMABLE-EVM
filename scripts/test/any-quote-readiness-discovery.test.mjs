@@ -300,6 +300,39 @@ function quickNodeRangeLimit({ provider, method, params }) {
   }
 }
 
+test("configured index hints never replace the original two canonical log verifiers", async () => {
+  const p = pool(), hintCalls = [];
+  const f = fixture([p], { override: info => {
+    if (info.method === "eth_getLogs" && wideRange(info.params)) throw Error("full-range requests are forbidden");
+  } });
+  const discovery = a.createAnyQuoteV4InitializeDiscoveryV1({ checkpoint: longCheckpoint, rpcs: f.rpcs,
+    hintRpc: async (method, params) => { hintCalls.push({ method, params }); return [log(p)]; } });
+  assert.equal((await discovery.nativePools(Q)).length, 1);
+  assert.equal(hintCalls.length, 1);
+  assert.equal(discovery.hasIncompleteCoverage(), true);
+  assert.deepEqual(f.calls.map(call => call.provider), [0, 1]);
+  assert.ok(f.calls.every(call => call.method === "eth_getLogs" && !wideRange(call.params)));
+  await discovery.nativePools(Q);
+  assert.equal(hintCalls.length, 1, "reverse discovery reuses the request's verified records");
+});
+
+test("index hints fail closed for forged records, failed verifiers and malformed or unavailable indexes", async () => {
+  const p = pool();
+  for (const kind of ["forged", "verifier", "malformed", "offline"]) {
+    const f = fixture([p], { override: ({ provider }) => {
+      if (kind === "verifier" && provider === 1) throw Error("unavailable");
+    } });
+    const discovery = a.createAnyQuoteV4InitializeDiscoveryV1({ checkpoint: longCheckpoint, rpcs: f.rpcs,
+      hintRpc: async () => {
+        if (kind === "offline") throw Error("private provider details");
+        if (kind === "malformed") return { result: [] };
+        return [{ ...log(p), ...(kind === "forged" ? { blockHash: `0x${"bb".repeat(32)}` } : {}) }];
+      } });
+    await assert.rejects(discovery.nativePools(Q));
+    assert.ok(f.calls.every(call => !wideRange(call.params)), "no unbounded retry or provider substitution");
+  }
+});
+
 test("60-million-block discovery verifies single-provider hints through both original RPCs in 10,000-block windows", async () => {
   const f = fixture([pool(), pool(ZERO, Q, { fee: 500, block: 19_999n }), pool(ZERO, Q, { fee: 3000, block: 50_000_000n })], { override: quickNodeRangeLimit });
   const discovery = a.createAnyQuoteV4InitializeDiscoveryV1({ checkpoint: longCheckpoint, rpcs: f.rpcs });

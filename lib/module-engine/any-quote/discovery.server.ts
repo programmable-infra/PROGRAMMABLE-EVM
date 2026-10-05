@@ -94,7 +94,7 @@ export function parseAnyQuoteV4DiscoveryV1(value: unknown, chainId: FoundationCh
  * providers must independently agree on every hinted log in bounded canonical block ranges.
  * This verifies candidates, not index completeness; absent hints never prove no market.
  * Buy/sell and intermediate searches share one checkpoint, cache and request budget. */
-export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQuoteCheckpointV1; rpcs: readonly [TradeRpcV1, TradeRpcV1]; chainId?: FoundationChainId }) {
+export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQuoteCheckpointV1; rpcs: readonly [TradeRpcV1, TradeRpcV1]; chainId?: FoundationChainId; hintRpc?: TradeRpcV1 }) {
   const profile = foundationChainProfile(input.chainId), chainId = profile.chainId;
   const infrastructure = profile.infrastructure;
   const ANY_QUOTE_INFRASTRUCTURE = { poolManager: infrastructure.poolManager.address, stateView: infrastructure.stateView.address, stateViewCodeHash: infrastructure.stateView.runtimeCodeHash };
@@ -182,6 +182,15 @@ export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQu
   };
   const readRange = async (currency: Address, otherCurrency: Address | undefined, topics: readonly (Hex | null)[], fromBlock: bigint, end: bigint, depth = 0): Promise<PoolRecord[]> => {
     reserveRequest();
+    if (input.hintRpc) {
+      // The historical index is a candidate source only. Never ask limited production
+      // RPCs to scan millions of blocks; verify each shortlisted log through both instead.
+      let value: unknown;
+      try { value = await input.hintRpc("eth_getLogs", filter(topics, fromBlock, end)); }
+      catch { throw new AnyQuoteErrorV1("V4_DISCOVERY_PROVIDER_UNAVAILABLE"); }
+      const hints = parseAnyQuoteV4InitializeV1(value, { currency, otherCurrency, fromBlock, toBlock: end, chainId });
+      return verifyHints(hints, currency, otherCurrency, topics);
+    }
     const responses = await Promise.allSettled(input.rpcs.map(rpc => rpc("eth_getLogs", filter(topics, fromBlock, end))));
     // Invalid successful responses are terminal, not provider outages eligible for fallback.
     const records = responses.map(response => response.status === "fulfilled"
