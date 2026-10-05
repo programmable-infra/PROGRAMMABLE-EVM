@@ -69,6 +69,9 @@ for (const width of [1440, 390]) {
       const lastDraft = () => page.evaluate(() => (window as unknown as { launchEvents: { lastDraft?: { quoteValuation?: string; initialBuy: string }; walletRequests: number } }).launchEvents);
       await expect.poll(async () => (await lastDraft()).lastDraft).toMatchObject({ quoteValuation: "12.345678", initialBuy: "0" });
       expect((await lastDraft()).walletRequests).toBe(0);
+      await page.getByRole("button", { name: "Launch coin", exact: true }).click();
+      await expect.poll(async () => (await lastDraft()).walletRequests).toBe(1);
+      await expect(page.getByRole("alert")).toContainText("Fixture wallet rejected");
       await page.getByLabel("Quote token address").fill("0x2222222222222222222222222222222222222222");
       await expect(page.getByRole("button", { name: "Automatic USD", exact: true })).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByLabel("Starting market cap · PAIR")).toHaveCount(0);

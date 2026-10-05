@@ -31,7 +31,7 @@ export async function createModuleStudioServer() {
         await new Promise(resolve=>setTimeout(resolve,1200)); signal.throwIfAborted();
         launchEvents.readyAt=performance.now();
         return {id:String(launchEvents.preparations),contextKey:context,expiresAt:Math.floor(Date.now()/1000)+120,
-          quote,chainId:4663,platformFeeBps:30,platformFeeRecipient:FOUNDATION_PLATFORM_FEE_RECIPIENT,creatorFeeBps:draft.creatorFeeBps,
+          quote:{...quote,address:draft.quoteAsset},chainId:4663,platformFeeBps:30,platformFeeRecipient:FOUNDATION_PLATFORM_FEE_RECIPIENT,creatorFeeBps:draft.creatorFeeBps,
           transactions:[{label:'Launch coin',to:quote.address,chainId:4663,value:'0',effect:'Launch coin'}]};
       };
       return <><button data-testid="wallet-switch" onClick={()=>setContext('other-wallet:4663:release')}>Fixture wallet switch</button>

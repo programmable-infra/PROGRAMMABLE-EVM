@@ -83,7 +83,7 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
   const quote = quotes.find(asset => asset.chainId === chainId && asset.supported && asset.supportsNativeEth);
   return { name: initial?.name ?? "", symbol: initial?.symbol ?? "", description: initial?.description ?? "", image: initial?.image ?? null,
     socialLinks: initial?.socialLinks ?? {}, quoteAsset: initial?.quoteAsset ?? quote?.address ?? "", creatorFeeBps: initial?.creatorFeeBps ?? (initial?.creatorBuyFeeBps === initial?.creatorSellFeeBps ? initial?.creatorBuyFeeBps : 0) ?? 0,
-    initialBuy: initial?.initialBuy ?? "", quoteValuation: initial?.quoteValuation, additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
+    initialBuy: initial?.initialBuy ?? "", ...(initial?.quoteValuation !== undefined ? { quoteValuation: initial.quoteValuation } : {}), additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
 export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
@@ -160,8 +160,12 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (key === "initialBuy") setBuyEdited(true);
     generation.current += 1;
     launchPreparation.current.invalidate();
-    setDraft(current => ({ ...current, ...(key === "quoteAsset" ? { quoteValuation: undefined } : {}), [key]: value }));
-    setErrors(current => { const next = { ...current }; delete next[key]; if (key === "socialLinks") for (const name of Object.keys(next)) if (name.startsWith("social-")) delete next[name]; return next; });
+    setDraft(current => {
+      const next = { ...current, [key]: value };
+      if (key === "quoteAsset" || (key === "quoteValuation" && value === undefined)) delete next.quoteValuation;
+      return next;
+    });
+    setErrors(current => { const next = { ...current }; delete next[key]; if (key === "quoteAsset") delete next.quoteValuation; if (key === "quoteValuation") delete next.initialBuy; if (key === "socialLinks") for (const name of Object.keys(next)) if (name.startsWith("social-")) delete next[name]; return next; });
     setError(""); setPhase("editing");
   }
 
@@ -238,7 +242,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (draft.image && !isFoundationDefaultImage(draft.image) && !isProgrammableTokenImageUrl(draft.image.url)) next.image = "Choose an image to save with this launch.";
     if (!selectedQuote?.supported || selectedQuote.chainId !== availability.chainId || (!customQuote && !selectedQuote.supportsNativeEth)) next.quoteAsset = selectedQuote?.reason ?? (customQuote ? /^0x[0-9a-fA-F]{40}$/.test(quoteAddress) ? "This token could not be verified. Try launching again." : `Enter a token contract address on ${availability.chainName}.` : "ETH pairing could not be verified. Try again.");
     if (!isFoundationCreatorFee(draft.creatorFeeBps)) next.creatorFeeBps = "Choose a whole percentage from 0% to 10%.";
-    const buyError = foundationDecimalError(buyAmount, 18, false);
+    const buyError = foundationDecimalError(buyAmount, 18, draft.quoteValuation !== undefined);
     if (buyError) next.initialBuy = buyError;
     if (draft.quoteValuation !== undefined) {
       const priceError = foundationDecimalError(draft.quoteValuation, selectedQuote?.decimals ?? 18, false);
