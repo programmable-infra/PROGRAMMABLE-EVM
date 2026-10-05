@@ -28,6 +28,7 @@ type Launch = LaunchPresentationSource & {
   tokenAddress: string;
   hookAddress: string | null;
   category?: "classic" | "custom";
+  mode?: "classic" | "custom" | "module";
   creator: string;
   transactionHash: string;
   blockNumber: string;
@@ -97,6 +98,7 @@ function isLaunch(value: unknown, chainId: ViewChainId): value is Launch {
   if (chainId === 4663 && isRobinhoodProjectedLaunch(value)) return true;
   return typeof value.launchId === "string" && (chainId === 4663 ? HASH.test(value.launchId) : value.launchId.length > 0 && value.launchId.length <= 256)
     && (chainId !== 1 || value.category === "classic" || value.category === "custom")
+    && (value.mode === undefined || value.mode === "classic" || value.mode === "custom" || value.mode === "module")
     && (value.sourceKind === undefined || isRobinhoodModuleLaunch(value))
     && typeof value.tokenAddress === "string" && ADDRESS.test(value.tokenAddress)
     && ((typeof value.hookAddress === "string" && ADDRESS.test(value.hookAddress)) || (value.sourceKind === "module-engine-v1" && value.hookAddress === null))
@@ -388,6 +390,9 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
               const details = presentations.get(chainId === "all" ? identity : exploreIdentityKey({ tokenAddress: launch.tokenAddress }));
               const valuation = coinValuation(details?.market);
               const hasAsset = !launch.launchProjection || launch.launchProjection.primaryComponentId !== null;
+              // The unified index classifies Ethereum modules from their launch
+              // provenance. They do not have Robinhood's source record shape.
+              const launchMode = launch.mode ?? (launch.category === "classic" ? "classic" : isRobinhoodModuleLaunch(launch) ? "module" : "custom");
               return (
               <li key={identity} className={styles.item}>
                 <article className={styles.row}>
@@ -395,7 +400,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
                   <RobinhoodCoinArtwork
                     eager={index < 5}
                     imageUrl={details?.imageUrl} loading={loading && !details}
-                    fallbackImageUrl={isRobinhoodModuleLaunch(launch) ? MODULE_TOKEN_FALLBACK_IMAGE : undefined}
+                    fallbackImageUrl={launchMode === "module" ? MODULE_TOKEN_FALLBACK_IMAGE : undefined}
                     className={styles.artwork}
                   />
                   <div className={styles.identity}>
@@ -403,7 +408,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
                       <strong className={styles.name} title={launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}>{launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}</strong>
                       {hasAsset ? <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span> : null}
                     </div>
-                    <span className={styles.mode}>{launch.category === "classic" ? "Classic" : isRobinhoodModuleLaunch(launch) ? "Module" : "Custom"}
+                    <span className={styles.mode}>{{ classic: "Classic", module: "Module", custom: "Custom" }[launchMode]}
                       <ChainMark chainId={launchChainId} className={styles.chainMark} />
                     </span>
                   </div>

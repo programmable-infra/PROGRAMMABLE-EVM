@@ -34,3 +34,24 @@ test('standalone Explore fetches immediately',async({page})=>{
   await page.goto(origin+'?standalone'); await expect(page.getByRole('heading',{name:'No launches yet',exact:true})).toBeVisible();
   expect(requests).toBe(1);
 });
+
+test('Ethereum cards retain the unified index mode instead of Robinhood source heuristics', async ({page}) => {
+  const address = `0x${'11'.repeat(20)}`, hash = `0x${'22'.repeat(32)}`;
+  const modes = ['module', 'custom', 'classic'];
+  const items = modes.map((mode, index) => ({
+    chainId: 1, mode, category: mode === 'classic' ? 'classic' : 'custom',
+    launchId: `ethereum-${index}`, tokenAddress: `0x${String(index + 3).repeat(40)}`,
+    hookAddress: address, creator: address, transactionHash: hash, blockNumber: '100',
+    launchedAt: new Date().toISOString(), name: `Ethereum fixture ${index}`, symbol: `T${index}`, decimals: 18,
+  }));
+  await page.route('**/api/explore/launches?*', route => route.fulfill({json: {
+    scope: 'all', status: 'ready', updatedAt: new Date().toISOString(), items, presentations: [],
+    page: {number: 1, size: 10, totalItems: 3, totalPages: 1, hasMore: false},
+  }}));
+  await page.goto(origin + '?standalone');
+  for (const [index, label] of ['Module', 'Custom', 'Classic'].entries()) {
+    const card = page.getByRole('link', {name: new RegExp(`Ethereum fixture ${index}`)});
+    await expect(card).toContainText(label);
+    await expect(card.getByRole('img', {name: 'Ethereum'})).toBeVisible();
+  }
+});
