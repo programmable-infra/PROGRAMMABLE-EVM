@@ -175,3 +175,13 @@
     transition-duration: 0.01ms;
   }
 }
+
+@media (forced-colors: none) {
+  .devBuyInput:focus-within {
+    --input-focus-fill: transparent;
+    outline: none;
+    border-color: transparent;
+    box-shadow: none;
+    background-color: color-mix(in srgb, var(--panel-fill-control, var(--surface-soft)) 90%, var(--text));
+  }
+}

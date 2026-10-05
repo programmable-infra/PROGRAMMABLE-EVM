@@ -38,3 +38,13 @@
 @media (max-width: 600px) { .toolbar { align-items: stretch; flex-direction: column; } .categorySelect select { width: 100%; } .search input, .categorySelect select { font-size: 16px; } .module { gap: 12px; } .dialogHeader { padding: 20px 16px 16px; } .dialogContent { padding: 0 16px 16px; } }
 @media (forced-colors: active) { .search, .categorySelect select, .add, .dialogSurface, .pagination button { border-color: ButtonText; } .add[aria-pressed="true"] { outline: 1px solid Highlight; } }
 .library button:hover, .library button:active, .close:hover, .close:active { transform: none; }
+
+@media (forced-colors: none) {
+  .search:focus-within {
+    --input-focus-fill: transparent;
+    outline: none;
+    border-color: transparent;
+    box-shadow: none;
+    background-color: color-mix(in srgb, var(--panel-fill-control, var(--surface-soft)) 90%, var(--text));
+  }
+}

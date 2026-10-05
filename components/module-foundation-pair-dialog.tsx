@@ -66,7 +66,7 @@ export function ModuleFoundationPairDialog({ chainId, initialView, initialAddres
   }, [chainId, configuring, known, trimmed, validAddress, retry]);
 
   return <ModulePickerDialog variant="compact" animateOpen title={moduleConfiguration?.descriptor.name ?? (configuring ? "Any Quote Pool" : "Add modules")}
-    description={moduleConfiguration?.descriptor.description ?? (configuring ? "Pair your coin with another token instead of ETH." : "Choose modules individually or combine them.")}
+    description={moduleConfiguration?.descriptor.description ?? (configuring ? "Pair your coin with another token instead of ETH." : undefined)}
     onClose={onClose} doneLabel={moduleConfiguration ? editingModule ? "Save module" : "Add module" : configuring ? initialAddress ? "Save module" : "Add module" : "Done"}
     doneDisabled={configuring && !supported} onDone={() => {
       if (moduleConfiguration) {
@@ -86,12 +86,12 @@ export function ModuleFoundationPairDialog({ chainId, initialView, initialAddres
       {showModuleErrors && moduleErrors.length ? <p className={styles.error} role="alert">{moduleErrors.join(" ")}</p> : null}
     </div> : configuring ? <div className={styles.pairConfiguration}>
       <div className={styles.field}>
-        <label htmlFor="foundation-pair-address">Token address</label>
+        <label htmlFor="foundation-pair-address">Token address · {foundationChainProfile(chainId).name}</label>
         <input ref={input} id="foundation-pair-address" autoComplete="off" autoCapitalize="none" spellCheck={false} placeholder="0x…" value={address}
           aria-invalid={Boolean(error) || undefined} aria-describedby="foundation-pair-status"
           onChange={event => { setAddress(event.target.value); setLookup(null); }} />
         <p id="foundation-pair-status" className={error ? styles.error : supported ? styles.saved : styles.help} role="status">
-          {error ?? (supported ? <><CheckIcon size={16} aria-hidden="true" /> {asset?.name} · {asset?.symbol}</> : asset?.supportsNativeEth ? "Your coin is paired with ETH by default." : validAddress ? "Checking token…" : trimmed ? "Enter a complete token address." : `Paste a token contract address on ${foundationChainProfile(chainId).name}.`)}
+          {error ?? (supported ? <><CheckIcon size={16} aria-hidden="true" /> {asset?.name} · {asset?.symbol}</> : asset?.supportsNativeEth ? "Your coin is paired with ETH by default." : validAddress ? "Checking token…" : trimmed ? "Enter a complete token address." : null)}
         </p>
         {current?.error ? <button type="button" className={styles.textButton} onClick={() => { setLookup(null); setRetry(value => value + 1); }}>Try again</button> : null}
       </div>

@@ -158,7 +158,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
             <section className={styles.baseSection} aria-label="Launch settings"><h3>Launch settings</h3>
               <div className={styles.launchFields}>
               <StudioField id="foundation-initial-buy" label="First buy · ETH" error={errors.initialBuy}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" value={props.initialBuy} disabled={draft.quoteValuation !== undefined} aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} placeholder="0" onChange={event => props.onUpdate("initialBuy", event.target.value)} /></StudioField>
-              {draft.quoteValuation !== undefined ? <p className={styles.settingStatus}>No first buy with a token-defined starting value. You can trade after launch.</p> : null}
+              {draft.quoteValuation !== undefined ? <p className={styles.settingStatus}>First buy is unavailable with a custom starting value.</p> : null}
               <StudioField id="foundation-creator-fee-inline" label="Creator fees · %" error={errors.creatorFeeBps}><input id="foundation-creator-fee-inline" name="creatorFeeBps" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} aria-invalid={Boolean(errors.creatorFeeBps) || undefined} aria-describedby={errors.creatorFeeBps ? "foundation-creator-fee-inline-error" : undefined} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} /></StudioField>
               </div>
             </section>
@@ -170,7 +170,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
               {errors["social-other"] ? <span id="foundation-other-error" className={styles.error}>{errors["social-other"]}</span> : null}
             </StudioDetails>
           </> : panel === "quote" ? <>
-            <p className={styles.moduleDescription}>This module lets you choose another asset people use to buy and sell your coin. Enter its token contract address on the selected network. Turn the module off to use ETH.</p>
+            <p className={styles.moduleDescription}>Trade your coin against another token instead of ETH.</p>
             <button type="button" className={styles.quoteChoice} aria-pressed={!props.customQuote} onClick={disableQuote}><Waves size={22} /><strong>ETH</strong>{!props.customQuote ? <Check size={18} /> : null}</button>
             <StudioField id="foundation-quote" label="Quote token address"><input id="foundation-quote" name="quoteAsset" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" autoCapitalize="none" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} aria-describedby={props.quoteStatus || errors.quoteAsset ? "foundation-quote-status" : undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></StudioField>
             {props.quoteStatus || errors.quoteAsset ? <div id="foundation-quote-status" className={errors.quoteAsset ? styles.error : styles.settingStatus} role="status">{errors.quoteAsset || props.quoteStatus}</div> : null}
@@ -183,8 +183,8 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
                 <StudioField id="foundation-quote-valuation" label={`Starting market cap · ${props.quoteSymbol}`} error={errors.quoteValuation}>
                   <input id="foundation-quote-valuation" name="quoteValuation" value={draft.quoteValuation} inputMode="decimal" autoComplete="off" placeholder="Enter a value" aria-invalid={Boolean(errors.quoteValuation) || undefined} aria-describedby={errors.quoteValuation ? "foundation-quote-value-help foundation-quote-valuation-error" : "foundation-quote-value-help"} onChange={event => props.onUpdate("quoteValuation", event.target.value)} />
                 </StudioField>
-                <p id="foundation-quote-value-help" className={styles.settingStatus}>This is the value of the full coin supply in {props.quoteSymbol}, not a deposit. No existing market or dollar price is needed. Your coin launches without a first buy. Buyers can then pay with {props.quoteSymbol}.</p>
-              </> : <p className={styles.settingStatus}>Starts near $5,000 using a verified market price. If this token has no market, set the starting value in the token instead.</p>}
+                <p id="foundation-quote-value-help" className={styles.settingStatus}>Total supply value in {props.quoteSymbol}. No deposit or first buy.</p>
+              </> : <p className={styles.settingStatus}>Starts near $5,000. Requires a market price for the paired token.</p>}
             </section> : null}
           </> : panel === "fees" ? <>
             <p className={styles.moduleDescription}>Set the percentage of each buy and sell that goes to the creator. The platform fee is charged separately.</p>

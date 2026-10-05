@@ -42,3 +42,13 @@
 @media (hover: hover) and (pointer: fine) { .add:not(:disabled):hover { background: var(--panel-fill-hover); border-color: #e786b2; } .add[aria-pressed="true"]:not(:disabled):hover { background: rgb(241 157 195 / 0.9); } .author:hover, .contribute:hover { color: #f0bfd6; text-decoration: underline; text-underline-offset: 4px; } }
 @media (max-width: 600px) { .results { grid-template-columns: minmax(0,1fr); } .module { padding: 16px; } }
 @media (forced-colors: active) { .library :is(button,a):focus-visible { outline-color: Highlight; } .library button { border-color: ButtonText; } }
+
+@media (forced-colors: none) {
+  .search:focus-within {
+    --input-focus-fill: transparent;
+    outline: none;
+    border-color: transparent;
+    box-shadow: none;
+    background-color: color-mix(in srgb, var(--panel-fill-control, var(--surface-soft)) 90%, var(--text));
+  }
+}

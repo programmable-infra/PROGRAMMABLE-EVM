@@ -405,6 +405,28 @@ textarea {
   outline-offset: 3px;
 }
 
+/* Editing uses a quiet fill instead of stacked component focus rings. */
+@media (forced-colors: none) {
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="file"], [type="color"], [type="button"], [type="submit"], [type="reset"], [type="image"]), textarea, select):focus {
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+    background-color: var(--input-focus-fill, color-mix(in srgb, var(--panel-fill-control, var(--surface-soft)) 90%, var(--text))) !important;
+  }
+
+  :is(input, textarea, select)[aria-invalid="true"]:focus {
+    border-color: var(--danger) !important;
+  }
+
+  :is(.token-search, .meme-dev-buy-input, .input-suffix, .classic-v3-fee-input):focus-within {
+    --input-focus-fill: transparent;
+    outline: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+    background-color: color-mix(in srgb, var(--panel-fill-control, var(--surface-soft)) 90%, var(--text)) !important;
+  }
+}
+
 :where(h1, h2, h3, h4, h5, h6)[id] {
   scroll-margin-top: calc(var(--header-height) + 20px);
 }

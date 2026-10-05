@@ -1527,11 +1527,6 @@ export function DeveloperApiKeysView({
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
           <h1>{activeSection === "keys" ? initialGuideOpen ? "Custom Hook" : "API keys" : "Your launches"}</h1>
-          <p className={styles.intro}>
-            {activeSection === "keys"
-              ? initialGuideOpen ? "Build your coin with your own trading rules" : "Create a key for your builder and manage its access"
-              : "Review and sign launches prepared through the API."}
-          </p>
         </div>
       </header>
 
@@ -1614,11 +1609,6 @@ export function DeveloperApiKeysView({
         <section className={styles.walletGate} aria-labelledby="connect-title">
           <div className={styles.walletGateCopy}>
             <h2 id="connect-title">Connect your wallet</h2>
-            <p>
-              {activeSection === "keys"
-                ? "Create and manage keys for this account."
-                : "See launches linked to this wallet."}
-            </p>
           </div>
           <button
             className={styles.primaryButton}

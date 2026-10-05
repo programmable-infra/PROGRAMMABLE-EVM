@@ -488,7 +488,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
                   <Field id="foundation-quote-valuation" label={`Starting market cap · ${quoteSymbol}`} error={errors.quoteValuation}>
                     <input id="foundation-quote-valuation" name="quoteValuation" inputMode="decimal" autoComplete="off" value={draft.quoteValuation} placeholder="Enter a value" aria-invalid={Boolean(errors.quoteValuation) || undefined} aria-describedby={errors.quoteValuation ? "foundation-quote-valuation-error foundation-quote-value-help" : "foundation-quote-value-help"} onChange={event => update("quoteValuation", event.target.value)} />
                   </Field>
-                  <p id="foundation-quote-value-help" className={styles.help}>This is the value of the full coin supply in {quoteSymbol}, not a deposit. No existing market or dollar price is needed. Your coin launches without a first buy. Buyers can then pay with {quoteSymbol}.</p>
+                  <p id="foundation-quote-value-help" className={styles.help}>Total supply value in {quoteSymbol}. No deposit or first buy.</p>
                 </> : null}
               </section> : null}
               {draft.modules.length ? <div className={styles.catalog}>{catalog.filter(descriptor => draft.modules.some(item => item.id === descriptor.id)).map(descriptor => {
