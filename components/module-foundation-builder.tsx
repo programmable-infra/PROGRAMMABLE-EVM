@@ -98,7 +98,9 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const [modulePickerView, setModulePickerView] = useState<"modules" | "quote" | null>(null);
   const [phase, setPhase] = useState<Phase>("editing");
   const [errors, setErrors] = useState<Errors>({});
-  const [error, setError] = useState("");
+  const [operationError, setError] = useState("");
+  const [walletError, setWalletError] = useState<{ context: string; message: string } | null>(null);
+  const error = walletAction && walletError?.context === contextKey ? walletError.message : operationError;
   const [announcement, setAnnouncement] = useState("");
   const [result, setResult] = useState<FoundationTransactionResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -321,7 +323,12 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (lock.current || imagePreparing || locked || unavailable || submissionBlocked) return;
     if (walletAction) {
       lock.current = true;
-      try { await walletAction.onClick(); } catch (caught) { setError(cleanError(caught)); }
+      const context = currentContext.current;
+      setWalletError(null); setError("");
+      try { await walletAction.onClick(); }
+      catch (caught) {
+        if (active.current && currentContext.current === context) setWalletError({ context, message: cleanError(caught) });
+      }
       finally { lock.current = false; }
       return;
     }
