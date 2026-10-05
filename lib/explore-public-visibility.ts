@@ -13,16 +13,6 @@ type EvidenceBoundExploreExclusionV1 = Readonly<{
 export const NON_PUBLIC_EXPLORE_IDENTITIES_V1 = Object.freeze({
   tokens: Object.freeze([
     Object.freeze({
-      identity: "0xE2F175AF5eDf2BA4793ecdad94888FcDC5E1aB5F",
-      evidence: "contracts/deployments/ethereum-module-foundation-v1.json#sdkLifecycleEvidence.canaryToken",
-      kind: "release-canary-token" as const,
-    }),
-    Object.freeze({
-      identity: "0x1A6A3948B0c54670b634dd2A54598793EE192895",
-      evidence: "contracts/deployments/ethereum-module-foundation-v1.json#lifecycleEvidence.canaryToken",
-      kind: "release-canary-token" as const,
-    }),
-    Object.freeze({
       identity: "0xB382f738a99820276FD66EfB94b75Eca104c2B4D",
       evidence:
         "contracts/deployments/mainnet-classic-v4.json#lifecycleEvidence.canaryToken",
