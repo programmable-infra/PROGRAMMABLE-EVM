@@ -240,6 +240,23 @@ function fixture(pools, options = {}) {
   return { calls, rpcs, options: { now: NOW, rpcs, fetchImpl, routeDiscovery: "pool-index" } };
 }
 
+test("AMM-only USD valuation shares one checkpoint and token reads with route qualification", async () => {
+  const f = fixture([pool()]);
+  const value = await a.readAnyQuoteUsdPriceV1({ quoteAsset: Q }, f.options);
+  assert.equal(value.price.source, "qualified-amm");
+  for (const provider of [0, 1]) {
+    const calls = f.calls.filter(call => call.provider === provider);
+    assert.equal(calls.filter(call => call.method === "eth_chainId").length, 1);
+    assert.equal(calls.filter(call => call.method === "eth_getCode" && call.params[0] === Q).length, 1);
+    assert.equal(calls.filter(call => call.method === "eth_call" && call.params[0].to === Q
+      && call.params[0].data === toFunctionSelector("decimals()")).length, 1);
+    for (const name of ["universalRouter", "poolManager", "stateView", "v4Quoter"]) {
+      assert.ok(calls.some(call => call.method === "eth_getCode" && call.params[0].toLowerCase()
+        === a.ANY_QUOTE_INFRASTRUCTURE[name].toLowerCase()), `${name} runtime remains verified`);
+    }
+  }
+});
+
 test("Initialize records bind the real key, indexed asset, manager and canonical range", () => {
   const p = pool(), raw = log(p), expected = { currency: Q, otherCurrency: ZERO, fromBlock: 9070n, toBlock: HEIGHT };
   assert.deepEqual(a.parseAnyQuoteV4InitializeV1([raw], expected)[0].key, p.key);
