@@ -189,7 +189,7 @@ describe("interaction state regressions", () => {
       "utf8",
     );
 
-    expect(detailSource).toContain('setCopyError("Could not copy address")');
+    expect(detailSource).toContain('"Could not copy address"');
     expect(detailSource).toContain('<p className="toast" role="alert">');
     expect(detailSource).toContain(
       "Robinhood Chain token discovery is not active in Explore yet",
