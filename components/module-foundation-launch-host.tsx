@@ -67,6 +67,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
   const quotes = quoteState.context === session.contextKey ? quoteState.assets : [];
   const uploads = useRef(new Map<string, Hex>());
   const prepared = useRef(new WeakMap<FoundationLaunchReview, Awaited<ReturnType<typeof prepareFoundationLaunch>>>());
+  const acknowledged = useRef(new WeakSet<FoundationLaunchReview>());
   const launching = useRef(false);
   const [savedLaunchError, setSavedLaunchError] = useState<string | null>(null);
   const [openingSavedLaunch, setOpeningSavedLaunch] = useState(false);
@@ -141,9 +142,10 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     if (session.preparationBlocked) throw new Error(session.preparationBlocked);
     // Reviewing a new draft acknowledges only the completed result currently shown.
     // Keep the draft mounted; the result store still enforces its exact ID and wallet lock.
-    if (session.resolution) {
-      if (signal) throw new Error("Review the previous launch before preparing another coin.");
-      await session.acknowledgeResult(session.resolution.operationId, false);
+    const previousResult = session.resolution;
+    const acknowledgedResult = Boolean(previousResult && !signal);
+    if (previousResult && !signal) {
+      await session.acknowledgeResult(previousResult.operationId, false);
       session.assertCurrent(account, context);
     }
     if (!isFoundationDefaultImage(draft.image) && uploads.current.get(`${account.toLowerCase()}:${draft.image.url}`) !== draft.image.sha256) throw new Error("Choose and upload the exact coin image for this wallet before preparing.");
@@ -201,7 +203,9 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
         actualStartMarketCapUsd: sequence.price.actualMarketCapUsd,
         transactions: sequence.steps.map(foundationStepSummary), notes: ["The coin launch and first buy use one transaction.",
           "The starting market cap is set automatically to approximately $5,000. This is a valuation, not a deposit."] };
-      prepared.current.set(review, sequence); return review;
+      prepared.current.set(review, sequence);
+      if (acknowledgedResult) acknowledged.current.add(review);
+      return review;
     }, assertCurrent);
   }
   async function resultFrom(outcome: FoundationExecutionResult): Promise<FoundationTransactionResult> {
@@ -242,11 +246,18 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     <ModuleFoundationBuilder key={session.resultGeneration} layout={layout} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
-    onWarmLaunch={session.account && !session.resolution && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}
+    onWarmLaunch={session.account && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}
     onPrepareLaunch={prepare} onConfirmLaunch={async review => { const sequence = prepared.current.get(review);
       if (!sequence) throw new Error("Prepare this launch again with your current wallet."); session.assertCurrent(sequence.account, review.contextKey);
       launching.current = true;
-      try { const outcome = await session.execute(sequence); setCompletedDraft(draftKey); return await resultFrom(outcome); }
+      try {
+        // Background preparation preserves the previous result. Only this explicit launch click acknowledges it.
+        if (session.resolution && !acknowledged.current.has(review)) {
+          await session.acknowledgeResult(session.resolution.operationId, false);
+          session.assertCurrent(sequence.account, review.contextKey);
+        }
+        const outcome = await session.execute(sequence); setCompletedDraft(draftKey); return await resultFrom(outcome);
+      }
       finally { launching.current = false; } }} onRefreshResult={async result => resultFrom(await session.refreshResult(result))}
     walletAction={session.walletAction} submissionBlocked={session.preparationBlocked} onBack={() => router.push(layout === "studio" ? "/launch" : "/")} onRetryAvailability={session.retryAvailability} /></div>;
 }

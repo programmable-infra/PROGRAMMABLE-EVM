@@ -40,14 +40,12 @@ async function prepareNewDraft() {
 describe("starting a new coin after a saved result", () => {
   it("allows a new draft and does not acknowledge or submit anything on render", () => {
     expect(fixture.builder!.submissionBlocked).toBeUndefined();
-    expect(fixture.builder!.onWarmLaunch).toBeUndefined();
+    expect(fixture.builder!.onWarmLaunch).toBeDefined();
     expect(acknowledgeResult).not.toHaveBeenCalled();
     expect(resolveAuthority).not.toHaveBeenCalled();
   });
 
-  it("prepares in the background only without a saved result and honours cancellation before reads", async () => {
-    fixture.session.resolution = null;
-    renderToStaticMarkup(<ModuleFoundationLaunchHost />);
+  it("preserves the saved result during background preparation and honours cancellation before reads", async () => {
     const controller = new AbortController(); controller.abort();
     await expect(fixture.builder!.onWarmLaunch!({ ...draft, image: FOUNDATION_DEFAULT_IMAGE }, controller.signal)).rejects.toThrow();
     expect(acknowledgeResult).not.toHaveBeenCalled();

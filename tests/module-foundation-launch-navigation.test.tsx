@@ -25,7 +25,7 @@ import { foundationMetadata } from "@/lib/module-foundation/client";
 beforeEach(() => { vi.clearAllMocks(); vi.spyOn(Date, "now").mockReturnValue(v2Now); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
-async function prepareHost() {
+async function prepareHost(background = false) {
   const f = foundationV2Fixture(false, true);
   const draft: FoundationLaunchDraft = { name: "Navigation", symbol: "NAV", description: "", image: FOUNDATION_DEFAULT_IMAGE,
     socialLinks: {}, quoteAsset: f.quote, creatorFeeBps: 100, initialBuy: "0", additionalLiquidity: "0", modules: [] };
@@ -39,15 +39,35 @@ async function prepareHost() {
   fixture.session = { account: f.account, contextKey: "current", client: {}, walletContext: {}, envelope: null, resultGeneration: 0,
     availability: { status: "ready", chainId: 4663, chainName: "Robinhood Chain" }, assertCurrent: vi.fn(),
     resolveAuthority: vi.fn(async () => f.binding), execute: vi.fn(async () => outcome), refreshResult: vi.fn(async () => outcome) };
+  if (background) {
+    fixture.session.resolution = { operationId: "previous-launch" };
+    fixture.session.acknowledgeResult = vi.fn(async () => undefined);
+  }
   fixture.verify.mockResolvedValue({ details: { token: { address: f.token } } });
   vi.stubGlobal("fetch", vi.fn(async () => Response.json({ releaseDigest: f.binding.releaseDigest, token: f.token, modules: [], moduleAssetPins: [],
     startPrice: { decimals: 18 }, ethFunding: null, metadata: foundationMetadata({ ...draft, imageURI: draft.image.url, modulePackageIds: [], moduleAssetPins: [] }) })));
   renderToStaticMarkup(<ModuleFoundationLaunchHost />);
-  const prepared = await fixture.builder!.onPrepareLaunch(draft);
+  const prepared = background ? await fixture.builder!.onWarmLaunch!(draft, new AbortController().signal) : await fixture.builder!.onPrepareLaunch(draft);
   return { f, prepared: prepared!, outcome };
 }
 
 describe("launch completion navigation", () => {
+  it("warms a second coin without acknowledging its saved result until the explicit launch click", async () => {
+    const { prepared } = await prepareHost(true);
+    const acknowledge = fixture.session.acknowledgeResult as ReturnType<typeof vi.fn>;
+    const execute = fixture.session.execute as ReturnType<typeof vi.fn>;
+    expect(acknowledge).not.toHaveBeenCalled(); expect(execute).not.toHaveBeenCalled();
+    await fixture.builder!.onConfirmLaunch(prepared);
+    expect(acknowledge).toHaveBeenCalledExactlyOnceWith("previous-launch", false);
+    expect(acknowledge.mock.invocationCallOrder[0]).toBeLessThan(execute.mock.invocationCallOrder[0]);
+  });
+
+  it("does not open the wallet if another tab changed the saved result before the launch click", async () => {
+    const { prepared } = await prepareHost(true);
+    (fixture.session.acknowledgeResult as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error("The saved result changed"));
+    await expect(fixture.builder!.onConfirmLaunch(prepared)).rejects.toThrow("saved result changed");
+    expect(fixture.session.execute).not.toHaveBeenCalled();
+  });
   it("opens the verified coin chart in the current tab after the single execution", async () => {
     const { f, prepared } = await prepareHost();
     expect(fixture.push).not.toHaveBeenCalled();
