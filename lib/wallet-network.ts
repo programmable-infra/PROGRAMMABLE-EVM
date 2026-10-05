@@ -49,7 +49,9 @@ export async function getWalletProviderOnChain<TProvider extends WalletNetworkPr
     assertCurrentSession();
     const currentChainId = await provider.request({ method: "eth_chainId" });
     assertCurrentSession();
-    if (walletChainIdsEqual(currentChainId, chainId) && walletChainIdsEqual(wallet.chainId, chainId)) return provider;
+    // The provider owns the active network. A stale SDK label must not cause
+    // another switch prompt (or invalidate a switch that already completed).
+    if (walletChainIdsEqual(currentChainId, chainId)) return provider;
 
     if (walletChainIdsEqual(wallet.chainId, chainId)) {
       // An SDK cache can already show the target and skip its own switch request.

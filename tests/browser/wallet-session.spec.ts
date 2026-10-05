@@ -64,7 +64,7 @@ async function calls(page: Page) {
 async function expectMethods(page: Page, methods: string[]) {
   // Reading a selected provider account is not a login, link or signature.
   // Network-authority tests below inspect these read-only calls separately.
-  const sessionCalls = (items: string[]) => items.filter(method => !["getEthereumProvider", "eth_accounts"].includes(method));
+  const sessionCalls = (items: string[]) => items.filter(method => !["getEthereumProvider", "eth_accounts", "eth_chainId"].includes(method));
   await expect.poll(async () => sessionCalls((await calls(page)).map(call => call.method))).toEqual(sessionCalls(methods));
 }
 
@@ -729,11 +729,35 @@ test("duplicate requests do not open a second SDK network switch", async ({ page
   await open(page);
   await beginDelayedNetworkSwitch(page);
   await page.getByRole("button", { name: "Request Ethereum wallet network", exact: true }).dispatchEvent("click");
-  await expectNetworkResults(page, [false]);
+  await expectNetworkResults(page, []);
   expect((await calls(page)).filter((call) => call.method === "switchChain")).toHaveLength(1);
   await page.getByRole("button", { name: "Resolve network switch", exact: true }).dispatchEvent("click");
-  await expectNetworkResults(page, [false, true]);
+  await expectNetworkResults(page, [true, true]);
   await expect(page.getByLabel("Network switch busy", { exact: true })).toHaveText("false");
+});
+
+test("an already active Ethereum provider recovers a stale SDK label without another prompt", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Simulate stale Robinhood cache", exact: true }).click();
+  await page.getByRole("button", { name: "Request Ethereum wallet network", exact: true }).click();
+  await expectNetworkResults(page, [true]);
+  await expect(page.getByLabel("Selected wallet network", { exact: true })).toHaveText("0x1");
+  const methods = (await calls(page)).map(call => call.method);
+  for (const method of ["switchChain", "wallet_switchEthereumChain", "login", "connectWallet", "forbidden-wallet-operation"]) {
+    expect(methods).not.toContain(method);
+  }
+});
+
+test("returning to the page reads a missed Ethereum network change without a wallet prompt", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Simulate stale Robinhood cache", exact: true }).click();
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  await expect(page.getByLabel("Selected wallet network", { exact: true })).toHaveText("0x1");
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  const methods = (await calls(page)).map(call => call.method);
+  for (const method of ["switchChain", "wallet_switchEthereumChain", "login", "connectWallet", "forbidden-wallet-operation"]) {
+    expect(methods).not.toContain(method);
+  }
 });
 
 test("a rejected network switch keeps the existing chain and releases the pending gate for retry", async ({ page }) => {

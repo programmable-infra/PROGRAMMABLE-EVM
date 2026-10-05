@@ -42,13 +42,21 @@ describe("wallet provider network recovery", () => {
     expect(state.provider.request.mock.calls).toEqual([[{ method: "eth_chainId" }]]);
   });
 
-  it("asks the SDK to synchronize when only its cached chain is wrong", async () => {
+  it("uses the actual network without a switch when only the SDK cache is wrong", async () => {
     const state = fixture();
     state.setProviderChain("0x1237");
     await expect(getWalletProviderOnChain({ ...target, ...state })).resolves.toBe(state.provider);
-    expect(state.wallet.switchChain).toHaveBeenCalledExactlyOnceWith(4663);
-    expect(state.wallet.getEthereumProvider).toHaveBeenCalledTimes(2);
-    expect(state.provider.request.mock.calls).toEqual([[{ method: "eth_chainId" }], [{ method: "eth_chainId" }]]);
+    expect(state.wallet.switchChain).not.toHaveBeenCalled();
+    expect(state.wallet.getEthereumProvider).toHaveBeenCalledOnce();
+    expect(state.provider.request.mock.calls).toEqual([[{ method: "eth_chainId" }]]);
+  });
+
+  it("does not call a stale SDK switch that would reject an already active Ethereum connection", async () => {
+    const state = fixture("eip155:4663");
+    state.wallet.switchChain.mockRejectedValue(new Error("Network change was not completed"));
+    await expect(getWalletProviderOnChain({ ...state, chainId: 1, networkName: "Ethereum" })).resolves.toBe(state.provider);
+    expect(state.wallet.switchChain).not.toHaveBeenCalled();
+    expect(state.provider.request.mock.calls).toEqual([[{ method: "eth_chainId" }]]);
   });
 
   it("switches the actual provider when the SDK target cache would skip the request", async () => {
