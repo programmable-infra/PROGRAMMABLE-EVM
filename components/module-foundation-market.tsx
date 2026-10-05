@@ -23,6 +23,7 @@ export type ModuleFoundationMarketProps = FoundationCreatorFees & {
   quote: FoundationQuoteAsset;
   /** Wallet input/output asset; pool identity and fee accounting still use quote. */
   tradeAsset?: FoundationQuoteAsset;
+  tradeCurrency?: { value: "eth" | "quote"; onChange: (value: "eth" | "quote") => void };
   /** Native input balance after reserving network gas. */
   maximumBuyAmount?: string;
   pool: FoundationPoolIdentity;
@@ -192,6 +193,10 @@ export function ModuleFoundationMarket(props: ModuleFoundationMarketProps) {
     trade={<div className={`${styles.marketScope} ${tradeStyles.embedded}`}>
         <section className={tradeStyles.card} aria-label={`Trade ${coin.symbol}`}>
           <form noValidate onSubmit={event => void prepare(event)}>
+            {props.tradeCurrency ? <div className={tradeStyles.sides} role="group" aria-label="Payment currency">
+              <button type="button" aria-pressed={props.tradeCurrency.value === "eth"} disabled={blocked} onClick={() => props.tradeCurrency!.onChange("eth")}>ETH</button>
+              <button type="button" aria-pressed={props.tradeCurrency.value === "quote"} disabled={blocked} onClick={() => props.tradeCurrency!.onChange("quote")}>{quote.symbol}</button>
+            </div> : null}
             <div className={tradeStyles.sides} role="group" aria-label="Trade direction">{(["buy", "sell"] as const).map(side => <button type="button" key={side} aria-pressed={draft.side === side} disabled={Boolean(busy) || waitingForConfirmation} onClick={() => { setDraft(value => ({ ...value, side, amount: "" })); setAmountError(""); setError(""); setResult(null); }}>{side === "buy" ? "Buy" : "Sell"}</button>)}</div>
             <div className={tradeStyles.amountBox}>
               <div className={tradeStyles.fieldTop}><label htmlFor={`${fieldId}-amount`}>Amount</label>

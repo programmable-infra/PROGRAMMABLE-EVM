@@ -32,7 +32,7 @@ import { discoverFoundationLaunch } from "@/lib/module-foundation/discovery";
 import type { FoundationResolution } from "@/lib/module-foundation/result-store";
 import { foundationLaunchPositionPresentation, foundationPoolPresentation, foundationPositionPresentation } from "@/lib/module-foundation/ui-readback";
 import { foundationStepSummary } from "@/lib/module-foundation/wallet";
-import type { FoundationStartPrice } from "@/lib/module-foundation/start-price";
+import { isFoundationQuotePrice, type FoundationStartPrice } from "@/lib/module-foundation/start-price";
 import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, type FoundationImage,
   type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationQuoteAsset, type FoundationTransactionResult } from "@/lib/module-foundation/ui-types";
 import styles from "./module-foundation-ui.module.css";
@@ -171,6 +171,11 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
         moduleAssetPins: unknown; metadata: unknown; startPrice: FoundationStartPrice; ethFunding: { maximumEth: string; quoteAmount: string; path: FoundationFundingHop[] } | null };
       if (response.status === 503 && composition.code === "MODULE_INDEX_PROVIDER_DISAGREEMENT") throw new FoundationProviderDisagreementError();
       if (!response.ok || composition.error || composition.releaseDigest !== binding.releaseDigest) throw new Error(composition.error ?? "The module composition changed. Review again.");
+      const quotePriced = isFoundationQuotePrice(composition.startPrice);
+      if (quotePriced !== (draft.quoteValuation !== undefined)
+        || (isFoundationQuotePrice(composition.startPrice) && composition.startPrice.valuationQuoteRaw !== foundationParseAmount(draft.quoteValuation!, composition.startPrice.decimals, false).toString())) {
+        throw new Error("The starting value changed. Review your coin settings again.");
+      }
       const moduleAssetPins = parseFoundationAssetPinsV1(composition.moduleAssetPins);
       const metadata = foundationMetadata({ ...draft, imageURI: draft.image.url,
         modulePackageIds: draft.modules.map(item => item.id as Hex), moduleAssetPins });
@@ -209,8 +214,10 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
         minimumInitialTokens: formatUnits(sequence.parameters.initialBuyMinimumTokenAmount, 18),
         additionalLiquidity: formatUnits(sequence.result.factoryVersion !== "v1" ? sequence.result.creatorQuotePrincipal : sequence.price.creator?.principal ?? 0n, quote.decimals), supply: formatUnits(FOUNDATION_SUPPLY, 18),
         actualStartMarketCapUsd: sequence.price.actualMarketCapUsd,
-        transactions: sequence.steps.map(step => foundationStepSummary(step, chainId)), notes: ["The coin launch and first buy use one transaction.",
-          "The starting market cap is set automatically to approximately $5,000. This is a valuation, not a deposit."] };
+        actualStartMarketCapQuote: sequence.price.actualMarketCapQuote,
+        transactions: sequence.steps.map(step => foundationStepSummary(step, chainId)), notes: [draft.quoteValuation !== undefined ? "The coin launches in one transaction." : "The coin launch and first buy use one transaction.",
+          draft.quoteValuation !== undefined ? "You set the starting valuation in quote tokens. No dollar value is assumed, and no first buy is included."
+            : "The starting market cap is set automatically to approximately $5,000. This is a valuation, not a deposit."] };
       prepared.current.set(review, sequence);
       if (acknowledgedResult) acknowledged.current.add(review);
       return review;

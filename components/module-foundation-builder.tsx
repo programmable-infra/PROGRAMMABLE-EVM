@@ -83,13 +83,13 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
   const quote = quotes.find(asset => asset.chainId === chainId && asset.supported && asset.supportsNativeEth);
   return { name: initial?.name ?? "", symbol: initial?.symbol ?? "", description: initial?.description ?? "", image: initial?.image ?? null,
     socialLinks: initial?.socialLinks ?? {}, quoteAsset: initial?.quoteAsset ?? quote?.address ?? "", creatorFeeBps: initial?.creatorFeeBps ?? (initial?.creatorBuyFeeBps === initial?.creatorSellFeeBps ? initial?.creatorBuyFeeBps : 0) ?? 0,
-    initialBuy: initial?.initialBuy ?? "", additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
+    initialBuy: initial?.initialBuy ?? "", quoteValuation: initial?.quoteValuation, additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
 export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
   const [draft, setDraft] = useState<EditableDraft>(() => initialForm(initialDraft, quoteAssets, availability.chainId));
   const [buyEdited, setBuyEdited] = useState(initialDraft?.initialBuy !== undefined);
-  const initialBuy = buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
+  const initialBuy = draft.quoteValuation !== undefined ? "0" : buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
   const [localImage, setLocalImage] = useState<LocalImage | null>(null);
   const [imagePreparing, setImagePreparing] = useState(false);
   const [imageError, setImageError] = useState("");
@@ -160,7 +160,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (key === "initialBuy") setBuyEdited(true);
     generation.current += 1;
     launchPreparation.current.invalidate();
-    setDraft(current => ({ ...current, [key]: value }));
+    setDraft(current => ({ ...current, ...(key === "quoteAsset" ? { quoteValuation: undefined } : {}), [key]: value }));
     setErrors(current => { const next = { ...current }; delete next[key]; if (key === "socialLinks") for (const name of Object.keys(next)) if (name.startsWith("social-")) delete next[name]; return next; });
     setError(""); setPhase("editing");
   }
@@ -240,6 +240,10 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (!isFoundationCreatorFee(draft.creatorFeeBps)) next.creatorFeeBps = "Choose a whole percentage from 0% to 10%.";
     const buyError = foundationDecimalError(buyAmount, 18, false);
     if (buyError) next.initialBuy = buyError;
+    if (draft.quoteValuation !== undefined) {
+      const priceError = foundationDecimalError(draft.quoteValuation, selectedQuote?.decimals ?? 18, false);
+      if (priceError) next.quoteValuation = priceError;
+    }
     if (modulesError.length) next.modules = modulesError.join(" ");
     const socials = validateModuleSocialLinks(normalizeFoundationSocialInputs(draft.socialLinks));
     if (!socials.ok) for (const issue of socials.issues) next[`social-${issue.path.split("/").at(-1)}`] = issue.message.replace(/GitBook/g, "Docs");
@@ -471,6 +475,18 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
                 <span>Classic <span className={styles.muted}>· Paired with ETH</span></span>
               </div>}
               {errors.quoteAsset ? <p id="foundation-quote-error" className={styles.error}>{errors.quoteAsset}</p> : null}
+              {customQuote ? <section aria-label="Starting value">
+                <div className={styles.sideButtons} role="group" aria-label="Starting value currency">
+                  <button type="button" aria-pressed={draft.quoteValuation === undefined} onClick={() => update("quoteValuation", undefined)}>Automatic USD</button>
+                  <button type="button" aria-pressed={draft.quoteValuation !== undefined} onClick={() => update("quoteValuation", draft.quoteValuation ?? "")}>Set in {quoteSymbol}</button>
+                </div>
+                {draft.quoteValuation !== undefined ? <>
+                  <Field id="foundation-quote-valuation" label={`Starting market cap · ${quoteSymbol}`} error={errors.quoteValuation}>
+                    <input id="foundation-quote-valuation" name="quoteValuation" inputMode="decimal" autoComplete="off" value={draft.quoteValuation} placeholder="Enter a value" aria-invalid={Boolean(errors.quoteValuation) || undefined} aria-describedby={errors.quoteValuation ? "foundation-quote-valuation-error foundation-quote-value-help" : "foundation-quote-value-help"} onChange={event => update("quoteValuation", event.target.value)} />
+                  </Field>
+                  <p id="foundation-quote-value-help" className={styles.help}>This is the value of the full coin supply in {quoteSymbol}, not a deposit. No existing market or dollar price is needed. Your coin launches without a first buy. Buyers can then pay with {quoteSymbol}.</p>
+                </> : null}
+              </section> : null}
               {draft.modules.length ? <div className={styles.catalog}>{catalog.filter(descriptor => draft.modules.some(item => item.id === descriptor.id)).map(descriptor => {
                 const selection = draft.modules.find(item => item.id === descriptor.id)!;
                 return <div className={styles.module} key={`${descriptor.id}:${descriptor.version}`}><div className={styles.moduleHeading}><div><h3>{descriptor.name}</h3><p>{descriptor.description}</p></div><button className={styles.iconButton} type="button" aria-label={`Remove ${descriptor.name}`} onClick={() => update("modules", draft.modules.filter(item => item.id !== descriptor.id))}><XIcon size={18} aria-hidden="true" /></button></div>{!descriptor.available ? <p className={styles.help}>{descriptor.unavailableReason ?? "This module is currently unavailable."}</p> : null}<div className={styles.moduleFields}>{descriptor.fields.map(field => <ModuleFoundationConfigField key={field.key} field={field} id={`foundation-module-${encodeURIComponent(descriptor.id)}-${encodeURIComponent(field.key)}`} value={selection.configuration[field.key]} showErrors={Boolean(errors.modules)} onChange={value => update("modules", draft.modules.map(item => item.id === descriptor.id ? { ...item, configuration: { ...item.configuration, [field.key]: value } } : item))} />)}<details className={styles.transactionDetails}><summary>Module capabilities and version</summary><p className={styles.help}>Version {descriptor.version}</p><ul className={styles.notes}>{descriptor.capabilities.map(capability => <li key={capability}>{capability}</li>)}</ul></details></div></div>;
@@ -478,7 +494,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
               {errors.modules ? <p className={styles.error} role="alert">{errors.modules}</p> : null}
               <div className={styles.feesBuyRow}>
                 <CreatorFeeField value={draft.creatorFeeBps} error={errors.creatorFeeBps} onChange={value => update("creatorFeeBps", value)} />
-                <Field label="First buy" id="foundation-initial-buy" error={errors.initialBuy}><div className={styles.amountInput}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" required value={initialBuy} placeholder="ETH amount" aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} onChange={event => update("initialBuy", event.target.value)} /><span>ETH</span></div></Field>
+                <Field label="First buy" id="foundation-initial-buy" error={errors.initialBuy}><div className={styles.amountInput}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" required disabled={draft.quoteValuation !== undefined} value={initialBuy} placeholder="ETH amount" aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} onChange={event => update("initialBuy", event.target.value)} /><span>ETH</span></div></Field>
               </div>
             </section>
           </fieldset>

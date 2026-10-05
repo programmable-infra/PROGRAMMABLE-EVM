@@ -125,6 +125,7 @@
 .largeNumber > div > span { font-size: 18px; color: var(--muted); }
 .range { width: 100%; margin: 22px 0; accent-color: var(--accent); }
 .presets { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 18px; }
+.valueCurrency { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .presets button { background: var(--panel-fill-control); border: 0; padding: 10px 5px; border-radius: 8px; font-size: 13px; }
 .presets button[aria-pressed="true"] { background: var(--panel-fill-selected); }
 .inspectorAction { padding: 14px 18px; border-top: 0; display: grid; gap: 10px; flex-shrink: 0; }

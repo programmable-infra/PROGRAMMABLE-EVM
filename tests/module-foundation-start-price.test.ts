@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getAddress, toHex } from "viem";
-import { parseFoundationStartPrice, planFoundationStartPrice, type FoundationStartPrice } from "@/lib/module-foundation/start-price";
+import { parseFoundationStartPrice, planFoundationStartPrice, type FoundationUsdStartPrice as FoundationStartPrice } from "@/lib/module-foundation/start-price";
 
 const low = getAddress("0x1000000000000000000000000000000000000000");
 const high = getAddress("0x9000000000000000000000000000000000000000");

@@ -2,7 +2,7 @@
 
 Source schemas declare `asset` fields. Their UI uses ordinary ERC20 address inputs, and the application resolves those addresses through `lib/module-foundation/assets.ts`. The same schema path serves launch configuration and management actions. Package IDs and product names do not control asset resolution.
 
-The adapter uses the existing `readFoundationQuote` reader for standard ERC20 metadata and deployed code. It checks chain 4663, a checkpoint no older than 120 seconds, the requested block hash and a second block-hash read after metadata resolution. All ERC20 reads use that checkpoint. An RPC error or unsupported ERC20 metadata fails resolution. It inherits the reader's current metadata limits, including decimals through 36 and nonzero supply. These reads establish metadata and runtime observations; transfer behavior still requires the exact source action or launch simulation.
+The adapter uses the existing `readFoundationQuote` reader for standard ERC20 metadata and deployed code. It checks the selected supported chain, a checkpoint no older than 120 seconds, the requested block hash and a second block-hash read after metadata resolution. All ERC20 reads use that checkpoint. Missing optional names or symbols use an address-based display label. Required ERC20 reads, deployed code and decimals from 0 through 36 must remain valid. A zero supply alone does not invalidate the token. These reads establish metadata and runtime observations; transfer behavior still requires the exact source action or launch simulation.
 
 ## Compact immutable identity
 
@@ -14,7 +14,7 @@ type FoundationAssetPinV1 = readonly [
 ];
 ```
 
-Chain 4663 is fixed by this adapter version. Tuples retain first-occurrence order and canonical lowercase addresses and hashes. Each additional asset appears once. `parseFoundationAssetPinsV1` validates shape, decimals, identity and limits. `mergeFoundationAssetPinsV1` deduplicates identical tuples, rejects conflicting metadata and applies the combined limit. `hashFoundationAssetPinsV1` binds the full ordered table and chain to the `programmable.module-foundation.assets.v1` domain.
+The validated client determines the chain, either Ethereum mainnet (1) or Robinhood (4663). Tuples retain first-occurrence order and canonical lowercase addresses and hashes. Each additional asset appears once. `parseFoundationAssetPinsV1` validates shape, decimals, identity and limits. `mergeFoundationAssetPinsV1` deduplicates identical tuples, rejects conflicting metadata and applies the combined limit. `hashFoundationAssetPinsV1` binds the full ordered table and chain to the `programmable.module-foundation.assets.v1` domain.
 
 These helpers do not create provenance. The launch host commits the actual tuples in immutable metadata, recovers them from the verified original launch, and compares them with fresh chain reads. Social data stores them at `foundation.assets` beside the ordered `foundation.packages` identities. The existing 1,200-byte metadata limit still applies and fails explicitly if exceeded. A browser cache or a digest supplied by the browser cannot replace that commitment.
 
@@ -93,3 +93,13 @@ Resolution adds no approvals, transfer permissions, native value or transaction 
 ## Local validation
 
 The asset tests use the real shared ERC20 reader with deterministic RPC responses. They cover empty and arbitrary asset sets, exact compact pin recovery, changes in runtime/decimals, common checkpoints, reorganization, metadata reader limits, alias consistency, literal and hidden fixed metadata, deferred prediction references, inert source fields and the combined adapter limit. Presentation/action-runtime tests also restore an additional asset through canonical launch calldata and source composition. These checks do not establish deployed or funded lifecycle evidence.
+
+## Quote tokens without an existing market
+
+Any Quote Pool accepts a standard ERC20 address on the selected chain. It does not require a catalog listing or an existing trading pair. Transfer-tax, rebasing, paused or restricted tokens are not automatically compatible: the exact transaction must pass the current transfer and balance checks.
+
+The default starting value remains approximately $5,000 from a verified USD price. If no price is available, select **Set in [token]** and enter the value of the full new coin supply in that quote token. This is a valuation, not a deposit. This mode launches without a first buy; subsequent buyers can pay with the quote token directly.
+
+For composition, supply the optional decimal string `draft.quoteValuation`, set `draft.initialBuy` and `draft.additionalLiquidity` to `"0"`, and retain `launchFlow: "single-eth-v1"`. The returned `startPrice` uses `mode: "quote"`, binds the raw quote value, chain, address, decimals, runtime hash and fresh checkpoint, and contains no USD price. The client compares it with the selected draft before simulation. Omitting `quoteValuation` retains automatic USD pricing. Changing the quote address clears the entered value.
+
+On the coin page, select ETH or the actual quote token. Direct quote-token trades use `nativeEth: false`, exact input/output decimals, bounded approvals and balance simulation. They do not request an external ETH route. ETH first buys and ETH-denominated trades still require an executable route for the requested amount. Neither mode invents a dollar price or skips module validation.

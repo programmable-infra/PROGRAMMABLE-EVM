@@ -109,6 +109,34 @@ const request = (value: unknown) => new Request("http://localhost/api/module-fou
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(value),
 });
 const predictions = () => mocks.readContract.mock.calls.filter(([call]) => call.functionName === "predictTokenAddress");
+
+it.each([0, 6, 8, 18, 36])("composes an arbitrary %i-decimal quote without a market lookup or ETH funding", async decimals => {
+  assets.set(quote, { code, decimals });
+  mocks.startPrice.mockRejectedValue(new Error("No market exists"));
+  const input = body(); input.draft.quoteValuation = "1";
+  const response = await POST(request(input)); const value = await response.json();
+  expect(response.status, JSON.stringify(value)).toBe(200);
+  expect(value.ethFunding).toBeNull();
+  expect(value.startPrice).toMatchObject({ mode: "quote", quoteAsset: getAddress(quote), decimals,
+    valuationQuoteRaw: (10n ** BigInt(decimals)).toString() });
+  expect(value.startPrice).not.toHaveProperty("price");
+  expect(value.startPrice).not.toHaveProperty("targetMarketCapUsd");
+  expect(mocks.startPrice).not.toHaveBeenCalled();
+});
+
+it.each(["", "0", "-1", "1e6", "0.0000001"])("rejects invalid quote valuation %s", async quoteValuation => {
+  const input = body(); input.draft.quoteValuation = quoteValuation;
+  expect((await POST(request(input))).status).toBe(400);
+  expect(mocks.startPrice).not.toHaveBeenCalled();
+});
+
+it("never silently changes a requested ETH first buy into a zero-buy launch", async () => {
+  const input = body(); input.draft.quoteValuation = "100"; input.draft.initialBuy = "0.01";
+  const response = await POST(request(input));
+  expect(response.status).toBe(400);
+  expect((await response.json()).error).toContain("Set the first buy to 0");
+  expect(mocks.startPrice).not.toHaveBeenCalled();
+});
 function predicted(metadata: FoundationMetadata) {
   return getAddress(`0x${keccak256(encodeAbiParameters(foundationMetadataParameters, [metadata])).slice(-40)}`);
 }
