@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import ethereumModuleRelease from "../contracts/deployments/ethereum-module-foundation-v1.json";
 import classicV3Release from
   "../contracts/deployments/mainnet-classic-v3.json";
 import classicV4Release from
@@ -27,6 +28,8 @@ function sorted(values: readonly string[]) {
 describe("public Explore visibility", () => {
   it("binds every excluded token to canonical repository canary evidence", () => {
     const evidencedCanaryTokens = [
+      ethereumModuleRelease.lifecycleEvidence.canaryToken,
+      ethereumModuleRelease.sdkLifecycleEvidence.canaryToken,
       classicV3Release.lifecycleEvidence.canaryToken,
       classicV4Release.lifecycleEvidence.canaryToken,
       deepV1Release.lifecycleEvidence.canaryToken,
