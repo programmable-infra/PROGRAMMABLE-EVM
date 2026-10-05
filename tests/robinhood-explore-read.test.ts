@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RobinhoodLaunch, RobinhoodModuleLaunch } from "@/lib/robinhood-launches";
 import type { RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
 import { PINNED_ROBINHOOD_TOKEN } from "@/lib/robinhood-explore-policy";
+import { OWNER_HIDDEN_EXPLORE_IDENTITIES_V1 } from "@/lib/explore-public-visibility";
 import type { LaunchProjectionSnapshot, ModuleModeSnapshot, RobinhoodSnapshot } from "@/lib/server/robinhood-index/model";
 
 const mocks = vi.hoisted(() => ({ read: vi.fn(), markets: vi.fn(), presentations: vi.fn() }));
@@ -9,7 +10,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ unstable_cache: (callback: unknown) => callback }));
 vi.mock("@/lib/server/robinhood-index/store", () => ({ indexStore: () => ({ read: mocks.read }) }));
 vi.mock("@/lib/server/robinhood-presentation", () => ({ readRobinhoodMarkets: mocks.markets, readRobinhoodPresentations: mocks.presentations }));
-import { readRobinhoodLaunches, readRobinhoodToken, readRobinhoodTokenPresentation } from "@/lib/server/robinhood-index/read";
+import { readRobinhoodExploreCatalog, readRobinhoodLaunches, readRobinhoodToken, readRobinhoodTokenPresentation } from "@/lib/server/robinhood-index/read";
 
 const hex = (value: number, length: number) => `0x${value.toString(16).padStart(length, "0")}`;
 function token(id: number): RobinhoodLaunch & { poolId: string } {
@@ -34,6 +35,18 @@ beforeEach(() => {
 });
 
 describe("Robinhood Explore read model", () => {
+  it("applies shared chain exclusions to finalized projections before market reads and preserves direct lookup", async () => {
+    const hidden = OWNER_HIDDEN_EXPLORE_IDENTITIES_V1.find(row => row.chainId === 4663)!;
+    const projected = { ...token(1), tokenAddress: hidden.identity, sourceKind: "custom-launch-plan-v1" as const };
+    const publicToken = token(2), snapshot = saved([publicToken]);
+    snapshot.launchProjections = { version: 1, sourceUrl: "https://api.programmable.market/v4/chains/4663/finalized-launch-projections",
+      updatedAt: snapshot.updatedAt, nextCursor: null, items: [projected] };
+    mocks.read.mockResolvedValue({ snapshot }); mocks.markets.mockResolvedValue(new Map());
+    expect((await readRobinhoodExploreCatalog()).items).toEqual([publicToken]);
+    expect((await readRobinhoodLaunches()).items).toEqual([publicToken]);
+    expect(mocks.markets).toHaveBeenCalledWith([publicToken]);
+    expect((await readRobinhoodToken(hidden.identity)).token).toEqual(projected);
+  });
   it.each([
     "0xc3c389273ea80eb4c9e378f174f0214dba73b5cb", "0x6dcad5b2373963a677d8e0e2d7dcafea192ea41b",
     "0x08bdedb48ee01f29dd88e84e6d9296e84d736aa2", "0xaa86dd7c149d8220a5a90028620a0e1b2a75f261",

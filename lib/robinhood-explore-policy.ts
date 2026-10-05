@@ -1,3 +1,5 @@
+import { OWNER_HIDDEN_EXPLORE_IDENTITIES_V1 } from "./explore-public-visibility";
+
 // Explore pins the canonical Programmable token on Robinhood Chain.
 export const PINNED_ROBINHOOD_CHAIN_ID = 4663;
 export const PINNED_ROBINHOOD_TOKEN = "0xc60ba256b44334a0cd2c7242e98b88f031abb006";
@@ -5,6 +7,8 @@ export const PINNED_ROBINHOOD_TOKEN = "0xc60ba256b44334a0cd2c7242e98b88f031abb00
 // Requested Explore exclusions do not remove canonical launch records or coin pages.
 // Cleanup of existing Explore entries on 2026-10-03. New verified launches remain discoverable.
 const EXPLORE_EXCLUDED_TOKENS = new Set([
+  ...OWNER_HIDDEN_EXPLORE_IDENTITIES_V1.filter(hidden => hidden.chainId === PINNED_ROBINHOOD_CHAIN_ID)
+    .map(hidden => hidden.identity.toLowerCase()),
   "0x0168a810799cc1ad92c59747c653fb812d05138a",
   "0x022e6a6858aceec7ac7f44565d54d614fcc039b2",
   "0x1760a069be03a72bd8b055f5127540eb1e4e9403",
