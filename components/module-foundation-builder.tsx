@@ -16,6 +16,7 @@ import { foundationDecimalError, foundationReviewError, foundationSelectionError
 import { foundationCreatorFeesEqual } from "@/lib/module-foundation/creator-fees";
 import { FOUNDATION_WETH } from "@/lib/module-foundation/native-funding";
 import { FOUNDATION_DEFAULT_IMAGE, isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
+import { FoundationLaunchPreparation } from "@/lib/module-foundation/launch-preparation";
 import { normalizeFoundationSocialInput, normalizeFoundationSocialInputs } from "@/lib/module-foundation/social-input";
 import { ModuleFoundationTransactionResult } from "./module-foundation-review";
 import { ModuleFoundationPairDialog } from "./module-foundation-pair-dialog";
@@ -44,6 +45,8 @@ export interface ModuleFoundationBuilderProps {
   onResolveSuggestedInitialBuy?: () => Promise<string>;
   onUploadImage: (input: { image: { kind: "local"; sha256: Hex; mimeType: "image/webp"; bytes: number }; blob: Blob }) => Promise<FoundationImage>;
   onPrepareLaunch: (draft: FoundationLaunchDraft) => Promise<FoundationLaunchReview | null>;
+  /** Read-only preparation while editing; must not acknowledge saved results or request the wallet. */
+  onWarmLaunch?: (draft: FoundationLaunchDraft, signal: AbortSignal) => Promise<FoundationLaunchReview | null>;
   onConfirmLaunch: (review: FoundationLaunchReview) => Promise<FoundationTransactionResult>;
   onRefreshResult?: (result: FoundationTransactionResult) => Promise<FoundationTransactionResult>;
   onBack?: () => void;
@@ -82,7 +85,7 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
     initialBuy: initial?.initialBuy ?? "", additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
-export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
+export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
   const [draft, setDraft] = useState<EditableDraft>(() => initialForm(initialDraft, quoteAssets, availability.chainId));
   const [buyEdited, setBuyEdited] = useState(initialDraft?.initialBuy !== undefined);
   const initialBuy = buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
@@ -110,11 +113,27 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const refreshLock = useRef(false);
   const automaticRefreshes = useRef(0);
   const submittedContext = useRef<string | null>(null);
+  const launchPreparation = useRef(new FoundationLaunchPreparation());
+  const warmLaunch = useRef(onWarmLaunch);
+  const imageUploader = useRef(onUploadImage);
+  const selectedImage = useRef(localImage);
+  const imageUpload = useRef<{ key: string; promise: Promise<FoundationImage> } | null>(null);
+  const [warmState, setWarmState] = useState<{ key: string; status: "pending" | "ready" | "error" } | null>(null);
+  const [warmRetry, setWarmRetry] = useState(0);
   useLayoutEffect(() => {
-    if (currentContext.current !== contextKey) { quoteGeneration.current += 1; pendingQuote.current = null; }
+    if (currentContext.current !== contextKey) {
+      quoteGeneration.current += 1; pendingQuote.current = null;
+      launchPreparation.current.invalidate(); imageUpload.current = null;
+      if (selectedImage.current) setDraft(current => ({ ...current, image: null }));
+    }
     currentContext.current = contextKey; quoteResolver.current = onResolveQuote;
-  }, [contextKey, onResolveQuote]);
-  useEffect(() => { active.current = true; return () => { active.current = false; generation.current += 1; quoteGeneration.current += 1; }; }, []);
+    warmLaunch.current = onWarmLaunch; imageUploader.current = onUploadImage; selectedImage.current = localImage;
+  }, [contextKey, onResolveQuote, onWarmLaunch, onUploadImage, localImage]);
+  useEffect(() => {
+    active.current = true;
+    const preparation = launchPreparation.current;
+    return () => { active.current = false; generation.current += 1; quoteGeneration.current += 1; preparation.invalidate(); };
+  }, []);
   useEffect(() => () => { if (localImage) URL.revokeObjectURL(localImage.preview); }, [localImage]);
 
   const busy = phase === "uploading" || phase === "preparing" || phase === "signing";
@@ -139,6 +158,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   function update<K extends keyof EditableDraft>(key: K, value: EditableDraft[K]) {
     if (key === "initialBuy") setBuyEdited(true);
     generation.current += 1;
+    launchPreparation.current.invalidate();
     setDraft(current => ({ ...current, [key]: value }));
     setErrors(current => { const next = { ...current }; delete next[key]; if (key === "socialLinks") for (const name of Object.keys(next)) if (name.startsWith("social-")) delete next[name]; return next; });
     setError(""); setPhase("editing");
@@ -171,7 +191,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       setLocalImage({ blob, preview, sha256: digest });
       setDraft(current => ({ ...current, image: null }));
       setErrors(current => { const next = { ...current }; delete next.image; return next; });
-      setAnnouncement("Image selected. It will be saved when you create the launch.");
+      setAnnouncement("Image selected.");
     } catch (caught) { if (active.current && generation.current === request) setImageError(cleanError(caught, "image")); }
     finally { if (active.current) setImagePreparing(false); }
   }
@@ -225,6 +245,68 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     return { errors: next, links: socials.ok ? socials.links : {} };
   }
 
+  function saveImage(image: LocalImage, context: string): Promise<FoundationImage> {
+    const key = `${context}:${image.sha256}`;
+    if (imageUpload.current?.key === key) return imageUpload.current.promise;
+    const promise = imageUploader.current({ image: { kind: "local", sha256: image.sha256, mimeType: "image/webp", bytes: image.blob.size }, blob: image.blob }).then(saved => {
+      if (!isProgrammableTokenImageUrl(saved.url) || saved.sha256.toLowerCase() !== image.sha256.toLowerCase()) throw new Error("The saved image does not match your selected image. Choose the image again.");
+      if (!active.current || currentContext.current !== context || selectedImage.current?.sha256 !== image.sha256) throw new Error("Your wallet or selected image changed. Choose the image again.");
+      setDraft(current => ({ ...current, image: saved }));
+      setImageError("");
+      return saved;
+    }).catch(caught => { if (imageUpload.current?.key === key) imageUpload.current = null; throw caught; });
+    imageUpload.current = { key, promise };
+    return promise;
+  }
+
+  const canWarm = Boolean(onWarmLaunch && !walletAction && !unavailable && !submissionBlocked && !imagePreparing && phase !== "result");
+  // Saving a selected image does not need to hold up the eventual launch click.
+  useEffect(() => {
+    if (!canWarm || !localImage || draft.image) return;
+    const context = contextKey, image = localImage;
+    const timer = window.setTimeout(() => {
+      void saveImage(image, context).catch(caught => {
+        if (active.current && currentContext.current === context && selectedImage.current?.sha256 === image.sha256) setImageError(cleanError(caught, "image"));
+      });
+    }, 400);
+    return () => window.clearTimeout(timer);
+    // The uploader lives in a ref so a parent render cannot restart the same upload.
+  }, [canWarm, contextKey, localImage, draft.image]);
+
+  const warmValidation = validate(quote ? { ...quote } : undefined, initialBuy);
+  const warmDraft: FoundationLaunchDraft | null = canWarm && !imageError && !Object.keys(warmValidation.errors).length && (!localImage || draft.image)
+    ? { ...draft, name: draft.name.trim(), symbol: draft.symbol.trim().toUpperCase(), description: draft.description.trim(),
+      quoteAsset: quote!.address, socialLinks: warmValidation.links, image: draft.image ?? FOUNDATION_DEFAULT_IMAGE, initialBuy, additionalLiquidity: "0" }
+    : null;
+  const warmKey = warmDraft ? JSON.stringify({ contextKey, draft: warmDraft }) : "";
+  useEffect(() => {
+    const preparation = launchPreparation.current;
+    if (!warmKey) { preparation.invalidate(); return; }
+    const snapshot = JSON.parse(warmKey) as { contextKey: string; draft: FoundationLaunchDraft };
+    let current = true;
+    let refreshTimer: number | undefined;
+    let attempts = 0;
+    const run = () => {
+      const prepareWarm = warmLaunch.current;
+      if (!prepareWarm || !current || lock.current) return;
+      attempts += 1;
+      setWarmState({ key: warmKey, status: "pending" });
+      void preparation.prepare(snapshot.draft, snapshot.contextKey, prepareWarm)
+        .then(review => {
+          if (current) setWarmState({ key: warmKey, status: review ? "ready" : "error" });
+          if (!review || !current || attempts >= 3) return;
+          // Keep a short price reference ready while the owner is still editing. Never poll an idle/hidden tab forever.
+          refreshTimer = window.setTimeout(() => {
+            if (document.visibilityState === "visible" && document.hasFocus() && form.current?.contains(document.activeElement)) run();
+          }, Math.max(1_000, review.expiresAt * 1_000 - Date.now() - 14_000));
+        })
+        .catch(() => { if (current) setWarmState({ key: warmKey, status: "error" }); });
+    };
+    const timer = window.setTimeout(run, 800);
+    return () => { current = false; window.clearTimeout(timer); window.clearTimeout(refreshTimer); preparation.invalidate(); };
+    // Only exact draft/context changes should start RPC work, never callback identity or progress renders.
+  }, [warmKey, warmRetry]);
+
   async function prepare(event: FormEvent) {
     event.preventDefault();
     if (lock.current || imagePreparing || locked || unavailable || submissionBlocked) return;
@@ -271,7 +353,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       if (!savedImage && localImage) {
         errorStage = "image";
         setPhase("uploading");
-        savedImage = await onUploadImage({ image: { kind: "local", sha256: localImage.sha256, mimeType: "image/webp", bytes: localImage.blob.size }, blob: localImage.blob });
+        savedImage = await saveImage(localImage, context);
         assertCurrent();
         if (!isProgrammableTokenImageUrl(savedImage.url) || savedImage.sha256.toLowerCase() !== localImage.sha256.toLowerCase()) throw new Error("The saved image does not match your selected image. Choose the image again.");
         setDraft(current => ({ ...current, image: savedImage }));
@@ -280,8 +362,10 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       savedImage ??= FOUNDATION_DEFAULT_IMAGE;
       errorStage = "simulation";
       assertCurrent(); setPhase("preparing");
-      const prepared = await onPrepareLaunch({ ...draft, name: draft.name.trim(), symbol: draft.symbol.trim().toUpperCase(), description: draft.description.trim(), quoteAsset: selectedQuote!.address,
-        socialLinks: checked.links, image: savedImage, initialBuy: launchInitialBuy, additionalLiquidity: "0" });
+      const launchDraft: FoundationLaunchDraft = { ...draft, name: draft.name.trim(), symbol: draft.symbol.trim().toUpperCase(), description: draft.description.trim(), quoteAsset: selectedQuote!.address,
+        socialLinks: checked.links, image: savedImage, initialBuy: launchInitialBuy, additionalLiquidity: "0" };
+      const prepared = await launchPreparation.current.prepare(launchDraft, context,
+        (value, signal) => warmLaunch.current ? warmLaunch.current(value, signal) : onPrepareLaunch(value));
       assertCurrent();
       if (!prepared) { setPhase("editing"); return; }
       const invalid = foundationReviewError(prepared, context);
@@ -292,7 +376,14 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       errorStage = "wallet";
       const receipt = await onConfirmLaunch(prepared);
       if (active.current) { automaticRefreshes.current = 0; submittedContext.current = context; setResult(receipt); setPhase("result"); }
-    } catch (caught) { if (active.current) { setError(cleanError(caught, errorStage)); setPhase("editing"); } }
+    } catch (caught) {
+      launchPreparation.current.invalidate();
+      if (active.current) {
+        setError(cleanError(caught, errorStage)); setPhase("editing");
+        const failure = caught as { code?: number; walletRequestAttempted?: boolean; walletRequestRejected?: boolean } | null;
+        if (errorStage === "wallet" && (failure?.code === 4001 || failure?.walletRequestAttempted === false || failure?.walletRequestRejected === true)) setWarmRetry(value => value + 1);
+      }
+    }
     finally { lock.current = false; }
   }
 
@@ -321,11 +412,13 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     requestAnimationFrame(() => document.getElementById("foundation-name")?.focus());
   }
 
-  const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" ? "Saving image…" : phase === "preparing" ? "Preparing launch…" : phase === "signing" ? launchProgress || "Opening coin…" : "Launch coin");
+  const imageWarming = Boolean(canWarm && localImage && !draft.image && !imageError);
+  const warmPending = imageWarming || Boolean(warmKey && (warmState?.key !== warmKey || warmState.status === "pending"));
+  const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" || imageWarming ? "Saving image…" : phase === "signing" ? launchProgress || "Opening coin…" : phase === "preparing" || warmPending ? "Preparing launch…" : "Launch coin");
   if (layout === "studio" && phase !== "result") return <FoundationStudio draft={draft} catalog={catalog} imageSource={imageSource}
     previousLaunchAction={previousLaunchAction} quoteSymbol={quoteSymbol} quoteStatus={quoteStatus}
     initialBuy={initialBuy} actionLabel={actionLabel} disabled={locked || imagePreparing} busy={busy || walletAction?.busy}
-    actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
+    actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy || warmPending} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
     error={error || submissionBlocked} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
     customQuote={customQuote} canResolveQuote={canResolveQuote} modulesLoading={availability.status === "checking" && !catalog.length} formRef={form} imageInput={imageInput}
     onSocialChange={updateSocial} onImageError={() => setImageError("The image could not load. Choose another image.")}
@@ -388,7 +481,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
               </div>
             </section>
           </fieldset>
-          <div className={styles.formFooter}><p className={styles.error} role="alert">{error}</p>{phase === "preparing" ? <p className={styles.help} role="status">Checking your launch. MetaMask will open when the checks finish.</p> : null}<button type="submit" className={styles.primaryButton} disabled={locked || imagePreparing || unavailable || Boolean(submissionBlocked) || walletAction?.busy} aria-busy={busy || walletAction?.busy}><span>{actionLabel}</span><ArrowRightIcon size={18} aria-hidden="true" /></button></div>
+          <div className={styles.formFooter}><p className={styles.error} role="alert">{error}</p>{phase === "preparing" ? <p className={styles.help} role="status">Checking your launch. MetaMask will open when the checks finish.</p> : null}<button type="submit" className={styles.primaryButton} disabled={locked || imagePreparing || unavailable || Boolean(submissionBlocked) || walletAction?.busy || warmPending} aria-busy={busy || walletAction?.busy || warmPending}><span>{actionLabel}</span><ArrowRightIcon size={18} aria-hidden="true" /></button></div>
         </form>}
       </div>
       <aside className={styles.preview} aria-label="Coin preview">

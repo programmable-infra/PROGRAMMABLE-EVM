@@ -11,6 +11,8 @@ export async function createModuleStudioServer() {
     import {createRoot} from 'react-dom/client';
     import {FoundationStudio} from './components/module-studio/studio';
     import {ModuleFoundationLaunchHost} from './components/module-foundation-launch-host';
+    import {ModuleFoundationBuilder} from './components/module-foundation-builder';
+    import {FOUNDATION_PLATFORM_FEE_RECIPIENT} from './lib/module-foundation/ui-types';
     import {SiteHeader} from './components/site-navigation';
     import styles from './components/module-studio/studio.module.css';
     import './app/globals.css'; import './app/interface.css';
@@ -18,6 +20,30 @@ export async function createModuleStudioServer() {
     const catalog = [{id:'wallet-cap-fixture',version:'1.0.0',digest:'0x'+'11'.repeat(32),name:'Initial wallet buy limit',
       description:'This module limits how much each wallet can buy during the opening period.',capabilities:['beforeSwap'],
       fields:[],available:true,studio:{category:'trading'}}];
+    const launchEvents = window.launchEvents = {preparations:0,coldPreparations:0,walletRequests:0,aborts:0};
+    const quote = {address:'0xC91D9BBCEa565eCaA0821DFAff2E377b4FeaDd5f',chainId:4663,name:'Wrapped Ether',symbol:'WETH',decimals:18,supported:true,supportsNativeEth:true};
+    function LaunchSpeedFixture() {
+      const [context,setContext] = useState('wallet:4663:release');
+      const [renders,setRenders] = useState(0);
+      const warm = async (draft,signal) => {
+        launchEvents.preparations++; launchEvents.startedAt=performance.now();
+        signal.addEventListener('abort',()=>{launchEvents.aborts++;},{once:true});
+        await new Promise(resolve=>setTimeout(resolve,1200)); signal.throwIfAborted();
+        launchEvents.readyAt=performance.now();
+        return {id:String(launchEvents.preparations),contextKey:context,expiresAt:Math.floor(Date.now()/1000)+120,
+          quote,chainId:4663,platformFeeBps:30,platformFeeRecipient:FOUNDATION_PLATFORM_FEE_RECIPIENT,creatorFeeBps:draft.creatorFeeBps,
+          transactions:[{label:'Launch coin',to:quote.address,chainId:4663,value:'0',effect:'Launch coin'}]};
+      };
+      return <><button data-testid="wallet-switch" onClick={()=>setContext('other-wallet:4663:release')}>Fixture wallet switch</button>
+        <button data-testid="rerender" onClick={()=>setRenders(value=>value+1)}>Fixture render {renders}</button>
+        <ModuleFoundationBuilder layout="studio" availability={{status:'ready',chainId:4663,chainName:'Robinhood Chain'}}
+          contextKey={context} catalog={catalog} quoteAssets={[quote]} suggestedInitialBuy="0.001"
+          onUploadImage={async ({image})=>({url:'https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/token-images/'+'aa'.repeat(32)+'.webp',sha256:image.sha256})}
+          onWarmLaunch={warm} onPrepareLaunch={async draft=>{launchEvents.coldPreparations++;return warm(draft,new AbortController().signal);}}
+          onConfirmLaunch={async review=>{launchEvents.walletRequests++;launchEvents.walletRequestedAt=performance.now();launchEvents.walletContext=review.contextKey;
+            throw Object.assign(new Error('Fixture wallet rejected. No transaction was sent.'),{walletRequestAttempted:false});}}/>
+      </>;
+    }
     function App() {
       const mode = new URLSearchParams(location.search).get('mode');
       const [draft,setDraft] = useState({name:'',symbol:'COIN',description:'',image:null,socialLinks:{},quoteAsset:'',
@@ -25,6 +51,7 @@ export async function createModuleStudioServer() {
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
+      if(mode==='launch-speed') return <LaunchSpeedFixture/>;
       if(mode==='restored-launch') return <ModuleFoundationLaunchHost layout="studio"/>;
       return <div className="app-frame"><SiteHeader/><main><div className={styles.launchPage}>
         <FoundationStudio draft={draft} catalog={catalog} quoteSymbol={customQuote?'TOKEN':'ETH'} initialBuy={draft.initialBuy}
@@ -51,7 +78,7 @@ export async function createModuleStudioServer() {
           : args.path === "@/components/wallet-provider" ? `export const useWallet=()=>({wallet:null,authenticated:false,walletLinked:false,authReady:true,sessionReady:true,hasSession:false,openingWallet:false,connecting:false,disconnecting:false,preloadWallet:()=>{},openWallet:()=>{},disconnect:async()=>false});`
           : args.path === "next/navigation" ? `export const usePathname=()=>'/launch/modules/foundation';export const useSearchParams=()=>new URLSearchParams(location.search);export const useRouter=()=>({prefetch:()=>{},push:()=>{},replace:()=>{}});`
           : args.path === "next/link" ? `import React from 'react';export default function Link({prefetch,...props}){return <a {...props}/>}`
-          : `import React from 'react';export default function Image({priority,fill,unoptimized,...props}){return <img {...props}/>}` }));
+          : `import React from 'react';export default function Image({priority,fill,unoptimized,...props}){if(props.src?.startsWith('https://programmable.market/brand/')) props.src=new URL(props.src).pathname; return <img {...props}/>}` }));
     } }],
   });
   const files = new Map(bundled.outputFiles.map(file => [file.path.endsWith(".css") ? "/fixture.css" : "/fixture.js", file.contents]));
