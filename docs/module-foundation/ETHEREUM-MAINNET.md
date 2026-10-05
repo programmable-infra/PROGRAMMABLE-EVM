@@ -1,6 +1,6 @@
 # Ethereum Module Mode implementation status
 
-Status on 2026-10-05: the shared implementation and wallet-cap factory are deployed on Ethereum and source-matched by Sourcify. The launch flow is not admitted or available in production.
+Status on 2026-10-05: Ethereum contracts are deployed and source-matched. A real canary completed launch, buy, sell and creator-fee claim. The website SDK also completed an unbroadcast launch preparation with the production signing authority. Website activation is still pending the integrated release.
 
 ## Existing identity and indexing
 
@@ -18,9 +18,9 @@ The launch wallet receives the initial buy and any native refund. Base liquidity
 
 The Studio uses one UI on both networks. Chain profiles select infrastructure, WETH, quote discovery, RPC clients and finality. Prepared actions, pending transactions, results and caches include chain identity. Changing networks remounts the launch session. Ethereum Any Quote discovery uses Ethereum V4 pools and the Ethereum price feed; it does not borrow Robinhood routes or stock feeds.
 
-The Ethereum graph readback adapter reuses the canonical stamp reader and verifies the launch account's implementation, wallet, initialization, parameter hash, launch result and position custody. Its public fixture contains call bytes from the fork test and an explicit note that the permit signature was stubbed. The adapter is not yet connected to the production source inventory or indexing job.
+The Ethereum graph readback adapter reuses the canonical stamp reader and verifies the launch account's implementation, wallet, initialization, parameter hash, launch result and position custody. Its public fixture contains call bytes from the fork test and an explicit note that the permit signature was stubbed. The adapter consumes the existing finalized canonical stamp inventory for per-token source verification.
 
-The graph-plan codec computes CREATE2 addresses, graph commitments, expected deployment results, component sets and stamp requests locally using the canonical contracts' exact encoding. It reproduces the complete fork-tested Router call byte for byte. The codec does not issue permits or establish source admission. Production composition and the wallet flow still require integration.
+The graph-plan codec computes CREATE2 addresses, graph commitments, expected deployment results, component sets and stamp requests locally using the canonical contracts' exact encoding. It reproduces the complete fork-tested Router call byte for byte. The codec does not issue permits or establish source admission. Studio composition and wallet preparation use this graph codec and the authenticated same-origin authorization route.
 
 The graph builder now materializes the exact proxy, token and hook creation bytes from a reproducible compiler export. Wallet, release and token salt separate CREATE2 namespaces. Hook mining runs locally, yields between batches and supports cancellation. Metadata is checked before mining. A shared package, `@programmable/module-foundation-ethereum`, gives the API the same implementation as the website without importing trading SDKs.
 
@@ -35,25 +35,16 @@ Deployment evidence is saved in [`contracts/deployments/ethereum-module-foundati
 | Shared launch implementation | `0x487E8A196812fEC534f2D2514bfdc7c609EBAe35` | [Transaction](https://etherscan.io/tx/0x7cdd27a31d16179f9fb19573d20751baece76f38f499c06b610f12774f0eed61) |
 | Wallet-cap factory | `0x2960751d51a6559D630F9Fa9D94CD0011816d5D2` | [Transaction](https://etherscan.io/tx/0x228134c7d610c6a952c2cd12b99710b1dabff4a6d2be0ca06db21503b3ed3ed5) |
 
-Two RPC providers confirmed each receipt and the exact runtime returned by the pre-deployment simulation. Sourcify reports matching creation and runtime code for both contracts. Deployment gas cost 0.000632249848312916 ETH in total. The deployment evidence records the latest independent finality observations. No coin launch or production catalog change accompanied these deployments.
+Two RPC providers confirmed each receipt and the exact runtime returned by the pre-deployment simulation. Sourcify reports matching creation and runtime code for both contracts. Deployment gas cost 0.000632249848312916 ETH in total. The deployment evidence records the latest independent finality observations. A later canary launch and its transactions are recorded in `lifecycleEvidence`; production activation remains separate.
 
-## Validation completed
+## Validation and publication
 
-- Twenty Ethereum fork tests cover native funding, directional fees, canonical stamping, initialization boundaries, missing permit authorization and the real wallet-cap module's initial buy, later purchases, rejection and expiry.
-- The canonical graph test uses the existing Ethereum Router, Graph Factory and Uniswap contracts. Only its exact EIP-1271 permit authorization is stubbed locally. No live launch permit was obtained.
-- A two-module fixture consumes approximately 9.79 million gas including intrinsic calldata. An eight-module heavy fixture exceeds Ethereum's transaction gas cap. Wallet preparation rejects an excessive estimate; it does not assume every eight-module composition is deployable.
-- The relevant existing web suites passed: 838 tests in 52 files. The additional Ethereum owner-finality case passed in the five-test owner suite. Six graph readback tests passed using the exported fork call.
-- The website production build passed. After adding graph readback, the full TypeScript check and focused lint both passed. The graph adapter is not yet imported by a production route.
-- The graph-plan and graph-readback suites pass 12 tests, including full equality with the fork-tested call, canonical target predictions, changed runtime and initializer commitments, funding destinations and unsigned-plan rejection. TypeScript and focused lint also pass with the new codec.
-- The builder, graph, plan and atomic-launch suites pass 23 tests. The shared pool-key and funding-path extraction passes 27 SDK/native-funding tests. The backend authorizer's rejection checks and existing Safe/Privy signer checks pass 17 tests. A real authority signing request and signed live launch remain unverified.
+The Ethereum fork tests cover native funding, directional fees, canonical stamping, initialization, missing permits and wallet-cap behavior including expiry. The live canary token is `0x1A6A3948B0c54670b634dd2A54598793EE192895`. Its launch, buy, sell and fee claim are in the deployment evidence. The existing canonical stamp reader hydrated its identity after the required confirmations. The website receipt reader independently restored the pool, modules, fee records and liquidity positions. The canary is excluded from public Explore discovery.
 
-## Work required before activation
+A full website SDK preparation obtained a real permit through the protected production signer, reconstructed the exact graph and simulated the signed transaction and position custody. That initial preparation was not broadcast. A second canary, `0xE2F175AF5eDf2BA4793ecdad94888FcDC5E1aB5F`, subsequently completed the full SDK wallet revalidation and onchain launch with the shared package metadata. Receipt recovery, module restoration, buy simulation and sell simulation passed for that coin. Wallet-private keys and signer credentials remain outside the repository.
 
-1. Retain the finalized deployment identities recorded by both providers. The old unsigned deployment plan has been consumed; do not broadcast it again.
-2. Install the host's graph source binding and connect the staged module authorizer to the authenticated backend runtime. The authorizer uses the shared builder, two-provider simulation and the existing canonical Safe signer, but has no public route yet. The general Ethereum API's current 3.3 profile is not a drop-in Module Mode profile: its metadata requirements and 0.1% fee policy differ. Do not reuse its approval or claim 0.3% conformance without the correct versioned integration.
-3. Connect Studio composition to graph prediction, the real canonical permit and exact wallet calldata. The current composition path still calls direct-factory prediction and cannot launch this graph account. Preserve immediate wallet interaction where possible and invalidate changed chain, wallet, source, fee or module inputs.
-4. Connect the graph readback adapter and admitted host inventory to recovery, market projection and background indexing. Do not classify a launch as a module merely from its name or optional metadata.
-5. Exercise a real funded mainnet launch, initial buy, later buy and sell, fee accounting, module behavior and recovery. Verify the exact production build and responsive Studio before enabling the network.
-6. Complete the shared publication coordinator described in `MULTICHAIN-PUBLICATION.md`. Until then, accepting Ethereum owner records must not be described as publishing new module versions to both chains automatically.
+The backend endpoint `/v1/wallet-admin/module-launches/ethereum/authorization` requires an authenticated, body-bound wallet assertion and a selected wallet linked to that user. It accepts the installed source release, verifies module runtime bindings and simulates through two providers before requesting a signature. The website forwards through `/api/module-foundation/authorize`. `PROGRAMMABLE_ETHEREUM_MODULE_MODE=enabled` activates each installed deployment; deployment alone does not enable the feature.
 
-The automation wallet received 0.01 ETH through the owner-authorized Robinhood-to-Ethereum bridge. The bridge and two Ethereum deployment transactions were signed and broadcast, and both contract sources were submitted to Sourcify. No production catalog mutation or website publication has occurred for this Ethereum feature.
+Shared module publication stages one source package on both chains and activates both records in one conditional catalog write. See [the publication workflow](MULTICHAIN-PUBLICATION.md). Existing coins retain their original immutable package and factory bindings.
+
+Some large compositions exceed Ethereum's transaction gas cap. Preparation checks actual execution and gas; an eight-slot interface does not guarantee that every eight-module composition is deployable. External indexers limited to Classic launcher events must consume canonical stamp events to discover these launches.

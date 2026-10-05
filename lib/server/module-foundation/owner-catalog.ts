@@ -65,8 +65,13 @@ export async function withFoundationOwnerCatalogV1(availability: FoundationAvail
     for (const result of batch) if (result.status === "fulfilled" && result.value) verified.push(result.value);
   }
   const entries = [...availability.catalog.document.entries], admissions = [...availability.catalog.authority.admissions], releases = [...availability.catalog.authority.releases];
-  const ids = new Set<string>();
+  const ids = new Set<string>(), families = new Set<string>();
+  // New-launch screens show the newest source in each family. Token-specific
+  // recovery retains older immutable packages to restore existing coins.
+  verified.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt));
   for (const p of verified) {
+    if (!availability.token && families.has(p.manifest.familyId)) continue;
+    families.add(p.manifest.familyId);
     if (ids.has(p.manifest.packageId)) continue;
     ids.add(p.manifest.packageId);
     const reference = foundationOwnerReferenceV1(p), entry = { manifest: p.manifest, review: reference, release: p.release };

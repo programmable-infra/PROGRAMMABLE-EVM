@@ -1,3 +1,5 @@
+import { predictFoundationEthereumAccounts } from "./ethereum-graph-builder";
+import { prepareFoundationEthereumLaunch } from "./ethereum-preparation";
 import { foundationCreatorFeeFields, foundationCreatorFeeRates, type FoundationCreatorFees } from "./creator-fees";
 import { assertFoundationAtomicEth, assertFoundationLaunchCall, encodeFoundationFundingPath, type FoundationEthFunding } from "./atomic-launch";
 import {
@@ -33,7 +35,7 @@ export function createFoundationClient({ batchRpc = false, chainId = 4663, rpcUr
   const profile = foundationChainProfile(chainId), endpoints = rpcUrls ?? profile.publicRpcUrls;
   if (endpoints.length < 1 || endpoints.length > 2) throw new Error("Choose one or two chain-bound RPC providers.");
   return createPublicClient({ chain: profile.chain, transport: fallback(endpoints.map(url =>
-    http(url, { timeout: 20_000, retryCount: 0, batch: batchRpc ? { batchSize: 10, wait: 8 } : false })),
+    http(url, { timeout: 20_000, retryCount: 0, batch: batchRpc || chainId === 1 ? { batchSize: 10, wait: 8 } : false })),
   { rank: false, retryCount: 0 }), batch: { multicall: false } });
 }
 
@@ -318,6 +320,7 @@ export async function simulateFoundationV2Launch(input: {
 export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
   client: PublicClient; binding: FoundationDeploymentBinding; account: Address; metadata: FoundationMetadata; quote: Address;
   startPrice: FoundationStartPrice; initialBuy: string; additionalLiquidity: string;
+  accessToken?: () => Promise<string | null>;
   modules: readonly FoundationContractModule[]; tokenSalt: Hex; slippageBps: number; signal?: AbortSignal; ethFunding?: FoundationEthFunding;
 }) {
   const { client, binding } = input, account = getAddress(input.account), factoryAbi = foundationFactoryAbiFor(binding);
@@ -345,7 +348,7 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
   const nativeFunding = ethFunding ? [] : await prepareFoundationNativeFunding({ client, account, quote, amount: funding, blockNumber: checkpoint.blockNumber });
   input.signal?.throwIfAborted();
   if (!Number.isInteger(input.slippageBps) || input.slippageBps < 1 || input.slippageBps > 1_000) throw new Error("Choose slippage between 0.01% and 10%.");
-  const token = await client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "predictTokenAddress",
+  const token = binding.ethereumGraph ? predictFoundationEthereumAccounts({ source: binding.ethereumGraph, account, tokenSalt: input.tokenSalt, metadata: input.metadata }).token : await client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "predictTokenAddress",
     args: [account, input.tokenSalt, input.metadata], blockNumber: checkpoint.blockNumber });
   input.signal?.throwIfAborted();
   const moduleAssetPins = readFoundationAssetPins(input.metadata.socialData);
@@ -360,6 +363,12 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
     initialTick: price.initialTick, ...creatorFees,
     additionalQuoteAmount, initialBuyQuoteAmount, initialBuyMinimumTokenAmount: initialBuyQuoteAmount > 0n ? 1n : 0n,
     deadline: checkpoint.timestamp + 300n, tokenSalt: input.tokenSalt, hookSalt: FOUNDATION_ZERO_HASH, modules: input.modules };
+  if (binding.ethereumGraph) {
+    if (!input.accessToken || p.creatorFeeBps !== undefined) throw new Error("Ethereum launch authorization is unavailable.");
+    return sealFoundationSequence(await prepareFoundationEthereumLaunch({ client, binding, account, parameters: p,
+      ethFunding, slippageBps: input.slippageBps, checkpoint, price, quote, startPrice,
+      modulePackageIds: modulePackageIds ?? [], moduleAssetPins, accessToken: input.accessToken, signal: input.signal }));
+  }
   const initCodeHash = await readFoundationHookPrediction(client, binding, account, token, p, "hookInitCodeHash", checkpoint.blockNumber);
   input.signal?.throwIfAborted();
   const hook = await mineFoundationHook(binding.hookDeployer.address, initCodeHash, input.signal);

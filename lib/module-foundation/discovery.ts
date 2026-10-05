@@ -1,3 +1,5 @@
+import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
+import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import { foundationBindingChainId } from "./chains";
 import { assertFoundationLaunchFinality } from "./finality";
 import { decodeFoundationLaunchCall } from "./atomic-launch";
@@ -136,14 +138,17 @@ export async function discoverFoundationLaunch(input: {
   if (candidate === null) throw new Error("No creation transaction was found. A bounded recent launch lookup can supply another candidate.");
   const hash = transactionHash(candidate);
   const mined = await client.getTransaction({ hash });
-  if (!sameHex(mined.hash, hash) || !mined.to || !sameAddress(mined.to, binding.factory.address) || BigInt(mined.from) === 0n
+  if (!sameHex(mined.hash, hash) || !mined.to || !sameAddress(mined.to, binding.ethereumGraph ? getAddress(ethereum.canonicalStamp.router.address) : binding.factory.address) || BigInt(mined.from) === 0n
     || mined.blockNumber === null || !mined.blockHash || mined.blockNumber < binding.startBlock
     || mined.blockNumber > observedAt.blockNumber || mined.input.length > MAX_CALLDATA_BYTES * 2 + 2) {
     throw new Error("The candidate is not a mined transaction to the selected foundation factory.");
   }
   const { parameters } = decodeFoundationLaunchCall(binding, { data: mined.input, value: mined.value });
   await assertFoundationLaunchFinality(client, foundationBindingChainId(binding), mined.blockNumber, observedAt.blockNumber);
-  const [predictedToken, predictedHook] = await Promise.all([
+  const graph = binding.ethereumGraph ? (await assertFoundationEthereumTransaction({ source: binding.ethereumGraph,
+    transaction: { from: mined.from, to: mined.to, data: mined.input, value: mined.value }, signal: input.signal })).graph : null;
+  if (graph && graph.engine !== getAddress(binding.factory.address)) throw new Error("The Ethereum module launch account changed.");
+  const [predictedToken, predictedHook] = graph ? [graph.token, graph.hook] : await Promise.all([
     client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "predictTokenAddress",
       args: [mined.from, parameters.tokenSalt, parameters.metadata], blockNumber: observedAt.blockNumber }),
     readFoundationHookPrediction(client, binding, mined.from, token, parameters, "predictHookAddress", observedAt.blockNumber),

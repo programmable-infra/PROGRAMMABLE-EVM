@@ -1,3 +1,4 @@
+import { decodeFoundationEthereumTransaction, foundationEthereumStampAbi } from "./ethereum-graph";
 import { foundationCreatorFeeFields, type FoundationCreatorFees } from "./creator-fees";
 import {
   decodeAbiParameters, decodeFunctionData, getAddress, keccak256, parseAbi,
@@ -361,7 +362,9 @@ export function decodeFoundationLaunchSelectionsV1(input: {
   assertBoundFoundationCatalogV1(input.catalog);
   foundationRequire(/^0x(?:[0-9a-fA-F]{2})+$/.test(input.calldata) && input.calldata.length <= 2_097_154,
     "FOUNDATION_LAUNCH_CALLDATA_LIMIT", "Restore bounded canonical launch calldata.");
-  const decoded = decodeFunctionData({ abi: [...foundationFactoryNativeAbi, ...foundationFactoryV3NativeAbi], data: input.calldata });
+  const launchCalldata = chainId === 1 ? encodeFoundationLaunchEntry(decodeFoundationEthereumTransaction({ data: input.calldata,
+    value: decodeFunctionData({ abi: foundationEthereumStampAbi, data: input.calldata }).args[0].value }).parameters, { functionName: "launch" }) : input.calldata;
+  const decoded = decodeFunctionData({ abi: [...foundationFactoryNativeAbi, ...foundationFactoryV3NativeAbi], data: launchCalldata });
   foundationRequire((decoded.functionName === "launch" || decoded.functionName === "launchWithEth" || decoded.functionName === "launchWithEthRoute"), "FOUNDATION_LAUNCH_CALLDATA", "The transaction does not call this foundation factory's launch entrypoint.");
   const parameters = decoded.args[0];
   const creatorFees = foundationCreatorFeeFields(parameters);
@@ -370,7 +373,7 @@ export function decodeFoundationLaunchSelectionsV1(input: {
     : decoded.functionName === "launchWithEth"
     ? encodeFoundationLaunchEntry(parameters, { functionName: "launchWithEth", fundingPool: decoded.args[1] })
     : encodeFoundationLaunchEntry(parameters, { functionName: "launch" });
-  foundationRequire(sameHex(canonical, input.calldata),
+  foundationRequire(sameHex(canonical, launchCalldata),
     "FOUNDATION_LAUNCH_CALLDATA_NONCANONICAL", "The supplied launch bytes are not canonical ABI calldata.");
   foundationRequire(parameters.modules.length <= 8 && (!input.packageIds || input.packageIds.length === parameters.modules.length),
     "FOUNDATION_MODULE_LIMIT", "Restore one package identity for each of at most eight original modules.");

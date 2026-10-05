@@ -1,3 +1,5 @@
+import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
+import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import { foundationClientProfile } from "./chains";
 import { foundationCreatorFeeFields, foundationCreatorFeeRates, foundationCreatorFeesEqual } from "./creator-fees";
 import { assertFoundationLaunchCall } from "./atomic-launch";
@@ -311,10 +313,18 @@ export async function verifyFoundationLaunchReceipt(input: {
    * The receipt checkpoint stays bound to the original transaction's block. */
   verificationBlock?: bigint;
 }) {
-  const { client, binding, expected, transactionHash } = input;
+  const { client, expected, transactionHash } = input;
+  let binding = input.binding;
   const planned = expected.transaction, p = expected.parameters;
+  if (binding.ethereumGraph) {
+    const { graph } = await assertFoundationEthereumTransaction({ source: binding.ethereumGraph, transaction: planned });
+    if (getAddress(binding.factory.address) !== getAddress(binding.ethereumGraph.implementation.address)
+      && getAddress(binding.factory.address) !== graph.engine) throw new Error("The Ethereum launch account differs from its binding.");
+    binding = { ...binding, factory: { address: graph.engine, runtimeCodeHash: binding.ethereumGraph.proxyRuntimeCodeHash } };
+  }
+  const transactionTarget = binding.ethereumGraph ? getAddress(ethereum.canonicalStamp.router.address) : binding.factory.address;
   assertFoundationLaunchCall(binding, planned, p);
-  if (!sameAddress(planned.to, binding.factory.address)
+  if (!sameAddress(planned.to, transactionTarget)
     || !sameHex(expected.metadataHash, keccak256(encodeAbiParameters(foundationMetadataParameters, [p.metadata])))) {
     throw new Error("The expected launch transaction or metadata does not match its reviewed parameters.");
   }
@@ -322,7 +332,7 @@ export async function verifyFoundationLaunchReceipt(input: {
     client.getTransactionReceipt({ hash: transactionHash }), client.getTransaction({ hash: transactionHash }),
   ]);
   if (receipt.status !== "success" || !sameHex(receipt.transactionHash, transactionHash) || !sameHex(transaction.hash, transactionHash)
-    || !receipt.to || !transaction.to || !sameAddress(receipt.to, binding.factory.address) || !sameAddress(transaction.to, planned.to)
+    || !receipt.to || !transaction.to || !sameAddress(receipt.to, transactionTarget) || !sameAddress(transaction.to, planned.to)
     || !sameAddress(receipt.from, planned.from) || !sameAddress(transaction.from, planned.from)
     || !sameHex(transaction.input, planned.data) || transaction.value !== planned.value
     || transaction.blockNumber !== receipt.blockNumber || !transaction.blockHash || !sameHex(transaction.blockHash, receipt.blockHash)
@@ -340,7 +350,7 @@ export async function verifyFoundationLaunchReceipt(input: {
     }
     launchCheckpoint = { blockNumber: block.number, blockHash: block.hash, timestamp: block.timestamp };
   }
-  if (foundationFactoryVersion(binding) !== "v1") return verifyV2LaunchReceipt({ ...input, receipt, launchCheckpoint });
+  if (foundationFactoryVersion(binding) !== "v1") return verifyV2LaunchReceipt({ ...input, binding, receipt, launchCheckpoint });
   const candidates = receipt.logs.filter(log => sameAddress(log.address, binding.factory.address) && log.topics[0]
     && sameHex(log.topics[0], launchTopic));
   if (candidates.length !== 1) throw new Error("The receipt must contain exactly one launch event emitted by the expected factory.");

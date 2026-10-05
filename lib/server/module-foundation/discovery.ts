@@ -1,3 +1,5 @@
+import { readFinalizedRouterCustomIdentitySnapshotCoreV1 } from "@/lib/alchemy/router-custom-public.server";
+import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
 import "server-only";
 import { getAddress, type Address, type Hex } from "viem";
 import { parseFoundationAvailability } from "@/lib/module-foundation/availability";
@@ -77,6 +79,18 @@ async function locate(query: LocateQuery, signal: AbortSignal): Promise<Foundati
       }
     } catch { signal.throwIfAborted(); }
   }
+  if (query.chainId === 1) {
+    try {
+      const snapshot = await readFinalizedRouterCustomIdentitySnapshotCoreV1({ signal });
+      const candidate = snapshot.entries.find(entry => entry.tokenAddress.toLowerCase() === query.token.toLowerCase());
+      const stamp = candidate?.launchStampProvenance;
+      if (isEthereumModuleLaunchCandidate(candidate) && stamp && (!query.range
+        || (BigInt(stamp.blockNumber) >= query.range.fromBlock && BigInt(stamp.blockNumber) <= query.range.toBlock))) {
+        return { transactionHash: stamp.transactionHash };
+      }
+      return { transactionHash: null, reason: "This launch is still being indexed. You can use its transaction hash." };
+    } catch { return { transactionHash: null, reason: historyUnavailable }; }
+  }
   const client = createFoundationServerClient(query.chainId);
   let latest: bigint;
   try { latest = await client.getBlockNumber({ cacheTime: 0 }); }
@@ -88,7 +102,7 @@ async function locate(query: LocateQuery, signal: AbortSignal): Promise<Foundati
   const recentFrom = toBlock >= FOUNDATION_DISCOVERY_MAX_BLOCKS - 1n ? toBlock - FOUNDATION_DISCOVERY_MAX_BLOCKS + 1n : 0n;
   const fromBlock = query.range?.fromBlock ?? (recentFrom > binding.startBlock ? recentFrom : binding.startBlock);
 
-  if (query.chainId !== 1) try {
+  try {
     const candidate = await locateFoundationCreationTransaction(query.token, { signal });
     signal.throwIfAborted();
     if (candidate && /^0x[0-9a-fA-F]{64}$/.test(candidate) && BigInt(candidate) !== 0n) return { transactionHash: candidate };

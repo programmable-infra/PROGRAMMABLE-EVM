@@ -9,6 +9,7 @@ export type FoundationFactoryVersion = "v1" | "v2" | "v3";
 export type FoundationFactoryIdentity = { factoryVersion?: "v1"; lpCustodyId?: never }
   | { factoryVersion: "v2" | "v3"; lpCustodyId: Hex };
 export type FoundationDeploymentBinding = FoundationFactoryIdentity & {
+  ethereumGraph?: import("./ethereum-graph").FoundationEthereumGraphSource;
   chainId?: FoundationChainId; releaseDigest: Hex; sourceCommit: string; startBlock: bigint;
   factory: { address: Address; runtimeCodeHash: Hex };
   hookDeployer: { address: Address; runtimeCodeHash: Hex };
@@ -27,6 +28,11 @@ export function foundationFactoryVersion(binding: FoundationDeploymentBinding): 
     || !nonzero(binding.hookDeployer.address) || !hash(binding.hookDeployer.runtimeCodeHash)
     || same(binding.factory.address, binding.hookDeployer.address)) throw new Error("The foundation source binding is invalid.");
   if (foundationBindingChainId(binding) === 1 && binding.factoryVersion !== "v3") throw new Error("Ethereum Module Mode requires an explicit V3 source binding.");
+  if (binding.ethereumGraph && (foundationBindingChainId(binding) !== 1
+    || binding.ethereumGraph.releaseDigest !== binding.releaseDigest
+    || binding.ethereumGraph.sourceCommit !== binding.sourceCommit
+    || binding.ethereumGraph.startBlock !== binding.startBlock
+    || binding.ethereumGraph.chainId !== 1)) throw new Error("The Ethereum graph source differs from its binding.");
   if (binding.factoryVersion === undefined || binding.factoryVersion === "v1") {
     if (binding.lpCustodyId !== undefined) throw new Error("A V1 source cannot claim V2 LP custody.");
     return "v1";

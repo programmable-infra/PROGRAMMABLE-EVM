@@ -1,7 +1,7 @@
 {
   "schemaVersion": "programmable.ethereum-module-deployment-evidence.v1",
   "chainId": 1,
-  "state": "deployed-source-matched-not-activated",
+  "state": "deployed-source-matched-lifecycle-verified-not-activated",
   "sourceCommit": "92ff1f513c47fe94ddc1022babffdf95ad47d76b",
   "canonicalStamp": {
     "router": "0x8622DD5bAb44185f2A458ac90384Ac99248f8d56",
@@ -141,6 +141,28 @@
     "permitAuthorityIntegrated": false,
     "walletFlowIntegrated": false,
     "indexerSourceIntegrated": false,
-    "liveLifecycleVerified": false
+    "liveLifecycleVerified": true
+  },
+  "lifecycleEvidence": {
+    "canaryToken": "0x1A6A3948B0c54670b634dd2A54598793EE192895",
+    "launch": "0x81de2fbe25ab114190bf90e191e21e2022ff1e05091664a65d93eaef5ce507da",
+    "buy": "0xedd26c53f04362b6ce8337d999bab3373b15365e5d1d199ee0d4042e9d34e4ba",
+    "sell": "0xd7b8bb35cd85e81b8adac4cfd5eca40afd8801c1321de2d3d009ebd115d4bdbd",
+    "creatorClaim": "0x7fca110a98b079dd5e7938694a8a7966919be205ec69e6b9be0dd9c70f22c029",
+    "canonicalStampReadback": true,
+    "websiteSdkPrepared": true,
+    "websiteSdkPreparationBroadcast": false,
+    "platformFeeBps": 30
+  },
+  "sdkLifecycleEvidence": {
+    "canaryToken": "0xE2F175AF5eDf2BA4793ecdad94888FcDC5E1aB5F",
+    "launch": "0x375e34e1aea85453c58cae370bb6c9c76369a34cbb71be7025931b151d5f65e8",
+    "blockNumber": "26125758",
+    "sourcePackageId": "0xd15566640c85edef5dd30a5523d7436ad5923d1a06ab03dd9ce883a97a9881c0",
+    "path": "website SDK, protected permit, exact wallet revalidation and submission",
+    "receiptVerified": true,
+    "moduleSourcesRestored": true,
+    "buySimulated": true,
+    "sellSimulated": true
   }
 }

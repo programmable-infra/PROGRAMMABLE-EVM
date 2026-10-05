@@ -1,3 +1,4 @@
+import { decodeFoundationEthereumTransaction } from "./ethereum-graph";
 import { foundationCreatorFeeRates } from "./creator-fees";
 import { decodeAbiParameters, decodeFunctionData, getAddress, keccak256, stringToHex, zeroAddress, type Hex, type PublicClient } from "viem";
 import { encodeFoundationLaunchEntry, encodeFoundationParameters, type FoundationLaunchParameters } from "./abi";
@@ -28,6 +29,7 @@ export async function assertFoundationAtomicEth(client: PublicClient, binding: F
 
 /** Exact calldata and value, shared by simulation, discovery and receipt verification. */
 function decodeCall(binding: FoundationDeploymentBinding, transaction: { data: Hex; value: bigint }) {
+  if (binding.ethereumGraph) return { parameters: decodeFoundationEthereumTransaction(transaction).parameters, native: true };
   const chainId = foundationBindingChainId(binding), FOUNDATION_WETH = foundationChainProfile(chainId).wrappedEth.address;
   const abi = foundationFactoryVersion(binding) !== "v1" ? foundationFactoryNativeAbiFor(binding) : foundationFactoryAbiFor(binding);
   const decoded = decodeFunctionData({ abi, data: transaction.data });

@@ -124,3 +124,19 @@ export function decodeFoundationEthereumGraphLaunch(input: {
   return { engine, token, hook, parameters: parameters as FoundationLaunchParametersV3, fundingPath,
     parametersHash: keccak256(encodeFoundationParameters(parameters)), launchId: proof.launchId };
 }
+
+/** Decode settings only. Callers must also verify the fixed graph and successful canonical execution. */
+export function decodeFoundationEthereumTransaction(transaction: { data: Hex; value: bigint }) {
+  const decoded = decodeFunctionData({ abi: foundationEthereumStampAbi, data: transaction.data });
+  const [permit, stamp, payload, signature] = decoded.args;
+  if (encodeFunctionData({ abi: foundationEthereumStampAbi, functionName: decoded.functionName, args: decoded.args }).toLowerCase() !== transaction.data.toLowerCase()
+    || permit.chainId !== 1n || permit.kind !== 1 || !same(permit.router, ethereum.canonicalStamp.router.address)
+    || permit.value !== transaction.value || !same(keccak256(payload), permit.routePayloadHash)) throw new Error("Invalid Ethereum module transaction.");
+  const [route] = decodeAbiParameters(foundationEthereumRouteParameters, payload);
+  if (route.targets.length !== 3 || route.expectedOutputs.length !== 3 || encodeAbiParameters(foundationEthereumRouteParameters, [route]).toLowerCase() !== payload.toLowerCase()) throw new Error("Invalid Ethereum module graph.");
+  const initializer = decodeFunctionData({ abi: foundationEthereumGraphAbi, data: route.targets[0].initializerCalldata });
+  if (initializer.functionName !== "initializeGraph") throw new Error("Invalid Ethereum module initializer.");
+  const [parameters, token, hook, fundingPath] = initializer.args;
+  const [path] = decodeAbiParameters(fundingParameters, fundingPath);
+  return { permit, stamp, route, signature, parameters, token, hook, engine: getAddress(route.expectedOutputs[0].account), path };
+}

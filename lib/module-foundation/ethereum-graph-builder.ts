@@ -137,3 +137,20 @@ export function assertFoundationEthereumRuntime(name: ContractName, runtime: Hex
   }
   if (masked !== expected) throw new Error(`Unexpected ${name} runtime instructions.`);
 }
+
+/** Rebuild every target and every permit field from installed source before accepting wallet bytes. */
+export async function assertFoundationEthereumTransaction(input: {
+  source: FoundationEthereumGraphSource; transaction: { from: Address; to: Address; data: Hex; value: bigint }; signal?: AbortSignal;
+}) {
+  const { decodeFoundationEthereumTransaction } = await import("./ethereum-graph");
+  const { prepareFoundationEthereumStamp, encodeFoundationEthereumStamp } = await import("./ethereum-graph-plan");
+  const decoded = decodeFoundationEthereumTransaction(input.transaction);
+  if (getAddress(input.transaction.to) !== getAddress(ethereum.canonicalStamp.router.address)
+    || getAddress(decoded.permit.launchWallet) !== getAddress(input.transaction.from)) throw new Error("The Ethereum launch wallet or router changed.");
+  const graph = await buildFoundationEthereumGraph({ source: input.source, account: input.transaction.from,
+    parameters: decoded.parameters, fundingPath: decoded.path, value: input.transaction.value, signal: input.signal });
+  const plan = prepareFoundationEthereumStamp({ identity: graph.identity, targets: graph.targets, outputs: decoded.route.expectedOutputs,
+    launchId: graph.launchId, account: graph.account, poolKey: graph.poolKey, validAfter: decoded.permit.validAfter, deadline: decoded.permit.deadline });
+  if (encodeFoundationEthereumStamp(plan, decoded.signature).data.toLowerCase() !== input.transaction.data.toLowerCase()) throw new Error("The signed Ethereum graph differs from its installed source.");
+  return { graph, decoded };
+}

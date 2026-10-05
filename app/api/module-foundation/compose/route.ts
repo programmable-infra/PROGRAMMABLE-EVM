@@ -1,3 +1,4 @@
+import { predictFoundationEthereumAccounts } from "@/lib/module-foundation/ethereum-graph-builder";
 import { foundationCreatorFeeFields, foundationCreatorFeeRates } from "@/lib/module-foundation/creator-fees";
 import { readFoundationEthFunding } from "@/lib/server/module-foundation/eth-funding";
 import { assertFoundationAtomicEth } from "@/lib/module-foundation/atomic-launch";
@@ -113,11 +114,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     const moduleAssetPins = resolved.pins;
     const metadata = foundationMetadata({ ...draft, imageURI: draft.image.url,
       modulePackageIds: selected.map(({ entry }) => entry.manifest.packageId), moduleAssetPins });
-    const token = await client.readContract({ address: binding.factory.address, abi: foundationFactoryAbiFor(binding), functionName: "predictTokenAddress",
+    const predicted = binding.ethereumGraph ? predictFoundationEthereumAccounts({ source: binding.ethereumGraph, account, tokenSalt: body.tokenSalt, metadata }) : null;
+    const token = predicted?.token ?? await client.readContract({ address: binding.factory.address, abi: foundationFactoryAbiFor(binding), functionName: "predictTokenAddress",
       args: [account, body.tokenSalt, metadata], blockNumber: checkpoint.blockNumber });
     foundationRequire(getAddress(token) !== quote.address && !moduleAssetPins.some(([address]) => getAddress(address) === getAddress(token)),
       "FOUNDATION_ASSET_CONTEXT_CONFLICT", "The predicted coin overlaps an existing asset. Prepare with a new launch salt.");
-    const finalContext: OpenConfigContext = { ...resolved.context, assets: { ...resolved.context.assets,
+    const finalContext: OpenConfigContext = { ...resolved.context, components: { ...resolved.context.components, factory: predicted?.engine ?? binding.factory.address }, assets: { ...resolved.context.assets,
       token: { chainId: chainId, address: token, decimals: 18 } } };
     for (const { entry, configuration } of selected) {
       const schema = entry.manifest.sourceDescriptor.configuration;

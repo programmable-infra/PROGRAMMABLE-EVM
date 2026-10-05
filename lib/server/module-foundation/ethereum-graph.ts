@@ -1,3 +1,4 @@
+import { assertFoundationEthereumTransaction } from "@/lib/module-foundation/ethereum-graph-builder";
 import "server-only";
 import { getAddress, keccak256, type PublicClient } from "viem";
 import { hydrateLaunchStampAnchor, type LaunchStampAnchor } from "@/lib/alchemy/launch-stamp.server";
@@ -31,6 +32,7 @@ export async function readFoundationEthereumGraphLaunch(input: {
     || tx.transactionIndex !== anchor.transactionIndex) throw new Error("The module transaction is not in the stamped block.");
   const candidate = decodeFoundationEthereumGraphLaunch({ source, provenance: hydrated.launchStampProvenance,
     transaction: { hash: tx.hash, from: tx.from, to: tx.to, data: tx.input, value: tx.value } });
+  await assertFoundationEthereumTransaction({ source, transaction: { from: tx.from, to: tx.to!, data: tx.input, value: tx.value }, signal });
   const blockNumber = anchor.blockNumber, address = candidate.engine;
   const [implementationCode, proxyCode, implementation, implementationHash, graphFactory, launchWallet, initialized, parametersHash, result] = await Promise.all([
     client.getCode({ address: source.implementation.address, blockNumber }),
@@ -60,7 +62,7 @@ export async function readFoundationEthereumGraphLaunch(input: {
   // Per-token binding: the shared implementation is never mistaken for the
   // account holding this token's launch record. This binding cannot launch again.
   const binding: FoundationDeploymentBinding = {
-    chainId: 1, factoryVersion: "v3", lpCustodyId: FOUNDATION_LP_CUSTODY_DEAD_ID,
+    ethereumGraph: source, chainId: 1, factoryVersion: "v3", lpCustodyId: FOUNDATION_LP_CUSTODY_DEAD_ID,
     releaseDigest: source.releaseDigest, sourceCommit: source.sourceCommit, startBlock: source.startBlock,
     factory: { address, runtimeCodeHash: source.proxyRuntimeCodeHash },
     hookDeployer: { address: getAddress(ethereum.canonicalStamp.graphFactory.address),

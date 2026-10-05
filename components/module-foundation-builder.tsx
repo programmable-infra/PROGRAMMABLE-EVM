@@ -295,7 +295,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       void preparation.prepare(snapshot.draft, snapshot.contextKey, prepareWarm)
         .then(review => {
           if (current) setWarmState({ key: warmKey, status: review ? "ready" : "error" });
-          if (!review || !current || attempts >= 3) return;
+          if (!review || !current || attempts >= (availability.chainId === 1 ? 1 : 3)) return;
           // Keep a short price reference ready while the owner is still editing. Never poll an idle/hidden tab forever.
           refreshTimer = window.setTimeout(() => {
             if (document.visibilityState === "visible" && document.hasFocus() && form.current?.contains(document.activeElement)) run();
@@ -303,10 +303,10 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
         })
         .catch(() => { if (current) setWarmState({ key: warmKey, status: "error" }); });
     };
-    const timer = window.setTimeout(run, 800);
+    const timer = window.setTimeout(run, availability.chainId === 1 ? 2_000 : 800);
     return () => { current = false; window.clearTimeout(timer); window.clearTimeout(refreshTimer); preparation.invalidate(); };
     // Only exact draft/context changes should start RPC work, never callback identity or progress renders.
-  }, [warmKey, warmRetry]);
+  }, [warmKey, warmRetry, availability.chainId]);
 
   async function prepare(event: FormEvent) {
     event.preventDefault();

@@ -19,7 +19,7 @@ import { withFoundationOwnerCatalogV1 } from "@/lib/server/module-foundation/own
 
 it("checks independent modules in bounded parallel batches, preserves order and excludes invalid or other-host records", async () => {
   const availability = { available: true, binding: { releaseDigest: "host" }, catalog: { document: { entries: [] }, authority: { admissions: [], releases: [] } } } as unknown as FoundationAvailabilityEnvelope;
-  const valid = Array.from({ length: 8 }, (_, i) => ({ protocolReleaseDigest: "host", manifest: { packageId: `module-${i}` }, release: {} }));
+  const valid = Array.from({ length: 8 }, (_, i) => ({ protocolReleaseDigest: "host", manifest: { packageId: `module-${i}`, familyId: `family-${i}` }, publishedAt: "2026-10-05T00:00:00Z", release: { chainId: 4663 } }));
   const result = await withFoundationOwnerCatalogV1(availability, { read: async () => [
     ...valid, { ...valid[0], invalid: true }, { ...valid[0], protocolReleaseDigest: "other-host" }, valid[0],
   ], client: {} as PublicClient });

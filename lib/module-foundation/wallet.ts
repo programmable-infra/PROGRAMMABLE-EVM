@@ -1,3 +1,5 @@
+import { decodeFoundationEthereumTransaction } from "./ethereum-graph";
+import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
 import { getAddress, keccak256, toHex, type Address, type Hex, type PublicClient } from "viem";
 import type { ModuleNativeWalletTransaction } from "@/lib/module-mode/native-client";
 import { readFoundationResolution, writeFoundationResolution, type FoundationResolutionMetadata } from "./result-store";
@@ -102,6 +104,7 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
       binding.state = "ready";
       return transaction;
     }
+    if (sequence.kind === "launch" && current.ethereumGraph) await assertFoundationEthereumTransaction({ source: current.ethereumGraph, transaction: sequence.steps.at(-1)!.transaction });
     let checkpoint = await assertFoundationInfrastructure(binding.client, current);
     if (sequence.kind === "launch" && sequence.parameters.modules.length > 0) {
       if (!binding.resolveCatalog) throw new Error("The current module admissions cannot be checked. Review again.");
@@ -111,7 +114,7 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
         context: { roles: { creator: sequence.account }, assets: {
           token: { chainId: foundationBindingChainId(current), address: sequence.result.token, decimals: 18 },
           quote: { chainId: foundationBindingChainId(current), address: sequence.parameters.quote, decimals: sequence.parameters.quoteDecimals } },
-        components: { factory: current.factory.address, ...Object.fromEntries(Object.entries(foundationChainProfile(foundationBindingChainId(current)).infrastructure).map(([role, pin]) => [role, pin.address])) } } });
+        components: { factory: current.ethereumGraph ? decodeFoundationEthereumTransaction(sequence.steps.at(-1)!.transaction).engine : current.factory.address, ...Object.fromEntries(Object.entries(foundationChainProfile(foundationBindingChainId(current)).infrastructure).map(([role, pin]) => [role, pin.address])) } } });
       decodeFoundationLaunchSelectionsV1({ chainId: foundationBindingChainId(current), catalog: catalog!, calldata: sequence.steps.at(-1)!.transaction.data,
         packageIds: sequence.modulePackageIds, context: assets.context });
     }

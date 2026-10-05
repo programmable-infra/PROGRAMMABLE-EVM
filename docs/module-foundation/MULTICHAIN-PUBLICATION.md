@@ -4,7 +4,7 @@
 
 The owner requested on 2026-10-05 that adding a module on Robinhood also makes the same module version available on Ethereum mainnet. The implementation target is one publication job with both networks as required targets. After Ethereum Module Mode is enabled, new versions become selectable on both chains through one shared activation record.
 
-This is a design decision, not an implemented deployment pipeline. Module Mode currently launches on Robinhood. Ethereum Custom Hook support does not establish Ethereum Module Mode support. The Ethereum implementation has chain profiles, a shared UI, an immutable graph launch account and fork-tested canonical stamping. Production host admission, graph wallet preparation and the shared publication coordinator still need integration and release evidence. See [the Ethereum implementation status](ETHEREUM-MAINNET.md).
+The shared coordinator is implemented in `ops/module-owner-publication/shared-operator.mjs`. It stages both chain deployments, verifies both records and publishes them through one conditional catalog write. Website activation is recorded separately in [the Ethereum release status](ETHEREUM-MAINNET.md).
 
 ## One package, separate deployments
 
@@ -30,7 +30,9 @@ Concurrent readers and publication retries should share bounded work. Use one ta
 
 ## Application integration
 
-The existing catalog already separates a `FoundationModuleManifestV1` from a `FoundationReleaseReferenceV1`, whose fields include `chainId`, factory and evidence digests. The owner-publication verifier and runtime reader accept explicit Ethereum and Robinhood identities, including Ethereum deployment finality. The existing publication operator still deploys and publishes one Robinhood target. Introduce a versioned shared publication envelope that groups the per-chain records, keeping existing single-chain publications readable. Porting the verifier does not make publication atomic across chains.
+The catalog separates `FoundationModuleManifestV1` from chain-specific `FoundationReleaseReferenceV1` records. A `programmable.shared-module-job.v1` file provides one `sourceFile` and two `targets`, for chain IDs 1 and 4663. Each target supplies its test command, compiled artifacts and host release digest. Set `activate` to `false` to stage both targets and to `true` to publish the same staged records. The `--job`, `--wallet-file`, `--storage-file` and `--output` arguments identify local files; private credentials must not enter the source package.
+
+Deployment receipts, signed publications and checkpoints are preserved in each target's output directory. Resuming the same job reuses completed deployments. The final write checks the existing catalog ETag, preserves unrelated publications and previous immutable versions, and requires both records to have the same package and request digest. New-launch readers select the newest valid version in each family. Token recovery continues to resolve previous versions.
 
 Pass the selected chain and release identity through availability, composition, asset resolution, launch preparation, pending transactions, readback and indexing. Include both in cache and idempotency keys. Network changes must invalidate a prepared wallet request. Do not change a shared global chain constant while another operation is running.
 

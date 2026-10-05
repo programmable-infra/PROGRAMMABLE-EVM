@@ -1,4 +1,5 @@
 "use client";
+import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 
 import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 
@@ -47,7 +48,7 @@ export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, sav
   const chainId = foundationBindingChainId(saved);
   const authority = await (chainId === 4663 ? fetchFoundationAvailability(signal, token) : fetchFoundationAvailability(signal, token, chainId));
   if (!authority.available || !authority.binding || authority.binding.releaseDigest.toLowerCase() !== saved.releaseDigest.toLowerCase()
-    || getAddress(authority.binding.factory.address) !== getAddress(saved.to)) throw new Error("The saved launch release could not be verified.");
+    || getAddress(authority.binding.ethereumGraph ? ethereum.canonicalStamp.router.address : authority.binding.factory.address) !== getAddress(saved.to)) throw new Error("The saved launch release could not be verified.");
   const found = await discoverFoundationLaunch({ client, binding: authority.binding, token, transactionHash: saved.transactionHash, signal });
   if (signal?.aborted || getAddress(found.token) !== token || found.transactionHash.toLowerCase() !== saved.transactionHash.toLowerCase()
     || getAddress(found.transaction.from) !== getAddress(saved.account) || getAddress(found.transaction.to) !== getAddress(saved.to)
@@ -177,7 +178,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
       const ethFunding = composition.ethFunding ? { ...composition.ethFunding, maximumEth: BigInt(composition.ethFunding.maximumEth), quoteAmount: BigInt(composition.ethFunding.quoteAmount) } : undefined;
       if ((maximumEth > 0n) !== Boolean(ethFunding) || (ethFunding && ethFunding.maximumEth !== maximumEth)) throw new Error("The ETH spending amount changed. Create the launch again.");
       const sequence = await prepareFoundationLaunch({ client: session.client, binding, account, tokenSalt,
-        metadata, quote: draft.quoteAsset,
+        metadata, quote: draft.quoteAsset, accessToken: session.walletContext.getAccessToken,
         startPrice: composition.startPrice, initialBuy: ethFunding ? formatUnits(ethFunding.quoteAmount, composition.startPrice.decimals) : "0", additionalLiquidity: "0", ethFunding,
         ...creatorFees, modules: composition.modules, slippageBps: 100, signal });
       assertCurrent();

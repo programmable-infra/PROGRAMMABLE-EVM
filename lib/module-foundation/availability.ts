@@ -1,6 +1,7 @@
 import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "./chains";
 import { getAddress, isAddress, type Address, type Hex } from "viem";
 import type { FoundationDeploymentBinding } from "./client";
+import { ETHEREUM_MODULE_BINDING, ETHEREUM_MODULE_SOURCE } from "./ethereum-release";
 import { foundationFactoryVersion } from "./protocol";
 import { bindFoundationCatalogV1, FOUNDATION_CATALOG_SCHEMA_V1, type FoundationCatalogAuthorityV1, type FoundationCatalogDocumentV1 } from "./catalog";
 
@@ -8,9 +9,10 @@ export const FOUNDATION_AVAILABILITY_SCHEMA = "programmable.module-foundation.av
 export const FOUNDATION_AVAILABILITY_SCHEMA_V2 = "programmable.module-foundation.availability.v2";
 export const FOUNDATION_AVAILABILITY_SCHEMA_V3 = "programmable.module-foundation.availability.v3";
 export const FOUNDATION_AVAILABILITY_SCHEMA_V4 = "programmable.module-foundation.availability.v4";
+export const FOUNDATION_AVAILABILITY_SCHEMA_V5 = "programmable.module-foundation.availability.v5";
 export interface FoundationAvailabilityEnvelope {
   chainId?: FoundationChainId;
-  schemaVersion: typeof FOUNDATION_AVAILABILITY_SCHEMA | typeof FOUNDATION_AVAILABILITY_SCHEMA_V2 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V3 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V4;
+  schemaVersion: typeof FOUNDATION_AVAILABILITY_SCHEMA | typeof FOUNDATION_AVAILABILITY_SCHEMA_V2 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V3 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V4 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V5;
   available: boolean;
   reason: string | null;
   binding: FoundationDeploymentBinding | null;
@@ -25,8 +27,8 @@ export class FoundationProviderDisagreementError extends Error {
 }
 export function unavailableFoundation(schemaVersion: FoundationAvailabilityEnvelope["schemaVersion"] = FOUNDATION_AVAILABILITY_SCHEMA, chainId: FoundationChainId = 4663): FoundationAvailabilityEnvelope {
   foundationChainProfile(chainId);
-  if (chainId === 1 && schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V4) throw new Error("Ethereum availability requires an explicit chain-bound schema.");
-  return { schemaVersion, ...(schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 ? { chainId } : {}), available: false,
+  if (chainId === 1 && schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V4 && schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V5) throw new Error("Ethereum availability requires an explicit chain-bound schema.");
+  return { schemaVersion, ...([FOUNDATION_AVAILABILITY_SCHEMA_V4, FOUNDATION_AVAILABILITY_SCHEMA_V5].includes(schemaVersion) ? { chainId } : {}), available: false,
     reason: "Launching is temporarily unavailable while this release is being verified. Your coin details stay here.", binding: null,
     catalog: { document: { schemaVersion: FOUNDATION_CATALOG_SCHEMA_V1, entries: [] }, authority: { admissions: [], releases: [] } } };
 }
@@ -51,6 +53,27 @@ function tokenAddress(value: unknown): Address {
 /** Parse only the trusted same-origin response; this is not an independent acceptance decision. */
 export function parseFoundationAvailability(value: unknown, now = Date.now()): FoundationAvailabilityEnvelope {
   const r = record(value);
+  if (r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V5) {
+    if (r.chainId !== 1) throw new Error("This graph release belongs only to Ethereum.");
+    const token = r.token === undefined ? undefined : tokenAddress(r.token).toLowerCase() as Address;
+    if (r.available !== true) return { ...unavailableFoundation(FOUNDATION_AVAILABILITY_SCHEMA_V5, 1), ...(token ? { token } : {}) };
+    const b = record(r.binding), e = record(r.evidence);
+    if (e.kind !== "owner-source-runtime-v1" || e.releaseDigest !== ETHEREUM_MODULE_SOURCE.releaseDigest
+      || typeof e.checkedAt !== "string" || !Number.isFinite(Date.parse(e.checkedAt))
+      || Math.abs(now - Date.parse(e.checkedAt)) > 120_000 || e.providerCount !== 2
+      || b.releaseDigest !== ETHEREUM_MODULE_SOURCE.releaseDigest || b.chainId !== 1
+      || b.sourceCommit !== ETHEREUM_MODULE_SOURCE.sourceCommit || b.startBlock !== String(ETHEREUM_MODULE_SOURCE.startBlock)
+      || b.factoryVersion !== "v3" || b.lpCustodyId !== ETHEREUM_MODULE_BINDING.lpCustodyId) throw new Error("Current Ethereum source evidence is unavailable.");
+    hash(e.blockHash);
+    const factory = pin(b.factory), hookDeployer = pin(b.hookDeployer);
+    if (hookDeployer.address !== ETHEREUM_MODULE_BINDING.hookDeployer.address || hookDeployer.runtimeCodeHash !== ETHEREUM_MODULE_BINDING.hookDeployer.runtimeCodeHash
+      || (token ? factory.runtimeCodeHash !== ETHEREUM_MODULE_SOURCE.proxyRuntimeCodeHash
+        : factory.address !== ETHEREUM_MODULE_SOURCE.implementation.address || factory.runtimeCodeHash !== ETHEREUM_MODULE_SOURCE.implementation.runtimeCodeHash)) throw new Error("The Ethereum launch source changed.");
+    const catalog = record(r.catalog) as unknown as FoundationAvailabilityEnvelope["catalog"];
+    bindFoundationCatalogV1(catalog.document, catalog.authority);
+    return { schemaVersion: FOUNDATION_AVAILABILITY_SCHEMA_V5, chainId: 1, available: true, reason: null,
+      binding: { ...ETHEREUM_MODULE_BINDING, factory }, catalog, ...(token ? { token } : {}) };
+  }
   if (r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V2 && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V3 && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V4) throw new Error("The release response is unsupported.");
   const chainId = r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 ? foundationChainProfile(Number(r.chainId)).chainId : 4663;
   if (r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 && r.chainId !== chainId) throw new Error("The release response has no exact network identity.");

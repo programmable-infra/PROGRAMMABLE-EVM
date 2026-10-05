@@ -29,6 +29,7 @@ export function parseFoundationAvailabilityQuery(params: URLSearchParams): { tok
 /** The backend rechecks its installed release, accepted database decision and live runtime/finality evidence. */
 export async function readFoundationAvailabilityResponse(fetcher: typeof fetch = fetch, timeoutMs = 12_000, token?: Address, chainId: FoundationChainId = 4663): Promise<unknown> {
   foundationChainProfile(chainId);
+  if (chainId === 1) return (await import("./ethereum-availability")).readEthereumFoundationAvailability(token);
   if (token !== undefined) parseFoundationAvailabilityToken(new URLSearchParams({ token }));
   const raw = process.env.PROGRAMMABLE_CUSTOM_LAUNCH_API_BASE_URL;
   if (!raw) throw new Error("The foundation authority is not configured.");
