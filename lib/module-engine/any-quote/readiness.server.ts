@@ -122,12 +122,13 @@ async function context(options: AnyQuoteReadinessOptionsV1, verifyAmmInfrastruct
   const pin = async (address: Address, hash: Hex) => {
     if (keccak256(await code(address)).toLowerCase() !== hash.toLowerCase()) throw new AnyQuoteErrorV1("INFRASTRUCTURE_RUNTIME_MISMATCH");
   };
-  if (verifyAmmInfrastructure) await Promise.all([
+  const verifyAmm = () => Promise.all([
     pin(infra.universalRouter, infra.universalRouterCodeHash), pin(infra.poolManager, infra.poolManagerCodeHash),
     pin(infra.stateView, infra.stateViewCodeHash), pin(infra.v4Quoter, infra.v4QuoterCodeHash),
   ]);
+  if (verifyAmmInfrastructure) await verifyAmm();
   let discovery: ReturnType<typeof createAnyQuoteV4InitializeDiscoveryV1> | undefined;
-  return { profile, infra, now, checkpoint, block, code, call, pin,
+  return { profile, infra, now, checkpoint, block, code, call, pin, verifyAmm,
     discovery: () => discovery ??= createAnyQuoteV4InitializeDiscoveryV1({ checkpoint, rpcs, chainId: profile.chainId }) };
 }
 type Context = Awaited<ReturnType<typeof context>>;
@@ -421,26 +422,36 @@ export function qualifyAnyQuoteDepthV1(smallIn: bigint, smallOut: bigint, largeI
   if (difference * 10_000n > base * 200n) throw new AnyQuoteErrorV1("MARKET_PRICE_IMPACT_TOO_HIGH");
 }
 
+export type AnyQuoteUsdReferenceV1 = {
+  chainId: FoundationChainId; quoteAsset: Address; decimals: number;
+  checkpoint: Context["checkpoint"]; price: AnyQuotePriceEvidenceV1;
+};
+
 /** A USD reference does not require an engine release or an ETH swap route.
  * Tokens without an authoritative feed retain the existing qualified AMM policy. */
-export async function readAnyQuoteUsdPriceV1(input: { quoteAsset: string }, options: AnyQuoteReadinessOptionsV1 = {}) {
+export async function readAnyQuoteUsdPriceV1(input: { quoteAsset: string }, options: AnyQuoteReadinessOptionsV1 = {}): Promise<AnyQuoteUsdReferenceV1> {
   const quoteAsset = anyQuoteAddressV1(input.quoteAsset), ctx = await context(options, false);
   if (await ctx.code(quoteAsset) === "0x") throw new AnyQuoteErrorV1("TOKEN_CONTRACT_NOT_FOUND", "incompatible");
   const decimals = Number(await ctx.call(quoteAsset, "function decimals() view returns (uint8)"));
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 36) throw new AnyQuoteErrorV1("UNSUPPORTED_TOKEN_DECIMALS", "incompatible");
   const price = await trustedPrice(quoteAsset, ctx, options);
   if (price) return { chainId: ctx.profile.chainId, quoteAsset, decimals, checkpoint: ctx.checkpoint, price };
-  const readiness = await assessAnyQuoteAssetV1(input, options);
+  await ctx.verifyAmm();
+  const readiness = await assessWithContext(input, options, ctx);
   if (readiness.status !== "compatible") throw new AnyQuoteErrorV1(readiness.code, readiness.status);
   return { chainId: readiness.chainId, quoteAsset: readiness.quoteAsset, decimals: readiness.token.decimals,
     checkpoint: readiness.checkpoint, price: readiness.price };
 }
 
 export async function assessAnyQuoteAssetV1(input: { quoteAsset: string; probeEthAmount?: bigint }, options: AnyQuoteReadinessOptionsV1 = {}): Promise<AnyQuoteReadinessV1> {
+  return assessWithContext(input, options);
+}
+
+async function assessWithContext(input: { quoteAsset: string; probeEthAmount?: bigint }, options: AnyQuoteReadinessOptionsV1, existingContext?: Context): Promise<AnyQuoteReadinessV1> {
   let quoteAsset: Address | null = null;
   try {
     quoteAsset = anyQuoteAddressV1(input.quoteAsset);
-    const ctx = await context(options);
+    const ctx = existingContext ?? await context(options);
     if (await ctx.code(quoteAsset) === "0x") throw new AnyQuoteErrorV1("TOKEN_CONTRACT_NOT_FOUND", "incompatible");
     const [decimalsValue, totalSupply, name, symbol] = await Promise.all([
       ctx.call(quoteAsset, "function decimals() view returns (uint8)"), ctx.call(quoteAsset, "function totalSupply() view returns (uint256)"),

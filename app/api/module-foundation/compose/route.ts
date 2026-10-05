@@ -97,8 +97,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     request.signal.throwIfAborted();
     const maximumEth = foundationParseAmount(draft.initialBuy, 18);
     if (maximumEth > 0n) await assertFoundationAtomicEth(client, binding, checkpoint.blockNumber);
-    const ethFunding = maximumEth > 0n ? await readFoundationEthFunding(getAddress(draft.quoteAsset), maximumEth, chainId) : undefined;
-    const quote = await readFoundationQuote(client, getAddress(draft.quoteAsset), account, checkpoint.blockNumber);
+    const [ethFunding, quote] = await Promise.all([
+      maximumEth > 0n ? readFoundationEthFunding(getAddress(draft.quoteAsset), maximumEth, chainId) : undefined,
+      readFoundationQuote(client, getAddress(draft.quoteAsset), account, checkpoint.blockNumber),
+    ]);
     const context: OpenConfigContext = { roles: { creator: account },
       assets: { quote: { chainId: chainId, address: quote.address, decimals: quote.decimals } },
       components: { factory: binding.factory.address,
@@ -109,7 +111,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }));
     // One global bound applies across all selected modules, including defaults and fixed source values.
     const [resolved, startPrice] = await Promise.all([
-      resolveFoundationAssetsV1({ client, addresses, context, checkpoint }), readFoundationStartPrice(quote, chainId),
+      resolveFoundationAssetsV1({ client, addresses, context, checkpoint }), readFoundationStartPrice(quote, chainId, ethFunding?.priceReference),
     ]);
     const moduleAssetPins = resolved.pins;
     const metadata = foundationMetadata({ ...draft, imageURI: draft.image.url,

@@ -3,19 +3,44 @@ import type { Hex } from "viem";
 import { productionMainnetRpcPair } from "@/lib/onchain/website-rpc-providers.server";
 import { TradeRpcExecutionRevertedV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 
+const nextRequest = new Map<string, number>();
+const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+/** Share the request budget across quote contexts in this server instance.
+ * Leave capacity for the website's other reads on the same provider account. */
+async function pace(endpoint: string) {
+  const now = Date.now(), slot = Math.max(now, nextRequest.get(endpoint) ?? now);
+  if (slot - now > 8_000) throw new Error("The quote provider is busy.");
+  nextRequest.set(endpoint, slot + 50);
+  if (slot > now) await pause(slot - now);
+}
+
+class ProviderRateLimit extends Error {
+  constructor(readonly delayMs = 1_000) { super("The quote provider is busy."); }
+}
+
 /** Two existing, independently operated Ethereum providers. Never expose their URLs in errors. */
 export function foundationMainnetRpcs(env: Readonly<Record<string, string | undefined>> = process.env, fetcher: typeof fetch = fetch): readonly [TradeRpcV1, TradeRpcV1] {
   const pair = productionMainnetRpcPair(env);
-  const transport = (endpoint: string): TradeRpcV1 => async (method, params) => {
-    try {
+  const transport = (endpoint: string): TradeRpcV1 => {
+    const request: TradeRpcV1 = async (method, params) => {
+      await pace(endpoint);
       const response = await fetcher(endpoint, { method: "POST", cache: "no-store", redirect: "error", signal: AbortSignal.timeout(10_000),
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+      if (response.status === 429) {
+        await response.body?.cancel();
+        const seconds = Number(response.headers.get("retry-after") ?? 1);
+        // Long provider outages must not hold a launch open until its price expires.
+        if (!Number.isFinite(seconds) || seconds < 0 || seconds > 2) throw new Error();
+        throw new ProviderRateLimit(Math.max(500, seconds * 1_000));
+      }
       if (!response.ok || !response.body || Number(response.headers.get("content-length") ?? 0) > 1_048_576) throw new Error();
       const reader = response.body.getReader(), chunks: Uint8Array[] = []; let size = 0;
       try { for (;;) { const part = await reader.read(); if (part.done) break;
         size += part.value.length; if (size > 1_048_576) throw new Error(); chunks.push(part.value);
       } } finally { await reader.cancel().catch(() => undefined); }
       const data = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      if (data?.code === -32007 || data?.error?.code === -32007) throw new ProviderRateLimit();
       if (!data || data.jsonrpc !== "2.0" || data.id !== 1) throw new Error();
       if (method === "eth_call" && data.error?.code === 3 && !Object.hasOwn(data, "result")
         && typeof data.error.message === "string" && /^execution reverted\b/i.test(data.error.message)
@@ -24,10 +49,20 @@ export function foundationMainnetRpcs(env: Readonly<Record<string, string | unde
       }
       if (data.error || !Object.hasOwn(data, "result")) throw new Error();
       return data.result;
-    } catch (error) {
-      if (error instanceof TradeRpcExecutionRevertedV1) throw error;
-      throw new Error("An Ethereum provider is temporarily unavailable.");
-    }
+    };
+    return async (method, params) => {
+      try {
+        try { return await request(method, params); }
+        catch (error) {
+          if (!(error instanceof ProviderRateLimit)) throw error;
+          await pause(error.delayMs);
+          return await request(method, params);
+        }
+      } catch (error) {
+        if (error instanceof TradeRpcExecutionRevertedV1) throw error;
+        throw new Error("An Ethereum provider is temporarily unavailable.");
+      }
+    };
   };
   return [transport(pair.primary.url), transport(pair.secondary.url)];
 }

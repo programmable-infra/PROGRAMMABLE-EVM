@@ -1,16 +1,18 @@
 import "server-only";
 import { getAddress, type Address } from "viem";
-import { assessAnyQuoteAssetV1 } from "@/lib/module-engine/any-quote/readiness.server";
+import { assessAnyQuoteAssetV1, type AnyQuoteUsdReferenceV1 } from "@/lib/module-engine/any-quote/readiness.server";
 import { assertFoundationFundingPath, type FoundationEthFunding } from "@/lib/module-foundation/atomic-launch";
 import { requireAnyQuoteNativeUnlockRouteV1 } from "@/lib/module-engine/any-quote/route";
 import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 
 /** The ETH input is a spending ceiling. A 1% output margin leaves any unspent ETH refundable. */
-export async function readFoundationEthFunding(quote: Address, maximumEth: bigint, chainId: FoundationChainId = 4663): Promise<FoundationEthFunding> {
+export async function readFoundationEthFunding(quote: Address, maximumEth: bigint, chainId: FoundationChainId = 4663): Promise<FoundationEthFunding & { priceReference?: AnyQuoteUsdReferenceV1 }> {
   const FOUNDATION_WETH = foundationChainProfile(chainId).wrappedEth.address;
   if (getAddress(quote) === FOUNDATION_WETH) return { maximumEth, quoteAmount: maximumEth, path: [] };
   const result = await assessAnyQuoteAssetV1({ quoteAsset: quote, probeEthAmount: maximumEth }, { chainId });
-  if (result.status !== "compatible") throw new Error("No ETH route is available for this token at this amount. Increase the first buy or choose Classic.");
+  if (result.status !== "compatible") throw new Error(result.status === "inconclusive"
+    ? "The quote token's market could not be verified. Try again in a moment."
+    : "This token has no supported ETH funding route at this amount. Choose another quote token.");
   const hops = requireAnyQuoteNativeUnlockRouteV1(result.routes.buy, "buy", chainId);
   if (getAddress(hops.at(-1)!.tokenOut) !== getAddress(quote)) throw new Error("The ETH route ends in another quote token.");
   const path = hops.map(hop => ({ intermediateCurrency: hop.tokenIn, fee: hop.key.fee,
@@ -18,5 +20,7 @@ export async function readFoundationEthFunding(quote: Address, maximumEth: bigin
   assertFoundationFundingPath(quote, path, chainId);
   const quoteAmount = BigInt(result.routes.buy.amountOut) * 99n / 100n;
   if (quoteAmount <= 0n) throw new Error("The first buy is too small for this token. Increase the ETH amount.");
-  return { maximumEth, quoteAmount, path };
+  // The same independently verified market supplies both funding and the starting price.
+  return { maximumEth, quoteAmount, path, priceReference: { chainId: result.chainId,
+    quoteAsset: result.quoteAsset, decimals: result.token.decimals, checkpoint: result.checkpoint, price: result.price } };
 }
