@@ -22,7 +22,7 @@ const unavailable = async (): Promise<never> => { throw new Error("source unavai
 describe("Ethereum verified Explore adapter", () => {
   it("adds only the selected verified Classic identity to unified discovery", async () => {
     const helixAddress = "0x9C355950bd5634eF2b2935d356075C7c19b2386a";
-    const helix = { ...entry(1), tokenAddress: helixAddress };
+    const helix: CanonicalTokenExploreEntry = { ...entry(1), tokenAddress: helixAddress };
     const classic = vi.fn(source([helix, entry(2)]));
     const custom = vi.fn(source([customGraphExploreEntry]));
     const catalog = await readEthereumUnifiedExploreCatalog({ classic, custom });
