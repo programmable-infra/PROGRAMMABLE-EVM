@@ -596,7 +596,7 @@ jobs:
       - name: Verify contract release bindings, forks, and late migration
         env:
           LATE_MIGRATION_FORK_RPC_URL: https://eth-mainnet.public.blastapi.io
-          FOUNDATION_RPC_URL: https://rpc.mainnet.chain.robinhood.com
+          FOUNDATION_RPC_URL: https://rpc-robinhood.blockmachine.io
         run: node scripts/ci/contracts-ci.mjs release
 
   contracts-analysis:
