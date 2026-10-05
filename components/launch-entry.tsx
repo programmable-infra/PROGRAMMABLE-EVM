@@ -38,7 +38,7 @@ function LaunchArtworkImage() {
 }
 
 /** Opening a draft is always available; the builder checks authority before review and submission. */
-export function ModuleFoundationLaunchCard({ chainId = DEFAULT_VIEW_CHAIN_ID }: { chainId?: ViewChainId } = {}) {
+export function ModuleFoundationLaunchCard({ chainId = DEFAULT_VIEW_CHAIN_ID }: { chainId?: ViewChainId }) {
   const cardProps = {
     className: `launch-model-card ${launchExperience.modelCard} liquid-glass-surface`,
     "data-launch-model-option": "modules",
