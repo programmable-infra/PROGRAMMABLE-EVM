@@ -1711,6 +1711,9 @@ function PrivyWalletBridge({
       void provider.request({ method: "eth_accounts" }).then(accounts => {
         if (isCurrent() && revision === accountRevision) accountsChanged(accounts);
       }).catch(() => { /* Never prompt from a background read. */ });
+      // A remembered injected provider may outlive the SDK connection during
+      // reconnect. It can report accounts, but cannot yet verify this session's chain.
+      if (!walletRequestSessionRef.current.authenticated || !walletRequestSessionRef.current.walletCapability) return;
       void provider.request({ method: "eth_chainId" }).then(chainId => {
         // Network reads must not hold up account updates. Newer events and
         // explicit switches win over a read started before either one.
@@ -1726,7 +1729,7 @@ function PrivyWalletBridge({
       provider.removeListener?.("accountsChanged", accountsChanged);
       provider.removeListener?.("chainChanged", chainChanged);
     };
-  }, [activeAuthenticated, connectedWalletAddress, connectedWalletClientType, disconnecting,
+  }, [activeAuthenticated, connectedWalletClientType, disconnecting,
     ownedWalletAddresses, ready, user?.id, walletsReady]);
   const providerSettled = isWalletProviderSettled(
     ready && !sessionSuppressed && authenticated === Boolean(user),
