@@ -38,6 +38,17 @@ describe("inline Foundation trading", () => {
     expect(html).toContain('aria-haspopup="dialog"');
   });
 
+  it("labels direct six-decimal token inputs and keeps ETH as an explicit alternative", () => {
+    const token = { ...props.quote, symbol: "PAIR", decimals: 6, balance: "12.345678" };
+    const html = renderToStaticMarkup(<ModuleFoundationMarket {...props} quote={token} tradeAsset={token}
+      maximumBuyAmount="12.345678" tradeCurrency={{ value: "quote", onChange: vi.fn() }} />);
+    expect(html).toContain('aria-label="Payment currency"');
+    expect(html).toMatch(/aria-pressed="true"[^>]*>PAIR<\/button>/);
+    expect(html).toContain('aria-label="Amount of PAIR to buy"');
+    expect(html).not.toContain('aria-label="Amount of ETH to buy"');
+    expect(html).toContain('title="12.345678"');
+  });
+
   it("keeps Connect wallet enabled with an empty amount and disables Max without verified funds", () => {
     const html = renderToStaticMarkup(<ModuleFoundationMarket {...props} maximumBuyAmount={undefined} tradeAsset={{ ...props.tradeAsset!, balance: undefined }} walletAction={{ label: "Connect wallet", onClick: vi.fn() }} />);
     const submit = html.match(/<button type="submit"[^>]*>/)?.[0];

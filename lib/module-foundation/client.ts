@@ -16,7 +16,7 @@ import { encodeFoundationLaunchEntry, foundationFactoryV2Abi, foundationHookAbi,
 import { FOUNDATION_ABI_ID,
   FOUNDATION_INT128_MAX, FOUNDATION_PLATFORM_RECIPIENT, FOUNDATION_ZERO_HASH, FOUNDATION_DEAD_ADDRESS, FOUNDATION_FACTORY_V2_ID, FOUNDATION_FACTORY_V3_ID, FOUNDATION_LP_CUSTODY_DEAD_ID } from "./constants";
 import { foundationParseAmount, planFoundationPrice } from "./price";
-import { parseFoundationStartPrice, planFoundationStartPrice, type FoundationStartPrice } from "./start-price";
+import { foundationPriceExpiry, parseFoundationStartPrice, planFoundationStartPrice, type FoundationStartPrice } from "./start-price";
 import { buildFoundationExactInput, buildFoundationNativeExactInput, foundationNativeTradePath, foundationPoolId, foundationPoolKey, type FoundationPool } from "./route";
 import type { AnyQuoteExternalRouteV1 } from "@/lib/module-engine/any-quote/types";
 import type { FoundationPrepareModuleActionInputV1 } from "./action-runtime";
@@ -123,15 +123,19 @@ export async function readFoundationQuote(client: PublicClient, raw: Address, ac
   if (BigInt(address) <= 2n || Object.values(FOUNDATION_INFRASTRUCTURE).some(pin => pin.address === address)) throw new Error("Choose an ERC20 quote token.");
   const [code, name, symbol, decimals, totalSupply, balance] = await Promise.all([
     client.getCode({ address, blockNumber }),
-    client.readContract({ address, abi: erc20Abi, functionName: "name", blockNumber }),
-    client.readContract({ address, abi: erc20Abi, functionName: "symbol", blockNumber }),
+    client.readContract({ address, abi: erc20Abi, functionName: "name", blockNumber }).catch(() => ""),
+    client.readContract({ address, abi: erc20Abi, functionName: "symbol", blockNumber }).catch(() => ""),
     client.readContract({ address, abi: erc20Abi, functionName: "decimals", blockNumber }),
     client.readContract({ address, abi: erc20Abi, functionName: "totalSupply", blockNumber }),
     account ? client.readContract({ address, abi: erc20Abi, functionName: "balanceOf", args: [account], blockNumber }) : Promise.resolve(null),
   ]);
-  if (!code || code === "0x" || decimals > 36 || totalSupply === 0n || utf8ByteLength(name) > 256 || utf8ByteLength(symbol) > 64
-    || hasUnsafeDisplayCharacters(name) || hasUnsafeDisplayCharacters(symbol)) throw new Error("This quote token's metadata or decimals are unsupported.");
-  return { chainId: foundationClientProfile(client).chainId, address, name, symbol, decimals, codeHash: keccak256(code), balance,
+  if (!code || code === "0x" || !Number.isInteger(decimals) || decimals < 0 || decimals > 36 || typeof totalSupply !== "bigint") {
+    throw new Error("Enter an ERC20 token address on this network with 0 to 36 decimals.");
+  }
+  // Name and symbol are optional display metadata, not permission to form a pool.
+  const displayName = name && utf8ByteLength(name) <= 256 && !hasUnsafeDisplayCharacters(name) ? name : `Token ${address.slice(0, 6)}…${address.slice(-4)}`;
+  const displaySymbol = symbol && utf8ByteLength(symbol) <= 64 && !hasUnsafeDisplayCharacters(symbol) ? symbol : address.slice(0, 8);
+  return { chainId: foundationClientProfile(client).chainId, address, name: displayName, symbol: displaySymbol, decimals, codeHash: keccak256(code), balance,
     transferQualification: "exact-launch-simulation-required" as const };
 }
 
@@ -414,7 +418,7 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
   input.signal?.throwIfAborted();
   // Mining and simulation can consume the reference lifetime. Never present an expired review.
   parseFoundationStartPrice(startPrice, quote);
-  const priceExpiry = BigInt(startPrice.price.validUntil);
+  const priceExpiry = foundationPriceExpiry(startPrice);
   return sealFoundationSequence({ kind: "launch" as const, sourceKind: "module-foundation-v1" as const, account, binding,
     checkpoint, expiresAt: priceExpiry < p.deadline ? priceExpiry : p.deadline, quote, ethFunding, parameters: p, result, factoryVersion: result.factoryVersion, price, startPrice, poolKey: key, modulePackageIds: modulePackageIds ?? [],
     moduleAssetPins, balanceChecks: checks(),

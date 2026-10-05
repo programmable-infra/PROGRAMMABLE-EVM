@@ -6,7 +6,7 @@ import { encodeFoundationFundingPath, type FoundationEthFunding } from "./fundin
 import { requestEthereumModuleAuthorization } from "./ethereum-authorization";
 import { simulateFoundationSequence, type FoundationCheckpoint, type FoundationPreparedStep, type FoundationBalanceCheck, type readFoundationQuote } from "./client";
 import { assertFoundationV2Result, foundationV2PositionSpecs, foundationV2PositionCalls, verifyFoundationV2PositionData, type FoundationDeploymentBinding } from "./protocol";
-import { parseFoundationStartPrice, type planFoundationStartPrice, type FoundationStartPrice } from "./start-price";
+import { foundationPriceExpiry, parseFoundationStartPrice, type planFoundationStartPrice, type FoundationStartPrice } from "./start-price";
 import { assertFoundationNativeBalance } from "./native-funding";
 import { foundationPoolId } from "./pool-key";
 import type { FoundationAssetPinV1 } from "./assets";
@@ -69,7 +69,7 @@ export async function prepareFoundationEthereumLaunch(input: {
   verifyFoundationV2PositionData(specs, result.poolId, simulation.postData.slice(1));
   await assertFoundationNativeBalance(client, account, simulation.steps, checkpoint.blockNumber);
   parseFoundationStartPrice(startPrice, quote);
-  const deadline = BigInt(authorization.deadline), priceExpiry = BigInt(startPrice.price.validUntil);
+  const deadline = BigInt(authorization.deadline), priceExpiry = foundationPriceExpiry(startPrice);
   return { kind: "launch" as const, sourceKind: "module-foundation-v1" as const, account, binding, checkpoint,
     expiresAt: priceExpiry < deadline ? priceExpiry : deadline, quote, ethFunding, parameters: p, result,
     factoryVersion: result.factoryVersion, price, startPrice, poolKey: graph.poolKey, modulePackageIds, moduleAssetPins,

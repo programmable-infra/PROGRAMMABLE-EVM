@@ -108,13 +108,19 @@ describe("Foundation generic ERC20 asset metadata", () => {
     if (kind === "reorg") f.state.reorg = true;
     await expect(resolveFoundationAssetsV1({ client: f.client, addresses: [first], checkpoint })).rejects.toThrow();
   });
-  it.each(["no-code", "invalid-decimals", "zero-supply", "unsafe-symbol"])("retains the shared ERC20 reader's %s checks", async kind => {
+  it.each(["no-code", "invalid-decimals"])("retains the shared ERC20 reader's %s checks", async kind => {
     const f = rpc();
     if (kind === "no-code") f.state.code = "0x";
     if (kind === "invalid-decimals") f.state.decimals = 37;
-    if (kind === "zero-supply") f.state.supply = 0n;
-    if (kind === "unsafe-symbol") f.state.symbol = "ASSET\u200b";
     await expect(resolveFoundationAssetsV1({ client: f.client, addresses: [first] })).rejects.toThrow();
+  });
+  it("retains immutable asset identity with zero supply and replaces unsafe optional display metadata", async () => {
+    const f = rpc(), initial = await resolveFoundationAssetsV1({ client: f.client, addresses: [first] });
+    f.state.supply = 0n; f.state.symbol = "ASSET\u200b";
+    const current = await resolveFoundationAssetsV1({ client: f.client, addresses: [first] });
+    expect(current.pins).toEqual(initial.pins);
+    expect(current.assets[0].symbol).toBe(first.slice(0, 8));
+    expect(current.assets[0].symbol).not.toContain("\u200b");
   });
 });
 

@@ -59,7 +59,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     const feeKeys = body.draft && typeof body.draft === "object" && Object.hasOwn(body.draft, "creatorFeeBps")
       ? ["creatorFeeBps"] : ["creatorBuyFeeBps", "creatorSellFeeBps"];
     const draft = moduleRecord(body.draft, ["name", "symbol", "description", "image", "socialLinks", "quoteAsset", ...feeKeys,
-      "initialBuy", "additionalLiquidity", "modules"], "foundation.compose.draft") as unknown as FoundationLaunchDraft;
+      "initialBuy", "additionalLiquidity", "modules", ...(Object.hasOwn(body.draft, "quoteValuation") ? ["quoteValuation"] : [])], "foundation.compose.draft") as unknown as FoundationLaunchDraft;
     const creatorFees = foundationCreatorFeeFields(draft);
     const feeRates = foundationCreatorFeeRates(creatorFees);
     const account = getAddress(body.account);
@@ -96,6 +96,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     const client = createFoundationServerClient(chainId), checkpoint = await assertFoundationInfrastructure(client, binding);
     request.signal.throwIfAborted();
     const maximumEth = foundationParseAmount(draft.initialBuy, 18);
+    if (draft.quoteValuation !== undefined && (maximumEth !== 0n || foundationParseAmount(draft.additionalLiquidity, 18) !== 0n)) {
+      throw new Error("A start value in quote tokens launches without an ETH first buy. Set the first buy to 0.");
+    }
     if (maximumEth > 0n) await assertFoundationAtomicEth(client, binding, checkpoint.blockNumber);
     const [ethFunding, quote] = await Promise.all([
       maximumEth > 0n ? readFoundationEthFunding(getAddress(draft.quoteAsset), maximumEth, chainId) : undefined,
@@ -111,7 +114,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     }));
     // One global bound applies across all selected modules, including defaults and fixed source values.
     const [resolved, startPrice] = await Promise.all([
-      resolveFoundationAssetsV1({ client, addresses, context, checkpoint }), readFoundationStartPrice(quote, chainId, ethFunding?.priceReference),
+      resolveFoundationAssetsV1({ client, addresses, context, checkpoint }), draft.quoteValuation !== undefined
+        ? parseFoundationStartPrice({ mode: "quote", chainId, quoteAsset: quote.address, quoteCodeHash: quote.codeHash, decimals: quote.decimals,
+          valuationQuoteRaw: foundationParseAmount(draft.quoteValuation, quote.decimals, false).toString(),
+          checkpoint: { number: checkpoint.blockNumber.toString(), hash: checkpoint.blockHash, timestamp: checkpoint.timestamp.toString() },
+          validUntil: (checkpoint.timestamp + 45n).toString() }, { ...quote, chainId })
+        : readFoundationStartPrice(quote, chainId, ethFunding?.priceReference),
     ]);
     const moduleAssetPins = resolved.pins;
     const metadata = foundationMetadata({ ...draft, imageURI: draft.image.url,

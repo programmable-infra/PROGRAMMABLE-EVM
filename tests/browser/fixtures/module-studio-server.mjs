@@ -26,18 +26,19 @@ export async function createModuleStudioServer() {
       const [context,setContext] = useState('wallet:4663:release');
       const [renders,setRenders] = useState(0);
       const warm = async (draft,signal) => {
-        launchEvents.preparations++; launchEvents.startedAt=performance.now();
+        launchEvents.preparations++; launchEvents.startedAt=performance.now(); launchEvents.lastDraft=draft;
         signal.addEventListener('abort',()=>{launchEvents.aborts++;},{once:true});
         await new Promise(resolve=>setTimeout(resolve,1200)); signal.throwIfAborted();
         launchEvents.readyAt=performance.now();
         return {id:String(launchEvents.preparations),contextKey:context,expiresAt:Math.floor(Date.now()/1000)+120,
-          quote,chainId:4663,platformFeeBps:30,platformFeeRecipient:FOUNDATION_PLATFORM_FEE_RECIPIENT,creatorFeeBps:draft.creatorFeeBps,
+          quote:{...quote,address:draft.quoteAsset},chainId:4663,platformFeeBps:30,platformFeeRecipient:FOUNDATION_PLATFORM_FEE_RECIPIENT,creatorFeeBps:draft.creatorFeeBps,
           transactions:[{label:'Launch coin',to:quote.address,chainId:4663,value:'0',effect:'Launch coin'}]};
       };
       return <><button data-testid="wallet-switch" onClick={()=>setContext('other-wallet:4663:release')}>Fixture wallet switch</button>
         <button data-testid="rerender" onClick={()=>setRenders(value=>value+1)}>Fixture render {renders}</button>
         <ModuleFoundationBuilder layout="studio" availability={{status:'ready',chainId:4663,chainName:'Robinhood Chain'}}
           contextKey={context} catalog={catalog} quoteAssets={[quote]} suggestedInitialBuy="0.001"
+          onResolveQuote={new URLSearchParams(location.search).get('mode')==='open-quote' ? async address=>({address,chainId:4663,name:'Pair token',symbol:'PAIR',decimals:6,supported:true}) : undefined}
           onUploadImage={async ({image})=>({url:'https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/token-images/'+'aa'.repeat(32)+'.webp',sha256:image.sha256})}
           onWarmLaunch={warm} onPrepareLaunch={async draft=>{launchEvents.coldPreparations++;return warm(draft,new AbortController().signal);}}
           onConfirmLaunch={async review=>{launchEvents.walletRequests++;launchEvents.walletRequestedAt=performance.now();launchEvents.walletContext=review.contextKey;
@@ -51,7 +52,7 @@ export async function createModuleStudioServer() {
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
-      if(mode==='launch-speed') return <LaunchSpeedFixture/>;
+      if(mode==='launch-speed'||mode==='open-quote') return <LaunchSpeedFixture/>;
       if(mode==='restored-launch') return <ModuleFoundationLaunchHost layout="studio"/>;
       return <div className="app-frame"><SiteHeader/><main><div className={styles.launchPage}>
         <FoundationStudio draft={draft} catalog={catalog} quoteSymbol={customQuote?'TOKEN':'ETH'} initialBuy={draft.initialBuy}

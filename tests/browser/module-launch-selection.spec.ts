@@ -51,6 +51,35 @@ for (const width of [1440, 390]) {
   });
 }
 
+for (const width of [1440, 390]) {
+  test(`arbitrary quote pricing uses token units and clears the ETH first buy at ${width}px`, async ({ page }) => {
+    const studio = await createModuleStudioServer(); studio.listen(0, "127.0.0.1"); await once(studio, "listening");
+    const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
+    try {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`http://127.0.0.1:${address.port}/?mode=open-quote`);
+      if (width < 700) await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await page.getByLabel("Name", { exact: true }).fill("My coin");
+      await page.getByLabel("Ticker", { exact: true }).fill("COIN");
+      if (width < 700) await page.getByRole("button", { name: "Modules", exact: true }).click();
+      await page.getByRole("switch", { name: "Any Quote Pool", exact: true }).click();
+      await page.getByLabel("Quote token address").fill("0x1111111111111111111111111111111111111111");
+      await page.getByRole("button", { name: "Set in PAIR", exact: true }).click();
+      await page.getByLabel("Starting market cap · PAIR").fill("12.345678");
+      const lastDraft = () => page.evaluate(() => (window as unknown as { launchEvents: { lastDraft?: { quoteValuation?: string; initialBuy: string }; walletRequests: number } }).launchEvents);
+      await expect.poll(async () => (await lastDraft()).lastDraft).toMatchObject({ quoteValuation: "12.345678", initialBuy: "0" });
+      expect((await lastDraft()).walletRequests).toBe(0);
+      await page.getByRole("button", { name: "Launch coin", exact: true }).click();
+      await expect.poll(async () => (await lastDraft()).walletRequests).toBe(1);
+      await expect(page.getByRole("alert")).toContainText("Fixture wallet rejected");
+      await page.getByLabel("Quote token address").fill("0x2222222222222222222222222222222222222222");
+      await expect(page.getByRole("button", { name: "Automatic USD", exact: true })).toHaveAttribute("aria-pressed", "true");
+      await expect(page.getByLabel("Starting market cap · PAIR")).toHaveCount(0);
+      await expect.poll(async () => (await lastDraft()).lastDraft?.initialBuy).toBe("0.001");
+    } finally { studio.close(); await once(studio, "close"); }
+  });
+}
+
 test("a click joins pending launch work once, and wallet switches cancel the older draft", async ({ page }) => {
   const studio = await createModuleStudioServer(); studio.listen(0, "127.0.0.1"); await once(studio, "listening");
   const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");

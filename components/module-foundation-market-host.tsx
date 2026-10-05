@@ -46,6 +46,7 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
   const [readback, setReadback] = useState<{ context: string; details: FoundationPoolDetails } | null>(null);
   const [nativeFunds, setNativeFunds] = useState<{ context: string; balance: string; maximum: string } | null>(null);
   const [error, setError] = useState(""); const [refreshKey, setRefreshKey] = useState(0);
+  const [tradeCurrency, setTradeCurrency] = useState<"eth" | "quote">("eth");
   const trades = useRef(new WeakMap<FoundationTradeReview, Awaited<ReturnType<typeof prepareFoundationTrade>>>());
   const claims = useRef(new WeakMap<FoundationActionReview, Awaited<ReturnType<typeof prepareFoundationClaim>> | Awaited<ReturnType<typeof prepareFoundationModuleAction>>>());
   const [moduleState, setModuleState] = useState<{ key: string; error?: string; selections?: readonly FoundationModuleSelection[];
@@ -54,6 +55,7 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
   const [selectedHash, setSelectedHash] = useState(transactionHash);
   const details = readback?.context === session.contextKey ? readback.details : null;
   const funds = nativeFunds?.context === session.contextKey ? nativeFunds : null;
+  const useNativeEth = !details || getAddress(details.quote.address) === FOUNDATION_WETH || tradeCurrency === "eth";
   const binding = session.envelope?.binding;
   const catalog = useMemo(() => session.envelope ? bindFoundationCatalogV1(session.envelope.catalog.document, session.envelope.catalog.authority) : null, [session.envelope]);
   const moduleKey = `${session.contextKey}:${token}:${details?.checkpoint.blockHash ?? "loading"}`;
@@ -112,25 +114,25 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
     if (details.ledger.modules.length > 0 && (!modules?.selections || !modules.context || modules.error)) {
       throw new Error("Wait for this pool's original module sources and asset bindings to be verified before trading.");
     }
-    const amountIn = foundationParseAmount(draft.amount, 18, false);
+    const amountIn = foundationParseAmount(draft.amount, draft.side === "buy" && !useNativeEth ? details.quote.decimals : 18, false);
     let externalRoute;
-    if (getAddress(details.quote.address) !== FOUNDATION_WETH) {
+    if (useNativeEth && getAddress(details.quote.address) !== FOUNDATION_WETH) {
       const response = await fetch("/api/module-foundation/eth-route", { method: "POST", credentials: "same-origin", redirect: "error",
         headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteAsset: details.quote.address, ...(chainId === 1 ? { chainId } : {}),
           ...(draft.side === "buy" ? { probeEthAmount: amountIn.toString() } : {}) }) });
       const readiness = await response.json() as AnyQuoteReadinessV1;
-      if (!response.ok || readiness.status !== "compatible") throw new Error("An executable ETH route is currently unavailable for this pool. Try again when liquidity is available.");
+      if (!response.ok || readiness.status !== "compatible") throw new Error(`No ETH route is available for this amount. Select ${details.quote.symbol} to trade directly with the pool's token.`);
       externalRoute = readiness.routes[draft.side];
     }
     session.assertCurrent(account, context);
     const sequence = await prepareFoundationTrade({ client: session.client, binding: current, account, pool: details.pool,
-      side: draft.side, amountIn, slippageBps: draft.slippageBps, nativeEth: true, externalRoute,
+      side: draft.side, amountIn, slippageBps: draft.slippageBps, nativeEth: useNativeEth, externalRoute,
       ...(details.ledger.modules.length > 0 ? { moduleReview: { catalog: await session.resolveCatalog(),
         selections: modules!.selections!, context: modules!.context } } : {}) });
     const fees = await simulateFoundationTradeFees({ client: session.client, binding: current, pool: details.pool,
       steps: sequence.steps, checkpoint: sequence.checkpoint });
     session.assertCurrent(account, context);
-    const outputDecimals = 18;
+    const outputDecimals = draft.side === "sell" && !useNativeEth ? details.quote.decimals : 18;
     const review: FoundationTradeReview = { id: crypto.randomUUID(), contextKey: context, account, chainId, side: draft.side,
       expiresAt: Number(sequence.expiresAt), simulationBlock: sequence.checkpoint.blockNumber.toString(), inputAmount: draft.amount,
       outputAmount: formatUnits(sequence.amountOut, outputDecimals), minimumOutput: formatUnits(sequence.minimumOutput, outputDecimals),
@@ -184,8 +186,11 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
       payout: { asset: quote, recipient: budget.beneficiary, claimableAmount: formatUnits(budget.withdrawable, quote.decimals),
         creditedAmount: formatUnits(budget.credited, quote.decimals), paidAmount: formatUnits(budget.claimed, quote.decimals), asOfBlock: details.checkpoint.blockNumber.toString() } };
   });
-  return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} /><ModuleFoundationMarket key={`${session.contextKey}:${session.resultGeneration}`} availability={session.availability} contextKey={session.contextKey}
-    coin={coin} quote={quote} market={market} marketLoading={presentation.loading} marketDelayed={presentation.delayed} tradeAsset={{ address: zeroAddress, chainId, name: "Ether", symbol: "ETH", decimals: 18, supported: true, balance: funds?.balance }} maximumBuyAmount={funds?.maximum}
+  return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} /><ModuleFoundationMarket key={`${session.contextKey}:${session.resultGeneration}:${useNativeEth}`} availability={session.availability} contextKey={session.contextKey}
+    coin={coin} quote={quote} market={market} marketLoading={presentation.loading} marketDelayed={presentation.delayed}
+    tradeCurrency={getAddress(quote.address) !== FOUNDATION_WETH ? { value: tradeCurrency, onChange: setTradeCurrency } : undefined}
+    tradeAsset={useNativeEth ? { address: zeroAddress, chainId, name: "Ether", symbol: "ETH", decimals: 18, supported: true, balance: funds?.balance } : quote}
+    maximumBuyAmount={useNativeEth ? funds?.maximum : quote.balance}
     pool={foundationPoolPresentation(details)} positions={foundationPositionPresentation(details)} {...foundationCreatorFeeFields(details)}
     walletAction={session.walletAction} submissionBlocked={session.preparationBlocked} onPrepareTrade={prepareTrade}
     onConfirmTrade={async review => { const sequence = trades.current.get(review); if (!sequence) throw new Error("Review this trade again.");
