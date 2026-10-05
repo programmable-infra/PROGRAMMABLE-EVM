@@ -6,6 +6,7 @@ import { ArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/csr/PlugsConnected";
 import type { Address } from "viem";
+import { foundationChainProfile } from "@/lib/module-foundation/chains";
 import { foundationSelectionErrors, type FoundationModuleDescriptor, type FoundationModuleSelection, type FoundationQuoteAsset } from "@/lib/module-foundation/ui-types";
 import { ModulePickerDialog } from "./module-picker-dialog";
 import { ModuleFoundationConfigField } from "./module-foundation-config-field";
@@ -90,7 +91,7 @@ export function ModuleFoundationPairDialog({ chainId, initialView, initialAddres
           aria-invalid={Boolean(error) || undefined} aria-describedby="foundation-pair-status"
           onChange={event => { setAddress(event.target.value); setLookup(null); }} />
         <p id="foundation-pair-status" className={error ? styles.error : supported ? styles.saved : styles.help} role="status">
-          {error ?? (supported ? <><CheckIcon size={16} aria-hidden="true" /> {asset?.name} · {asset?.symbol}</> : asset?.supportsNativeEth ? "ETH is already included in Classic." : validAddress ? "Checking token…" : trimmed ? "Enter a complete token address." : "Paste a contract address on Robinhood Chain.")}
+          {error ?? (supported ? <><CheckIcon size={16} aria-hidden="true" /> {asset?.name} · {asset?.symbol}</> : asset?.supportsNativeEth ? "Your coin is paired with ETH by default." : validAddress ? "Checking token…" : trimmed ? "Enter a complete token address." : `Paste a token contract address on ${foundationChainProfile(chainId).name}.`)}
         </p>
         {current?.error ? <button type="button" className={styles.textButton} onClick={() => { setLookup(null); setRetry(value => value + 1); }}>Try again</button> : null}
       </div>
