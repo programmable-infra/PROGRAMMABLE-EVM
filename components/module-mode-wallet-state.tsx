@@ -1,7 +1,7 @@
 import { sha256, type Address, type Hex } from "viem";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
-import { ROBINHOOD_CHAIN_ID } from "@/lib/chains";
+import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 import { walletChainIdsEqual } from "@/lib/wallet-chain-id";
 import type { ModuleModeDraft } from "@/lib/module-mode/builder";
 import type { ModuleNativeWalletTransaction, PreparedModuleNativeTransaction } from "@/lib/module-mode/native-client";
@@ -64,24 +64,24 @@ export interface ModuleModeWalletSnapshot {
   sessionReady: boolean;
 }
 
-export function isModuleModeChain(chainId: string | undefined) {
-  return walletChainIdsEqual(chainId, ROBINHOOD_CHAIN_ID);
+export function isModuleModeChain(chainId: string | undefined, targetChainId: FoundationChainId = 4663) {
+  return walletChainIdsEqual(chainId, foundationChainProfile(targetChainId).chainId);
 }
 
-export function moduleModeWalletStep(wallet: ModuleModeWalletSnapshot): "connect" | "switch" | "prepare" {
+export function moduleModeWalletStep(wallet: ModuleModeWalletSnapshot, targetChainId: FoundationChainId = 4663): "connect" | "switch" | "prepare" {
   if (!wallet.authenticated || !wallet.sessionReady || !wallet.account) return "connect";
-  return isModuleModeChain(wallet.chainId) ? "prepare" : "switch";
+  return isModuleModeChain(wallet.chainId, targetChainId) ? "prepare" : "switch";
 }
 
 /** The wallet context accepts decimal network IDs; its EIP-1193 state uses hex. */
-export async function switchModuleModeNetwork(switchNetwork: (chainId: string) => Promise<boolean>): Promise<void> {
-  if (!await switchNetwork(String(ROBINHOOD_CHAIN_ID))) {
-    throw new Error("The network change was not completed. Switch your wallet to Robinhood Chain and try again.");
+export async function switchModuleModeNetwork(switchNetwork: (chainId: string) => Promise<boolean>, targetChainId: FoundationChainId = 4663): Promise<void> {
+  if (!await switchNetwork(String(foundationChainProfile(targetChainId).chainId))) {
+    throw new Error(`The network change was not completed. Switch your wallet to ${foundationChainProfile(targetChainId).name} and try again.`);
   }
 }
 
-export function assertModuleModeWalletUnchanged(current: ModuleModeWalletSnapshot, expectedAccount: string) {
-  if (moduleModeWalletStep(current) !== "prepare" || current.account?.toLowerCase() !== expectedAccount.toLowerCase()) {
+export function assertModuleModeWalletUnchanged(current: ModuleModeWalletSnapshot, expectedAccount: string, targetChainId: FoundationChainId = 4663) {
+  if (moduleModeWalletStep(current, targetChainId) !== "prepare" || current.account?.toLowerCase() !== expectedAccount.toLowerCase()) {
     throw new Error("Your wallet or network changed. Return to the draft and prepare again with the current wallet.");
   }
 }

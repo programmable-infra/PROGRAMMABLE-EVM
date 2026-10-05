@@ -1,3 +1,5 @@
+import { foundationBindingChainId } from "./chains";
+import { assertFoundationLaunchFinality } from "./finality";
 import { decodeFoundationLaunchCall } from "./atomic-launch";
 import {
   decodeAbiParameters, decodeEventLog, encodeAbiParameters, encodeFunctionResult,
@@ -6,7 +8,7 @@ import {
 } from "viem";
 import { foundationFactoryV2Abi, foundationFactoryV3Abi, foundationMetadataParameters, foundationTokenAbi } from "./abi";
 import { assertFoundationInfrastructure, type FoundationCheckpoint, type FoundationDeploymentBinding } from "./client";
-import { FOUNDATION_CHAIN_ID, FOUNDATION_LP_CUSTODY_DEAD_ID } from "./constants";
+import { FOUNDATION_LP_CUSTODY_DEAD_ID } from "./constants";
 import { foundationReadbackAbi, verifyFoundationLaunchReceipt } from "./readback";
 import { foundationPoolId, foundationPoolKey } from "./route";
 import { assertFoundationV2Result, foundationFactoryAbiFor, foundationFactoryVersion, readFoundationHookPrediction, readFoundationLaunchRecord } from "./protocol";
@@ -128,7 +130,8 @@ export async function discoverFoundationLaunch(input: {
   if (BigInt(token) === 0n || !sameAddress(record.token, token) || BigInt(record.hook) === 0n || BigInt(record.ledger) === 0n) {
     throw new Error("This token is not registered by the selected foundation factory.");
   }
-  const candidate = input.transactionHash ?? await (input.locator ?? locateFoundationCreationTransaction)(token, { signal: input.signal });
+  const locator = input.locator ?? (foundationBindingChainId(binding) === 4663 ? locateFoundationCreationTransaction : null);
+  const candidate = input.transactionHash ?? (locator ? await locator(token, { signal: input.signal }) : null);
   checkAbort(input.signal);
   if (candidate === null) throw new Error("No creation transaction was found. A bounded recent launch lookup can supply another candidate.");
   const hash = transactionHash(candidate);
@@ -139,6 +142,7 @@ export async function discoverFoundationLaunch(input: {
     throw new Error("The candidate is not a mined transaction to the selected foundation factory.");
   }
   const { parameters } = decodeFoundationLaunchCall(binding, { data: mined.input, value: mined.value });
+  await assertFoundationLaunchFinality(client, foundationBindingChainId(binding), mined.blockNumber, observedAt.blockNumber);
   const [predictedToken, predictedHook] = await Promise.all([
     client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "predictTokenAddress",
       args: [mined.from, parameters.tokenSalt, parameters.metadata], blockNumber: observedAt.blockNumber }),
@@ -214,7 +218,7 @@ export async function readFoundationLaunchIndex(input: {
       return [version, chainId, factory, releaseDigest, from, to, filter, anchorHash, number, transactionIndex, logIndex] as const;
     })() : decodeAbiParameters(cursorAbi, input.cursor);
     const [version, chainId, factory, releaseDigest, from, to, filter, anchorHash, blockNumber, transactionIndex, logIndex] = decoded;
-    if (version !== (extended ? 2 : 1) || chainId !== BigInt(FOUNDATION_CHAIN_ID) || !sameAddress(factory, binding.factory.address)
+    if (version !== (extended ? 2 : 1) || chainId !== BigInt(foundationBindingChainId(binding)) || !sameAddress(factory, binding.factory.address)
       || !sameHex(releaseDigest, binding.releaseDigest) || from !== fromBlock || to !== toBlock
       || !sameAddress(filter, token ?? zeroAddress) || !sameHex(anchorHash, checkpoint.blockHash)
       || blockNumber < fromBlock || blockNumber > toBlock) throw new Error("The launch-history cursor belongs to a different window, filter or canonical chain.");
@@ -271,10 +275,10 @@ export async function readFoundationLaunchIndex(input: {
   if (verificationBlock !== toBlock) await assertCanonical(client, verificationCheckpoint);
   const last = entries.at(-1);
   const nextCursor = remaining.length > pageSize && last ? input.verificationBlock !== undefined
-    ? encodeAbiParameters(verifiedCursorAbi, [2, BigInt(FOUNDATION_CHAIN_ID), binding.factory.address, binding.releaseDigest,
+    ? encodeAbiParameters(verifiedCursorAbi, [2, BigInt(foundationBindingChainId(binding)), binding.factory.address, binding.releaseDigest,
       fromBlock, toBlock, token ?? zeroAddress, checkpoint.blockHash, verificationBlock, verificationCheckpoint.blockHash,
       last.blockNumber, last.transactionIndex, last.logIndex])
-    : encodeAbiParameters(cursorAbi, [1, BigInt(FOUNDATION_CHAIN_ID), binding.factory.address, binding.releaseDigest,
+    : encodeAbiParameters(cursorAbi, [1, BigInt(foundationBindingChainId(binding)), binding.factory.address, binding.releaseDigest,
       fromBlock, toBlock, token ?? zeroAddress, checkpoint.blockHash, last.blockNumber, last.transactionIndex, last.logIndex]) : null;
   return { evidence: "canonical-launch-index" as const, checkpoint, fromBlock, toBlock, token, entries, nextCursor,
     ...(input.verificationBlock !== undefined ? { verificationCheckpoint } : {}) };

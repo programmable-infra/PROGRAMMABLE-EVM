@@ -27,7 +27,7 @@ export interface ModuleNativeLaunchRecord {
   positionRecipient: Address; positionTokenId: bigint; initialBuyNative: bigint; initialBuyTokens: bigint; runtime: Address; launchKey: Hex;
 }
 export interface ModuleNativeWalletTransaction {
-  chainId: 4663; from: Address; to: Address; data: Hex; value: Hex; gas?: Hex;
+  chainId: 1 | 4663; from: Address; to: Address; data: Hex; value: Hex; gas?: Hex;
   action: "launch" | "buy" | "sell" | "approve" | "manage"; description: string;
 }
 interface PreparedBase {

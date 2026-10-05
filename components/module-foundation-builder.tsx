@@ -14,7 +14,7 @@ import { prepareTokenImage, isProgrammableTokenImageUrl } from "@/lib/token-imag
 import { validateModuleSocialLinks, type ModuleSocialKind, type ModuleSocialLinks } from "@/lib/module-mode/token-metadata";
 import { foundationDecimalError, foundationReviewError, foundationSelectionErrors, isFoundationCreatorFee, type FoundationAvailability, type FoundationImage, type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationModuleDescriptor, type FoundationModuleSelection, type FoundationQuoteAsset, type FoundationTransactionResult, type FoundationWalletAction } from "@/lib/module-foundation/ui-types";
 import { foundationCreatorFeesEqual } from "@/lib/module-foundation/creator-fees";
-import { FOUNDATION_WETH } from "@/lib/module-foundation/native-funding";
+import { foundationChainProfile } from "@/lib/module-foundation/chains";
 import { FOUNDATION_DEFAULT_IMAGE, isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
 import { FoundationLaunchPreparation } from "@/lib/module-foundation/launch-preparation";
 import { normalizeFoundationSocialInput, normalizeFoundationSocialInputs } from "@/lib/module-foundation/social-input";
@@ -34,6 +34,7 @@ type Errors = Record<string, string>;
 export interface ModuleFoundationBuilderProps {
   layout?: "form" | "studio";
   previousLaunchAction?: ReactNode;
+  networkControl?: ReactNode;
   availability: FoundationAvailability;
   /** Custody of the currently verified launch factory; unknown while availability loads. */
   factoryVersion?: "v1" | "v2" | "v3";
@@ -85,7 +86,7 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
     initialBuy: initial?.initialBuy ?? "", additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
-export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
+export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
   const [draft, setDraft] = useState<EditableDraft>(() => initialForm(initialDraft, quoteAssets, availability.chainId));
   const [buyEdited, setBuyEdited] = useState(initialDraft?.initialBuy !== undefined);
   const initialBuy = buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
@@ -138,7 +139,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
 
   const busy = phase === "uploading" || phase === "preparing" || phase === "signing";
   const nativeQuote = quoteAssets.find(asset => asset.chainId === availability.chainId && asset.supported && asset.supportsNativeEth);
-  const quoteAddress = customQuote ? draft.quoteAsset.trim() : nativeQuote?.address ?? FOUNDATION_WETH;
+  const quoteAddress = customQuote ? draft.quoteAsset.trim() : nativeQuote?.address ?? foundationChainProfile(availability.chainId).wrappedEth.address;
   const knownQuote = quoteAssets.find(asset => asset.address.toLowerCase() === quoteAddress.toLowerCase() && asset.chainId === availability.chainId);
   const lookedUpQuote = quoteLookup?.address.toLowerCase() === quoteAddress.toLowerCase() && quoteLookup.status === "resolved" && quoteLookup.contextKey === contextKey ? quoteLookup.asset : undefined;
   const quote = knownQuote ?? lookedUpQuote;
@@ -235,7 +236,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (!/^[A-Za-z0-9]{1,12}$/.test(draft.symbol.trim())) next.symbol = "Use 1 to 12 letters or numbers.";
     if (new TextEncoder().encode(draft.description.trim()).length > 280) next.description = "Use a description of up to 280 bytes.";
     if (draft.image && !isFoundationDefaultImage(draft.image) && !isProgrammableTokenImageUrl(draft.image.url)) next.image = "Choose an image to save with this launch.";
-    if (!selectedQuote?.supported || selectedQuote.chainId !== availability.chainId || (!customQuote && !selectedQuote.supportsNativeEth)) next.quoteAsset = selectedQuote?.reason ?? (customQuote ? /^0x[0-9a-fA-F]{40}$/.test(quoteAddress) ? "This token could not be verified. Try launching again." : "Enter a token contract address on Robinhood Chain." : "ETH pairing could not be verified. Try again.");
+    if (!selectedQuote?.supported || selectedQuote.chainId !== availability.chainId || (!customQuote && !selectedQuote.supportsNativeEth)) next.quoteAsset = selectedQuote?.reason ?? (customQuote ? /^0x[0-9a-fA-F]{40}$/.test(quoteAddress) ? "This token could not be verified. Try launching again." : `Enter a token contract address on ${availability.chainName}.` : "ETH pairing could not be verified. Try again.");
     if (!isFoundationCreatorFee(draft.creatorFeeBps)) next.creatorFeeBps = "Choose a whole percentage from 0% to 10%.";
     const buyError = foundationDecimalError(buyAmount, 18, false);
     if (buyError) next.initialBuy = buyError;
@@ -416,7 +417,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const warmPending = imageWarming || Boolean(warmKey && (warmState?.key !== warmKey || warmState.status === "pending"));
   const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" || imageWarming ? "Saving image…" : phase === "signing" ? launchProgress || "Opening coin…" : phase === "preparing" || warmPending ? "Preparing launch…" : "Launch coin");
   if (layout === "studio" && phase !== "result") return <FoundationStudio draft={draft} catalog={catalog} imageSource={imageSource}
-    previousLaunchAction={previousLaunchAction} quoteSymbol={quoteSymbol} quoteStatus={quoteStatus}
+    previousLaunchAction={previousLaunchAction} networkControl={networkControl} quoteSymbol={quoteSymbol} quoteStatus={quoteStatus}
     initialBuy={initialBuy} actionLabel={actionLabel} disabled={locked || imagePreparing} busy={busy || walletAction?.busy}
     actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy || warmPending} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
     error={error || submissionBlocked} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
@@ -428,7 +429,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     onQuoteChange={address => { if (!customQuote) { quoteGeneration.current += 1; pendingQuote.current = null; setCustomQuote(true); setQuoteLookup(null); } update("quoteAsset", address); }}
     onDefaultQuote={() => chooseMarket(false)} onSubmit={event => void prepare(event)} onBack={onBack} />;
   return <div className={`${styles.page} ${styles.builderPage}`}>
-    <div className={styles.topline}>{onBack ? <button type="button" className={styles.backButton} disabled={busy} onClick={onBack}><ArrowLeftIcon size={16} aria-hidden="true" /> Home</button> : <span className={styles.eyebrow}>Module Mode</span>}<span className={styles.network}>{availability.chainName}</span></div>
+    <div className={styles.topline}>{onBack ? <button type="button" className={styles.backButton} disabled={busy} onClick={onBack}><ArrowLeftIcon size={16} aria-hidden="true" /> Home</button> : <span className={styles.eyebrow}>Module Mode</span>}{networkControl ?? <span className={styles.network}>{availability.chainName}</span>}</div>
     <header className={styles.pageHeading}><h1>Launch a Coin</h1></header>
     {availability.status === "checking" ? <div className={styles.launchStatus} role="status">Checking launch availability…</div> : null}
     {availability.status === "unavailable" ? <div className={styles.launchStatus} role="status"><span>Launching is temporarily unavailable.</span>{onRetryAvailability ? <button type="button" className={styles.textButton} onClick={onRetryAvailability}>Retry</button> : null}</div> : null}

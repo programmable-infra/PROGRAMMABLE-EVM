@@ -84,10 +84,11 @@ export function tradeBlockV1(value: unknown) {
 /** Robinhood's newest sequencer blocks can reach RPC nodes at different times.
  * Read a recent common block behind that propagation window. Callers still
  * enforce freshness, pin every state read and recheck its canonical hash. */
-export async function readTradeCheckpointV1(rpcs: readonly [TradeRpcV1, TradeRpcV1]) {
+export async function readTradeCheckpointV1(rpcs: readonly [TradeRpcV1, TradeRpcV1], lag: bigint = 16n) {
+  if (lag !== 16n && lag !== 2n) return pendingTradeV1("TRADE_CHECKPOINT_POLICY_INVALID");
   const tips = await Promise.all(rpcs.map(async read => tradeBlockV1(await read("eth_getBlockByNumber", ["latest", false]))));
   const common = tips.reduce((number, block) => BigInt(block.number) < number ? BigInt(block.number) : number, BigInt(tips[0]!.number));
-  const height = common > 16n ? common - 16n : 0n;
+  const height = common > lag ? common - lag : 0n;
   const block = await agreedTradeRpcV1(rpcs)("eth_getBlockByNumber", [toHex(height), false], tradeBlockV1);
   if (BigInt(block.number) !== height) return pendingTradeV1("TRADE_CHECKPOINT_CHANGED");
   return block;

@@ -427,3 +427,8 @@
 .marketScope { --mf-focus: #fff; }
 .marketExtras { margin-top: 24px; }
 .marketScope :is(button, a, summary, select):focus-visible { outline: 2px solid var(--mf-focus); outline-offset: 3px; }
+
+.networkChoice { display: inline-flex; margin-top: 10px; }
+.networkChoice select { min-height: 32px; padding: 4px 12px; color: inherit; background: rgba(15, 19, 29, 0.78); border: 0; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
+.networkChoice select:focus-visible { outline: 2px solid #88cba3; outline-offset: 3px; }
+.networkChoice select:disabled { opacity: 0.6; cursor: wait; }

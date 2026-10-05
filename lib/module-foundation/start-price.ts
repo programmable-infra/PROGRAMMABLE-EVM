@@ -1,12 +1,12 @@
 import { formatUnits, getAddress, type Address, type Hex } from "viem";
 import type { AnyQuoteCheckpointV1, AnyQuotePriceEvidenceV1 } from "@/lib/module-engine/any-quote/types";
 import { moduleHash, moduleRecord } from "@/lib/module-mode/release";
-import { FOUNDATION_CHAIN_ID } from "./constants";
+import { foundationChainProfile, type FoundationChainId } from "./chains";
 import { planFoundationPrice } from "./price";
 
 export const FOUNDATION_START_MARKET_CAP_USD = 5_000n;
 export interface FoundationStartPrice {
-  chainId: 4663;
+  chainId: FoundationChainId;
   quoteAsset: Address;
   quoteCodeHash: Hex;
   decimals: number;
@@ -22,7 +22,7 @@ function positive(value: unknown, digits = 256): bigint {
 }
 
 /** Validate the server-owned reference against the actual quote, never a draft valuation. */
-export function parseFoundationStartPrice(value: unknown, quote: { address: Address; decimals: number; codeHash: Hex }, now = BigInt(Math.floor(Date.now() / 1_000))): FoundationStartPrice {
+export function parseFoundationStartPrice(value: unknown, quote: { address: Address; decimals: number; codeHash: Hex; chainId?: FoundationChainId }, now = BigInt(Math.floor(Date.now() / 1_000))): FoundationStartPrice {
   try {
     const data = moduleRecord(value, ["chainId", "quoteAsset", "quoteCodeHash", "decimals", "targetMarketCapUsd", "checkpoint", "price"], "foundation.startPrice");
     const checkpoint = moduleRecord(data.checkpoint, ["number", "hash", "timestamp"], "foundation.startPrice.checkpoint");
@@ -31,11 +31,12 @@ export function parseFoundationStartPrice(value: unknown, quote: { address: Addr
     const stamp = positive(checkpoint.timestamp, 16), observed = positive(price.observedAt, 16), expiry = positive(price.validUntil, 16);
     positive(checkpoint.number, 20); positive(usd.numerator); positive(usd.denominator);
     moduleHash(checkpoint.hash, "foundation.startPrice.blockHash"); moduleHash(price.evidenceHash, "foundation.startPrice.evidenceHash");
-    if (data.chainId !== FOUNDATION_CHAIN_ID || data.targetMarketCapUsd !== FOUNDATION_START_MARKET_CAP_USD.toString()
+    if (data.chainId !== foundationChainProfile(quote.chainId).chainId || data.targetMarketCapUsd !== FOUNDATION_START_MARKET_CAP_USD.toString()
       || typeof data.quoteAsset !== "string" || getAddress(data.quoteAsset) !== getAddress(quote.address)
       || moduleHash(data.quoteCodeHash, "foundation.startPrice.quoteCodeHash") !== quote.codeHash
       || data.decimals !== quote.decimals || !Number.isInteger(quote.decimals) || quote.decimals < 0 || quote.decimals > 36
       || !["chainlink", "robinhood-stock-rest", "qualified-amm"].includes(String(price.source))
+      || (quote.chainId === 1 && price.source === "robinhood-stock-rest")
       || typeof price.heartbeatSeconds !== "number" || !Number.isInteger(price.heartbeatSeconds)
       || price.heartbeatSeconds < 1 || price.heartbeatSeconds > 604_800
       || stamp > now + 10n || now - stamp > 60n || observed > now || now - observed > BigInt(price.heartbeatSeconds)
@@ -45,7 +46,7 @@ export function parseFoundationStartPrice(value: unknown, quote: { address: Addr
 }
 
 /** Keep the USD conversion rational through tick selection, including zero-decimal quote tokens. */
-export function planFoundationStartPrice(input: { token: Address; quote: { address: Address; decimals: number; codeHash: Hex }; startPrice: unknown; additionalQuoteRaw?: bigint; now?: bigint }) {
+export function planFoundationStartPrice(input: { token: Address; quote: { address: Address; decimals: number; codeHash: Hex; chainId?: FoundationChainId }; startPrice: unknown; additionalQuoteRaw?: bigint; now?: bigint }) {
   const startPrice = parseFoundationStartPrice(input.startPrice, input.quote, input.now);
   const usd = startPrice.price.usd, units = 10n ** BigInt(input.quote.decimals);
   const price = planFoundationPrice({ token: input.token, quote: input.quote.address,

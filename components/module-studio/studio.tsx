@@ -14,6 +14,7 @@ import styles from "./studio.module.css";
 
 export interface FoundationStudioProps {
   previousLaunchAction?: ReactNode;
+  networkControl?: ReactNode;
   draft: FoundationStudioDraft;
   catalog: readonly FoundationModuleDescriptor[];
   imageSource?: string;
@@ -115,7 +116,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   </StudioField>;
 
   return <form className={styles.studio} ref={formRef} onSubmit={event => { setHandledErrors(""); props.onSubmit(event); }} noValidate>
-    <header className={styles.heading}>{props.preview ? <a className={styles.homeLogo} href="https://programmable.market" aria-label="Programmable home"><Image src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png" alt="" width={42} height={52} unoptimized /></a> : null}<div className={styles.title}><h1>Module Mode</h1><p>Build your coin with the rules you choose</p></div>{props.preview ? <span className={styles.previewTag}>Preview</span> : null}</header>
+    <header className={styles.heading}>{props.preview ? <a className={styles.homeLogo} href="https://programmable.market" aria-label="Programmable home"><Image src="/brand/loop/programmable-loop-mark-header-white-v1-1536.png" alt="" width={42} height={52} unoptimized /></a> : null}<div className={styles.title}><h1>Module Mode</h1><p>Build your coin with the rules you choose</p>{props.networkControl}</div>{props.preview ? <span className={styles.previewTag}>Preview</span> : null}</header>
     <nav className={styles.mobileNavigation} aria-label="Studio panels">{(["modules", "canvas", "settings"] as const).map(value => <button type="button" key={value} aria-pressed={activeMobilePanel === value} onClick={() => { setPanel(panel); setHandledErrors(errorSignature); setMobilePanel(value); }}>{value === "canvas" ? "Your coin" : value[0].toUpperCase() + value.slice(1)}</button>)}</nav>
     <fieldset className={styles.workspace} disabled={disabled} data-mobile-panel={activeMobilePanel}>
       <aside id="studio-module-library" tabIndex={-1} className={styles.library} aria-label="Module library">

@@ -5,7 +5,7 @@ import { getAddress, keccak256, type Address, type Hex, type TransactionReceipt 
 import { useWallet } from "@/components/wallet-provider";
 import { assertModuleModeWalletUnchanged, moduleModeWalletStep, switchModuleModeNetwork, useModuleModeOperation, type ModuleModeWalletSnapshot } from "@/components/module-mode-wallet-state";
 import { browserWalletRequestIsPending, subscribeToBrowserWalletRequest } from "@/lib/wallet-request-lock";
-import { ROBINHOOD_BLOCK_EXPLORER_URL } from "@/lib/chains";
+import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 import { createFoundationClient } from "@/lib/module-foundation/client";
 import { fetchFoundationAvailability, FoundationProviderDisagreementError, type FoundationAvailabilityEnvelope } from "@/lib/module-foundation/availability";
 import { bindFoundationCatalogV1 } from "@/lib/module-foundation/catalog";
@@ -25,12 +25,12 @@ export interface FoundationExecutionResult {
 }
 
 /** Newly launched coins can reach the page before both providers observe their registration. */
-export async function loadFoundationSessionAvailability(signal: AbortSignal, token?: Address): Promise<FoundationAvailabilityEnvelope> {
+export async function loadFoundationSessionAvailability(signal: AbortSignal, token?: Address, chainId: FoundationChainId = 4663): Promise<FoundationAvailabilityEnvelope> {
   const attempts = 4;
   for (let attempt = 0; attempt < attempts; attempt++) {
     signal.throwIfAborted();
     try {
-      const value = await fetchFoundationAvailability(signal, token);
+      const value = await (chainId === 4663 ? fetchFoundationAvailability(signal, token) : fetchFoundationAvailability(signal, token, chainId));
       signal.throwIfAborted();
       if (value.available || (!token && !value.providerDisagreement) || attempt === attempts - 1) return value;
     } catch (error) {
@@ -47,15 +47,16 @@ export async function loadFoundationSessionAvailability(signal: AbortSignal, tok
   throw new Error("Coin availability could not be checked.");
 }
 
-export function useFoundationSession(token?: Address) {
+export function useFoundationSession(token?: Address, chainId: FoundationChainId = 4663) {
+  const profile = foundationChainProfile(chainId);
   const walletContext = useWallet();
   const { wallet, authenticated, sessionReady, authReady, connecting, openingWallet, switchingNetwork, disconnecting, openWallet, switchNetwork, sendModuleModeTransaction } = walletContext;
   // Batch independent reads without caching their answers. Wallet checks still use fresh chain state.
-  const client = useMemo(() => createFoundationClient({ batchRpc: true }), []);
-  const targetKey = token?.toLowerCase() ?? "launch";
+  const client = useMemo(() => createFoundationClient({ batchRpc: true, chainId }), [chainId]);
+  const targetKey = `${chainId}:${token?.toLowerCase() ?? "launch"}`;
   const [envelopeState, setEnvelopeState] = useState<{ targetKey: string; refresh: number; value: FoundationAvailabilityEnvelope | null } | null>(null);
   const [refresh, setRefresh] = useState(0);
-  const displayEnvelope = useSyncExternalStore(subscribeFoundationLaunchDisplay, readFoundationLaunchDisplay, () => null);
+  const displayEnvelope = useSyncExternalStore(subscribeFoundationLaunchDisplay, useCallback(() => readFoundationLaunchDisplay(Date.now(), chainId), [chainId]), () => null);
   const envelope = envelopeState?.targetKey === targetKey && (!token || envelopeState.refresh === refresh) ? envelopeState.value : null;
   const availabilityError = envelopeState?.targetKey === targetKey && envelopeState.refresh === refresh && envelopeState.value === null;
   const [progress, setProgress] = useState("");
@@ -70,54 +71,54 @@ export function useFoundationSession(token?: Address) {
   const used = useRef(new WeakSet<FoundationPreparedSequence>());
   const outcomes = useRef(new Map<Hex, FoundationExecutionResult>());
   const savedLegacy = useModuleModeOperation(account);
-  const subscribeRequest = useCallback((listener: () => void) => subscribeToBrowserWalletRequest(account, "4663", listener), [account]);
-  const requestSnapshot = useCallback(() => browserWalletRequestIsPending(account, "4663"), [account]);
+  const subscribeRequest = useCallback((listener: () => void) => subscribeToBrowserWalletRequest(account, String(chainId), listener), [account, chainId]);
+  const requestSnapshot = useCallback(() => browserWalletRequestIsPending(account, String(chainId)), [account, chainId]);
   const requestPending = useSyncExternalStore(subscribeRequest, requestSnapshot, () => false);
   const subscribePending = useCallback((listener: () => void) => {
     window.addEventListener("storage", listener); window.addEventListener(FOUNDATION_PENDING_EVENT, listener);
     return () => { window.removeEventListener("storage", listener); window.removeEventListener(FOUNDATION_PENDING_EVENT, listener); };
   }, []);
   const pendingSnapshot = useCallback(() => {
-    try { return account ? JSON.stringify(readFoundationPending(account)) : "null"; }
+    try { return account ? JSON.stringify(readFoundationPending(account, chainId)) : "null"; }
     catch { return "unreadable"; }
-  }, [account]);
+  }, [account, chainId]);
   const pending = useSyncExternalStore(subscribePending, pendingSnapshot, () => "null");
   const subscribeResolution = useCallback((listener: () => void) => {
     window.addEventListener("storage", listener); window.addEventListener(FOUNDATION_RESOLUTION_EVENT, listener);
     return () => { window.removeEventListener("storage", listener); window.removeEventListener(FOUNDATION_RESOLUTION_EVENT, listener); };
   }, []);
   const resolutionSnapshot = useCallback(() => {
-    try { return account ? JSON.stringify(readFoundationResolution(account)) : "null"; }
+    try { return account ? JSON.stringify(readFoundationResolution(account, chainId)) : "null"; }
     catch { return "unreadable"; }
-  }, [account]);
+  }, [account, chainId]);
   const resolutionState = useSyncExternalStore(subscribeResolution, resolutionSnapshot, () => "null");
   const resolution = useMemo(() => resolutionState === "null" || resolutionState === "unreadable" ? null
     : JSON.parse(resolutionState) as FoundationResolution, [resolutionState]);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     const controller = new AbortController();
-    void loadFoundationSessionAvailability(controller.signal, token).then(value => {
+    void loadFoundationSessionAvailability(controller.signal, token, chainId).then(value => {
       if (!controller.signal.aborted) {
         if (!token) rememberFoundationLaunchDisplay(value);
         setEnvelopeState({ targetKey, refresh, value });
       }
     }).catch(() => { if (!controller.signal.aborted) setEnvelopeState({ targetKey, refresh, value: null }); });
     return () => controller.abort();
-  }, [refresh, token, targetKey]);
+  }, [refresh, token, targetKey, chainId]);
   const availability: FoundationAvailability = { status: availabilityError ? "unavailable" : !envelope ? "checking" : envelope.available ? "ready" : "unavailable",
-    chainId: 4663, chainName: "Robinhood Chain", reason: availabilityError ? "Launch availability could not be checked. Retry to keep working with this release." : envelope?.reason ?? undefined };
+    chainId, chainName: profile.name, reason: availabilityError ? "Launch availability could not be checked. Retry to keep working with this release." : envelope?.reason ?? undefined };
   const contextKey = `${account ?? "disconnected"}:${wallet?.chainId ?? "none"}:${authenticated}:${sessionReady}:${targetKey}:${envelope?.binding?.releaseDigest ?? "unavailable"}`;
   const currentContext = useRef(contextKey);
   const authorityRequest = useRef<{ context: string; promise: Promise<FoundationAvailabilityEnvelope> } | null>(null);
   useLayoutEffect(() => { walletRef.current = walletSnapshot; sourceRef.current = envelope; currentContext.current = contextKey; }, [walletSnapshot, envelope, contextKey]);
   function assertCurrent(expectedAccount: Address, expectedContext = currentContext.current) {
     if (!mounted.current || expectedContext !== currentContext.current) throw new Error("Your wallet or launch version changed. Review again.");
-    assertModuleModeWalletUnchanged(walletRef.current, expectedAccount);
+    assertModuleModeWalletUnchanged(walletRef.current, expectedAccount, chainId);
   }
   function readCurrentAuthority() {
     const context = currentContext.current;
     if (authorityRequest.current?.context === context) return authorityRequest.current.promise;
-    const promise = fetchFoundationAvailability(undefined, token).finally(() => {
+    const promise = fetchFoundationAvailability(undefined, token, chainId).finally(() => {
       if (authorityRequest.current?.promise === promise) authorityRequest.current = null;
     });
     authorityRequest.current = { context, promise };
@@ -136,23 +137,24 @@ export function useFoundationSession(token?: Address) {
     if (!current.available || !current.binding || current.binding.releaseDigest !== sourceRef.current?.binding?.releaseDigest) throw new Error("The admitted module catalog changed. Reload and review again.");
     return bindFoundationCatalogV1(current.catalog.document, current.catalog.authority);
   }
-  const walletStep = moduleModeWalletStep(walletSnapshot);
+  const walletStep = moduleModeWalletStep(walletSnapshot, chainId);
   // A coin page may defer wallet loading until Connect is pressed.
   const walletBusy = connecting || openingWallet || switchingNetwork || disconnecting || (walletStep !== "connect" && !authReady);
   const walletAction: FoundationWalletAction | undefined = walletStep === "prepare" ? undefined : {
-    label: walletStep === "connect" ? "Connect wallet" : "Switch to Robinhood Chain", busy: walletBusy,
-    onClick: walletStep === "connect" ? openWallet : () => switchModuleModeNetwork(switchNetwork),
+    label: walletStep === "connect" ? "Connect wallet" : `Switch to ${profile.name}`, busy: walletBusy,
+    onClick: walletStep === "connect" ? openWallet : () => switchModuleModeNetwork(switchNetwork, chainId),
   };
   const preparationBlocked = pending !== "null" ? "A previous wallet operation needs confirmation before you continue."
     : resolutionState === "unreadable" ? "The saved transaction result could not be read. Check wallet activity before continuing."
-    : savedLegacy.blocked ? "A previous Module Mode operation needs recovery before you continue."
+    : (chainId === 4663 && savedLegacy.blocked) ? "A previous Module Mode operation needs recovery before you continue."
       : requestPending ? "Complete the open wallet request before continuing." : undefined;
   const submissionBlocked = preparationBlocked ?? (resolution ? "Review the saved transaction result before starting another operation." : undefined);
 
   async function execute(sequence: FoundationPreparedSequence): Promise<FoundationExecutionResult> {
     if (executing.current || used.current.has(sequence)) throw new Error("Review a fresh operation before continuing.");
+    if (foundationBindingChainId(sequence.binding) !== chainId) throw new Error("This preparation belongs to a different launch network.");
     assertCurrent(sequence.account);
-    if (savedLegacy.blocked || readFoundationPending(sequence.account) || readFoundationResolution(sequence.account)) throw new Error("Resolve the previous wallet operation first.");
+    if ((chainId === 4663 && savedLegacy.blocked) || readFoundationPending(sequence.account, chainId) || readFoundationResolution(sequence.account, chainId)) throw new Error("Resolve the previous wallet operation first.");
     executing.current = true; used.current.add(sequence);
     const expectedContext = currentContext.current;
     try {
@@ -164,7 +166,7 @@ export function useFoundationSession(token?: Address) {
         const hash = await submitFoundationWalletStep(preparation, sendModuleModeTransaction);
         if (mounted.current) setProgress(sequence.kind === "launch" ? "Creating your coin…" : "Waiting for confirmation…");
         const outcome: FoundationExecutionResult = { sequence, stepIndex: index,
-          result: { status: "submitted", transactionHash: hash, explorerUrl: `${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${hash}`,
+          result: { status: "submitted", transactionHash: hash, explorerUrl: `${profile.explorer}/tx/${hash}`,
             operationComplete: false, stepLabel: step.label,
             message: `${step.label} was submitted. Confirmation is being checked.` } };
         outcomes.current.set(hash, outcome);
@@ -179,9 +181,9 @@ export function useFoundationSession(token?: Address) {
           if (outcome.receipt.status === "reverted" || index === sequence.steps.length - 1) return outcome;
           // The reviewed sequence already authorizes continuing after each successful approval or ETH conversion.
           // Only intermediate prerequisites are acknowledged here; the final outcome remains durable.
-          const saved = readFoundationResolution(sequence.account);
+          const saved = readFoundationResolution(sequence.account, chainId);
           if ((step.kind !== "approve" && step.kind !== "wrap") || !saved || saved.transactionHash.toLowerCase() !== hash.toLowerCase()) throw new Error("Review the saved transaction before continuing.");
-          await acknowledgeFoundationResolution(sequence.account, saved.operationId);
+          await acknowledgeFoundationResolution(sequence.account, saved.operationId, chainId);
         } catch {
           outcome.result = outcome.receipt ? { ...outcome.result, message: "The exact transaction is confirmed. Review its saved result before continuing the remaining steps." }
             : { ...outcome.result, status: "unconfirmed", message: "The transaction hash is saved. Check confirmation before continuing." };
@@ -203,7 +205,7 @@ export function useFoundationSession(token?: Address) {
       || transaction.hash.toLowerCase() !== result.transactionHash.toLowerCase() || getAddress(transaction.from) !== getAddress(expected.from)
       || !transaction.to || getAddress(transaction.to) !== getAddress(expected.to) || keccak256(transaction.input) !== keccak256(expected.data)
       || transaction.value !== expected.value || transaction.blockHash !== receipt.blockHash || transaction.blockNumber !== receipt.blockNumber
-      || (transaction.chainId !== undefined && transaction.chainId !== 4663)) throw new Error("The saved transaction does not match the reviewed operation.");
+      || (transaction.chainId !== undefined && transaction.chainId !== chainId)) throw new Error("The saved transaction does not match the reviewed operation.");
     const block = await client.getBlock({ blockNumber: receipt.blockNumber });
     if (block.hash !== receipt.blockHash) throw new Error("The confirmation block changed. Check again.");
     outcome.receipt = receipt;
@@ -214,10 +216,10 @@ export function useFoundationSession(token?: Address) {
   }
   async function acknowledgeResult(operationId: string, resetDraft = true) {
     if (!account || executing.current) throw new Error("Wait for the current operation to finish.");
-    await acknowledgeFoundationResolution(account, operationId);
+    await acknowledgeFoundationResolution(account, operationId, chainId);
     if (resetDraft) setResultGeneration(value => value + 1);
   }
-  return { client, account, walletContext, availability, envelope, displayEnvelope: token ? null : displayEnvelope, contextKey, walletAction, submissionBlocked, preparationBlocked,
+  return { chainId, profile, client, account, walletContext, availability, envelope, displayEnvelope: token ? null : displayEnvelope, contextKey, walletAction, submissionBlocked, preparationBlocked,
     pending, resolution, resolutionState, resultGeneration, acknowledgeResult, progress, assertCurrent, resolveAuthority, resolveCatalog, execute, refreshResult,
     retryAvailability: () => setRefresh(value => value + 1) };
 }
@@ -247,9 +249,9 @@ export function FoundationSessionStatus({ session, editingNewLaunch = false, sho
         : resolved.status === "success" ? editingNewLaunch ? "You can configure a new coin below. Your previous transaction is available here."
           : `Your ${resolved.metadata?.stepKind === "launch" ? "launch" : "transaction"} is saved at block ${resolved.blockNumber}. You can return to its details after reloading this page.`
           : "The request did not complete. Network gas may have been charged."}</p>
-      <p><a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${resolved.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a>
+      <p><a href={`${foundationChainProfile(foundationBindingChainId(resolved)).explorer}/tx/${resolved.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a>
         {resolved.status === "success" && resolved.metadata?.stepKind === "launch" && resolved.metadata.token
-          ? <> · <a href={`/modules/${resolved.metadata.token}?transaction=${resolved.transactionHash}`}>View Coin</a></> : null}</p>
+          ? <> · <a href={`/modules/${resolved.metadata.token}?${foundationBindingChainId(resolved) === 1 ? "chainId=1&" : ""}transaction=${resolved.transactionHash}`}>View Coin</a></> : null}</p>
       {!recovery ? <button type="button" className={styles.secondaryButton} disabled={busy} onClick={() => {
         setBusy(true); setMessage(""); void session.acknowledgeResult(resolved.operationId, !editingNewLaunch)
           .catch(error => setMessage(error instanceof Error ? error.message : "The saved result could not be acknowledged."))

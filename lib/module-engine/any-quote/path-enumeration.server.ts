@@ -3,9 +3,11 @@ import { computeAllV4Routes } from "@uniswap/smart-order-router/build/main/route
 import { HooksOptions } from "@uniswap/smart-order-router/build/main/util/hooksOptions.js";
 import { V4_ETH_WETH_FAKE_POOL } from "@uniswap/smart-order-router/build/main/util/pool.js";
 import { type Address } from "viem";
-import { ANY_QUOTE_CHAIN_ID, ANY_QUOTE_NATIVE, AnyQuoteErrorV1, anyQuoteSameAddressV1, type AnyQuoteV4PoolCandidateV1 } from "./types";
+import { ANY_QUOTE_NATIVE, AnyQuoteErrorV1, anyQuoteSameAddressV1, type AnyQuoteV4PoolCandidateV1 } from "./types";
 import { anyQuotePoolIdV1 } from "./route";
 import { ANY_QUOTE_V4_MAX_POOL_CANDIDATES, anyQuoteV4CandidateHopV1 } from "./discovery.server";
+
+import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 
 // SOR's pinned CommonJS helper uses instanceof Pool. Use the same entry, as well as
 // the package override, so Next cannot give this adapter a second ESM Pool class.
@@ -22,10 +24,11 @@ export type AnyQuoteV4RoutingPoolV1 = AnyQuoteV4PoolCandidateV1 & {
  * SDK pool objects describe topology; quotes always come from the real Quoter.
  * The existing automatic index searches direct pools and one intermediate. */
 export function enumerateAnyQuoteV4PathsV1(input: {
-  pools: readonly AnyQuoteV4RoutingPoolV1[]; tokenIn: Address; tokenOut: Address; maxHops: 1 | 2;
+  pools: readonly AnyQuoteV4RoutingPoolV1[]; tokenIn: Address; tokenOut: Address; maxHops: 1 | 2; chainId?: FoundationChainId;
 }) {
   if (input.maxHops !== 1 && input.maxHops !== 2) throw new AnyQuoteErrorV1("V4_DISCOVERY_ROUTE_MISMATCH");
   if (input.pools.length > 2 * ANY_QUOTE_V4_MAX_POOL_CANDIDATES) throw new AnyQuoteErrorV1("V4_DISCOVERY_CANDIDATE_LIMIT");
+  const ANY_QUOTE_CHAIN_ID = foundationChainProfile(input.chainId).chainId;
   const native = Ether.onChain(ANY_QUOTE_CHAIN_ID);
   // SOR 4.31.10's pure enumerator and formatter consult this map even for V4-only
   // routes. This missing-chain entry is internal wrap metadata, not pool data.

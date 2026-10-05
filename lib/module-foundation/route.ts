@@ -1,8 +1,8 @@
 import { CommandType, RoutePlanner, UniversalRouterVersion } from "@uniswap/universal-router-sdk";
 import { Actions, V4Planner, URVersion } from "@uniswap/v4-sdk";
 import { encodeAbiParameters, encodeFunctionData, getAddress, keccak256, parseAbi, parseAbiParameters, zeroAddress, type Address, type Hex } from "viem";
-import { FOUNDATION_CHAIN_ID, FOUNDATION_INFRASTRUCTURE, FOUNDATION_INT128_MAX, FOUNDATION_LP_FEE, FOUNDATION_TICK_SPACING } from "./constants";
-import { FOUNDATION_WETH } from "./native-funding";
+import { FOUNDATION_INT128_MAX, FOUNDATION_LP_FEE, FOUNDATION_TICK_SPACING } from "./constants";
+import { foundationChainProfile, type FoundationChainId } from "./chains";
 import { requireAnyQuoteNativeUnlockRouteV1 } from "@/lib/module-engine/any-quote/route";
 import type { AnyQuoteExternalRouteV1 } from "@/lib/module-engine/any-quote/types";
 
@@ -26,7 +26,8 @@ export function foundationPoolId(key: FoundationPoolKey): Hex {
 
 /** Single-pool official UR 2.1.1 route. Existing router donations cannot fund a user's swap. */
 export function buildFoundationExactInput(input: { pool: FoundationPool; owner: Address; recipient: Address;
-  side: "buy" | "sell"; amountIn: bigint; minimumOutput: bigint; deadline: bigint; now?: bigint }) {
+  chainId?: FoundationChainId; side: "buy" | "sell"; amountIn: bigint; minimumOutput: bigint; deadline: bigint; now?: bigint }) {
+  const profile = foundationChainProfile(input.chainId), FOUNDATION_INFRASTRUCTURE = profile.infrastructure;
   const now = input.now ?? BigInt(Math.floor(Date.now() / 1_000));
   if ((input.side !== "buy" && input.side !== "sell") || input.amountIn <= 0n || input.amountIn > FOUNDATION_INT128_MAX
     || input.minimumOutput <= 0n || input.minimumOutput > FOUNDATION_INT128_MAX
@@ -47,7 +48,7 @@ export function buildFoundationExactInput(input: { pool: FoundationPool; owner: 
   const router = new RoutePlanner();
   router.addCommand(CommandType.V4_SWAP, [v4.finalize()], false, UniversalRouterVersion.V2_1_1);
   const commands = router.commands as Hex, inputs = router.inputs as Hex[];
-  return { chainId: FOUNDATION_CHAIN_ID, routerVersion: "2.1.1" as const, poolId: input.pool.poolId, currencyIn, currencyOut,
+  return { chainId: profile.chainId, routerVersion: "2.1.1" as const, poolId: input.pool.poolId, currencyIn, currencyOut,
     commands, inputs, deadline: input.deadline, minimumOutput: input.minimumOutput,
     transaction: { from: owner, to: FOUNDATION_INFRASTRUCTURE.universalRouter.address,
       data: encodeFunctionData({ abi: executeAbi, functionName: "execute", args: [commands, inputs, input.deadline] }), value: 0n },
@@ -57,10 +58,10 @@ export function buildFoundationExactInput(input: { pool: FoundationPool; owner: 
 }
 
 /** Reuse qualified native v4 hops, with the actual Foundation pool's own key. */
-export function foundationNativeTradePath(pool: FoundationPool, side: "buy" | "sell", route: AnyQuoteExternalRouteV1) {
+export function foundationNativeTradePath(pool: FoundationPool, side: "buy" | "sell", route: AnyQuoteExternalRouteV1, chainId: FoundationChainId = 4663) {
   const key = foundationPoolKey(pool), buy = side === "buy";
   if (foundationPoolId(key).toLowerCase() !== pool.poolId.toLowerCase()) throw new Error("Pool identity changed.");
-  const hops = requireAnyQuoteNativeUnlockRouteV1(route, side);
+  const hops = requireAnyQuoteNativeUnlockRouteV1(route, side, chainId);
   if (getAddress(buy ? hops.at(-1)!.tokenOut : hops[0].tokenIn) !== getAddress(pool.quote)) throw new Error("The ETH route uses another quote token.");
   if (hops.some(hop => getAddress(hop.tokenIn) === getAddress(pool.token) || getAddress(hop.tokenOut) === getAddress(pool.token)
     || hop.poolId.toLowerCase() === pool.poolId.toLowerCase())) throw new Error("The ETH route repeats the launch pool.");
@@ -74,9 +75,10 @@ export function foundationNativeTradePath(pool: FoundationPool, side: "buy" | "s
 
 /** Official UR commands: native v4 routing, or exact wrapping/unwrapping for the WETH quote. */
 export function buildFoundationNativeExactInput(input: Parameters<typeof buildFoundationExactInput>[0] & { externalRoute?: AnyQuoteExternalRouteV1 }) {
+  const FOUNDATION_WETH = foundationChainProfile(input.chainId).wrappedEth.address;
   const base = buildFoundationExactInput(input), buy = input.side === "buy";
   const wrapped = getAddress(input.pool.quote) === FOUNDATION_WETH;
-  const path = wrapped ? null : input.externalRoute ? foundationNativeTradePath(input.pool, input.side, input.externalRoute) : null;
+  const path = wrapped ? null : input.externalRoute ? foundationNativeTradePath(input.pool, input.side, input.externalRoute, input.chainId) : null;
   const now = input.now ?? BigInt(Math.floor(Date.now() / 1_000));
   if (!wrapped && (!path || BigInt(input.externalRoute!.validUntil) <= now)) throw new Error("A current ETH route is required.");
   const router = new RoutePlanner(), v4 = new V4Planner();

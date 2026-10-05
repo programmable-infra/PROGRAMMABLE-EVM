@@ -50,7 +50,9 @@ describe("Foundation presentation reads", () => {
     readQuote.mockRejectedValueOnce(new Error("Provider unavailable"));
     await expect(readFoundationQuoteForDisplay(client, address)).rejects.toThrow("Provider unavailable");
     await expect(readFoundationQuoteForDisplay(client, address)).resolves.toMatchObject({ symbol: "Q" });
-    await expect(readFoundationQuoteForDisplay({ chain: { id: 1 } } as PublicClient, address)).rejects.toThrow("Robinhood Chain");
-    expect(readQuote).toHaveBeenCalledTimes(2);
+    await expect(readFoundationQuoteForDisplay({ chain: { id: 1 } } as PublicClient, address)).resolves.toMatchObject({ symbol: "Q" });
+    expect(readQuote).toHaveBeenCalledTimes(3);
+    await expect(readFoundationQuoteForDisplay({ chain: { id: 10 } } as PublicClient, address)).rejects.toThrow("supported launch network");
+    expect(readQuote).toHaveBeenCalledTimes(3);
   });
 });

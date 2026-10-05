@@ -4,6 +4,8 @@ import "server-only";
 import publishers from "@/config/module-foundation/owner-publishers.json";
 import { get } from "@vercel/blob";
 import { createPublicClient, fallback, http, type PublicClient } from "viem";
+import { foundationBindingChainId, type FoundationChainId } from "@/lib/module-foundation/chains";
+import { createFoundationServerClient } from "./client";
 import { robinhoodChain, ROBINHOOD_MAINNET_RPC_URL } from "@/lib/chains";
 import type { FoundationAvailabilityEnvelope } from "@/lib/module-foundation/availability";
 import { FOUNDATION_OWNER_CATALOG_PATH, FOUNDATION_OWNER_CATALOG_V1, foundationOwnerReferenceV1,
@@ -11,7 +13,7 @@ import { FOUNDATION_OWNER_CATALOG_PATH, FOUNDATION_OWNER_CATALOG_V1, foundationO
 
 // Share concurrent requests only. A later request always reads the current catalog/runtime.
 const pendingReads = new Map<string, Promise<unknown[]>>();
-let sharedClient: PublicClient | undefined;
+const sharedClients = new Map<FoundationChainId, PublicClient>();
 async function readCurrentCatalog(token: string): Promise<unknown[]> {
   const existing = pendingReads.get(token);
   if (existing) return existing;
@@ -48,13 +50,15 @@ export async function withFoundationOwnerCatalogV1(availability: FoundationAvail
   let values: unknown[];
   try { values = await (dependencies.read?.() ?? readCurrentCatalog(token!)); } catch { return availability; }
   if (!values.length) return availability;
-  const client = dependencies.client ?? (sharedClient ??= ownerClient());
+  const chainId = foundationBindingChainId(availability.binding);
+  let client = dependencies.client ?? sharedClients.get(chainId);
+  if (!client) { client = chainId === 4663 ? ownerClient() : createFoundationServerClient(chainId); sharedClients.set(chainId, client); }
   const verified: Awaited<ReturnType<typeof verifyFoundationOwnerPublicationV1>>[] = [];
   // Bound provider concurrency as the catalog grows, while preserving catalog order.
   for (let offset = 0; offset < values.length; offset += 4) {
     const batch = await Promise.allSettled(values.slice(offset, offset + 4).map(async value => {
       const publication = await verifyFoundationOwnerPublicationV1(value, publishers.wallets);
-      if (publication.protocolReleaseDigest !== availability.binding!.releaseDigest) return null;
+      if (publication.release.chainId !== chainId || publication.protocolReleaseDigest !== availability.binding!.releaseDigest) return null;
       await verifyFoundationOwnerRuntimeV1(publication, client);
       return publication;
     }));

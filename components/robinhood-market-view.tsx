@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
+import { ChainMark } from "./chain-mark";
 import { ArrowLeft, ArrowRight, Check, Copy } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { AnimatedMarketCap } from "./animated-market-cap";
@@ -18,7 +18,8 @@ const EXPLORER = "https://robinhoodchain.blockscout.com";
 
 /** Shared market presentation; each launch family supplies its own verified trade adapter. */
 export function RobinhoodMarketView({ address, name, symbol, creator, launch, presentation, loading = false,
-  delayed = false, hasAsset = true, manageHref, fallbackImageUrl, trade, children }: {
+  chainId = 4663, delayed = false, hasAsset = true, manageHref, fallbackImageUrl, trade, children }: {
+  chainId?: 1 | 4663;
   address: string;
   name: string;
   symbol?: string | null;
@@ -37,7 +38,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
   const valuation = coinValuation(market);
   const change = market?.change24hPercent;
   const description = presentation?.description?.trim();
-  const explorerHref = `${EXPLORER}/${launch?.launchProjection ? "address" : "token"}/${address}`;
+  const explorerHref = `${chainId === 1 ? "https://etherscan.io" : EXPLORER}/${launch?.launchProjection ? "address" : "token"}/${address}`;
   const [copyResult, setCopyResult] = useState<{ address: string; state: "copied" | "failed" } | null>(null);
   const copyState = copyResult?.address === address ? copyResult.state : "idle";
 
@@ -62,10 +63,10 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
             <div className={styles.nameRow}>
               <h1>{name}</h1>
               {hasAsset && (symbol || !loading) ? <span className={styles.ticker}>{coinTicker(symbol ?? null)}</span> : null}
-              <Image className={styles.chainLogo} src="/brand/networks/robinhood-feather-white.svg" alt="Robinhood Chain" width={17} height={22} title="Robinhood Chain" />
+              <ChainMark chainId={chainId} className={styles.chainLogo} />
               {presentation?.links.length ? <RobinhoodProjectLinks links={presentation.links} name={name} /> : null}
             </div>
-            {launch ? <LaunchPairModules launch={launch} chainId={4663} market={market} className={styles.launchProperties} /> : null}
+            {launch ? <LaunchPairModules launch={launch} chainId={chainId} market={market} className={styles.launchProperties} /> : null}
             {description && description.toLowerCase() !== name.trim().toLowerCase() ? <p className={styles.bio}>{description}</p> : null}
           </div>
         </div>
@@ -74,7 +75,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
             {copyState === "copied" ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
             {copyState === "copied" ? "Copied" : "Copy address"}
           </button>
-          {creator && /^0x(?!0{40}$)[\da-f]{40}$/i.test(creator) ? <Link className={styles.secondaryButton} href={`/profile?account=${creator}&chain=4663`} prefetch={false} title={`Dev wallet: ${creator}`}>Dev wallet</Link> : null}
+          {creator && /^0x(?!0{40}$)[\da-f]{40}$/i.test(creator) ? <Link className={styles.secondaryButton} href={`/profile?account=${creator}&chain=${chainId}`} prefetch={false} title={`Dev wallet: ${creator}`}>Dev wallet</Link> : null}
         </div>
       </header>
       <p className="sr-only" role="status">{copyState === "copied" ? "Contract address copied" : ""}</p>
@@ -85,7 +86,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
         <dl className={styles.metrics}>
           <Metric label="Price" value={coinDollars(market?.priceUsd, true)} />
           <Metric label={valuation.label} title={valuation.title} value={market && valuation.value !== null
-            ? <AnimatedMarketCap metric={{ kind: "usd", value: valuation.value }} replayKey={`4663:${address.toLowerCase()}:${market.poolId.toLowerCase()}:${valuation.label}`} /> : "—"} />
+            ? <AnimatedMarketCap metric={{ kind: "usd", value: valuation.value }} replayKey={`${chainId}:${address.toLowerCase()}:${market.poolId.toLowerCase()}:${valuation.label}`} /> : "—"} />
           <Metric label="Liquidity" title="Liquidity in this coin’s launch pool" value={coinDollars(market?.liquidityUsd)} />
           <Metric label="24h volume" value={coinDollars(market?.volume24hUsd)} />
           <div><dt>24h change</dt><dd className={styles.change} data-direction={change != null && change < 0 ? "down" : change != null && change > 0 ? "up" : "flat"}>
@@ -94,7 +95,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
         </dl>
         {delayed && !loading ? <p className={styles.notice} role="status">{market ? "Price updates are delayed." : "Market data is temporarily unavailable."}</p> : null}
         <div className={styles.tradingLayout}>
-          {launch?.poolId ? <RobinhoodChart tokenAddress={address} poolId={launch.poolId} name={name} market={market} /> : <div className={styles.chart} aria-busy={loading}><p className={styles.chartState} role="status">{loading ? "Loading chart…" : "No trading market is verified for this coin."}</p></div>}
+          {launch?.poolId ? <RobinhoodChart chainId={chainId} tokenAddress={address} poolId={launch.poolId} name={name} market={market} /> : <div className={styles.chart} aria-busy={loading}><p className={styles.chartState} role="status">{loading ? "Loading chart…" : "No trading market is verified for this coin."}</p></div>}
           <ResponsiveTradePanel symbol={symbol ?? undefined}>{trade}</ResponsiveTradePanel>
         </div>
       </> : <p className={styles.notice}>No primary asset is declared for this launch.</p>}

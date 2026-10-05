@@ -1,3 +1,4 @@
+import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "./chains";
 import { getAddress, isAddress, type Address, type Hex } from "viem";
 import type { FoundationDeploymentBinding } from "./client";
 import { foundationFactoryVersion } from "./protocol";
@@ -6,8 +7,10 @@ import { bindFoundationCatalogV1, FOUNDATION_CATALOG_SCHEMA_V1, type FoundationC
 export const FOUNDATION_AVAILABILITY_SCHEMA = "programmable.module-foundation.availability.v1";
 export const FOUNDATION_AVAILABILITY_SCHEMA_V2 = "programmable.module-foundation.availability.v2";
 export const FOUNDATION_AVAILABILITY_SCHEMA_V3 = "programmable.module-foundation.availability.v3";
+export const FOUNDATION_AVAILABILITY_SCHEMA_V4 = "programmable.module-foundation.availability.v4";
 export interface FoundationAvailabilityEnvelope {
-  schemaVersion: typeof FOUNDATION_AVAILABILITY_SCHEMA | typeof FOUNDATION_AVAILABILITY_SCHEMA_V2 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V3;
+  chainId?: FoundationChainId;
+  schemaVersion: typeof FOUNDATION_AVAILABILITY_SCHEMA | typeof FOUNDATION_AVAILABILITY_SCHEMA_V2 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V3 | typeof FOUNDATION_AVAILABILITY_SCHEMA_V4;
   available: boolean;
   reason: string | null;
   binding: FoundationDeploymentBinding | null;
@@ -18,10 +21,12 @@ export interface FoundationAvailabilityEnvelope {
   providerDisagreement?: boolean;
 }
 export class FoundationProviderDisagreementError extends Error {
-  constructor() { super("Robinhood launch checks are temporarily out of sync."); }
+  constructor() { super("Launch checks are temporarily out of sync."); }
 }
-export function unavailableFoundation(schemaVersion: FoundationAvailabilityEnvelope["schemaVersion"] = FOUNDATION_AVAILABILITY_SCHEMA): FoundationAvailabilityEnvelope {
-  return { schemaVersion, available: false,
+export function unavailableFoundation(schemaVersion: FoundationAvailabilityEnvelope["schemaVersion"] = FOUNDATION_AVAILABILITY_SCHEMA, chainId: FoundationChainId = 4663): FoundationAvailabilityEnvelope {
+  foundationChainProfile(chainId);
+  if (chainId === 1 && schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V4) throw new Error("Ethereum availability requires an explicit chain-bound schema.");
+  return { schemaVersion, ...(schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 ? { chainId } : {}), available: false,
     reason: "Launching is temporarily unavailable while this release is being verified. Your coin details stay here.", binding: null,
     catalog: { document: { schemaVersion: FOUNDATION_CATALOG_SCHEMA_V1, entries: [] }, authority: { admissions: [], releases: [] } } };
 }
@@ -46,24 +51,29 @@ function tokenAddress(value: unknown): Address {
 /** Parse only the trusted same-origin response; this is not an independent acceptance decision. */
 export function parseFoundationAvailability(value: unknown, now = Date.now()): FoundationAvailabilityEnvelope {
   const r = record(value);
-  if (r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V2 && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V3) throw new Error("The release response is unsupported.");
+  if (r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V2 && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V3 && r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V4) throw new Error("The release response is unsupported.");
+  const chainId = r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 ? foundationChainProfile(Number(r.chainId)).chainId : 4663;
+  if (r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 && r.chainId !== chainId) throw new Error("The release response has no exact network identity.");
+  if (r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA_V4 && r.chainId !== undefined && r.chainId !== 4663) throw new Error("Legacy source authority belongs only to Robinhood Chain.");
   const token = r.token === undefined ? undefined : tokenAddress(r.token).toLowerCase() as Address;
   if (r.token !== undefined && r.token !== token) throw new Error("The token authority response is not canonical.");
-  if (r.available !== true) return { ...unavailableFoundation(r.schemaVersion), ...(token ? { token } : {}),
+  if (r.available !== true) return { ...unavailableFoundation(r.schemaVersion, chainId), ...(token ? { token } : {}),
     ...(r.reason === "MODULE_INDEX_PROVIDER_DISAGREEMENT" ? { providerDisagreement: true } : {}) };
   const b = record(r.binding), evidence = record(r.evidence);
   if (typeof b.sourceCommit !== "string" || !/^[a-f0-9]{40}$/.test(b.sourceCommit)
     || typeof b.startBlock !== "string" || !/^[1-9][0-9]{0,19}$/.test(b.startBlock)
     || typeof evidence.checkedAt !== "string" || !Number.isFinite(Date.parse(evidence.checkedAt))
     || Math.abs(now - Date.parse(evidence.checkedAt)) > 120_000
-    || evidence.sourcePath !== (r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA
+    || evidence.sourcePath !== (r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4
+      ? `/v2/modules/foundation/chains/${chainId}/source/release/${hash(b.releaseDigest).toLowerCase()}` : r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA
       ? `/v1/modules/foundation/source/release/${hash(b.releaseDigest).toLowerCase()}` : "/v1/modules/foundation/source")) throw new Error("Current verified release evidence is unavailable.");
   for (const field of ["artifactDigest", "decisionDigest", "sourceManifestHash", "deploymentEvidenceDigest", "runtimeVerificationDigest", "finalityEvidenceDigest", "blockHash"]) hash(evidence[field]);
-  const pins = { releaseDigest: hash(b.releaseDigest), sourceCommit: b.sourceCommit,
+  if (r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 && b.chainId !== chainId) throw new Error("The deployment binding belongs to a different network.");
+  const pins = { ...(r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 ? { chainId } : {}), releaseDigest: hash(b.releaseDigest), sourceCommit: b.sourceCommit,
     startBlock: BigInt(b.startBlock), factory: pin(b.factory), hookDeployer: pin(b.hookDeployer) };
   let binding: FoundationDeploymentBinding;
   if (r.schemaVersion !== FOUNDATION_AVAILABILITY_SCHEMA) {
-    const factoryVersion = r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V3 ? "v3" : "v2";
+    const factoryVersion = (r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V3 || r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4) ? "v3" : "v2";
     if (b.factoryVersion !== factoryVersion) throw new Error("The release has no exact factory version.");
     binding = { ...pins, factoryVersion, lpCustodyId: hash(b.lpCustodyId) };
   } else {
@@ -76,17 +86,22 @@ export function parseFoundationAvailability(value: unknown, now = Date.now()): F
   const document = catalog.document as FoundationCatalogDocumentV1;
   const authority = catalog.authority as FoundationCatalogAuthorityV1;
   bindFoundationCatalogV1(document, authority);
-  return { schemaVersion: r.schemaVersion, available: true, reason: null, binding, catalog: { document, authority }, ...(token ? { token } : {}) };
+  return { schemaVersion: r.schemaVersion, ...(r.schemaVersion === FOUNDATION_AVAILABILITY_SCHEMA_V4 ? { chainId } : {}), available: true, reason: null, binding, catalog: { document, authority }, ...(token ? { token } : {}) };
 }
-export async function fetchFoundationAvailability(signal?: AbortSignal, token?: Address): Promise<FoundationAvailabilityEnvelope> {
+export async function fetchFoundationAvailability(signal?: AbortSignal, token?: Address, chainId: FoundationChainId = 4663): Promise<FoundationAvailabilityEnvelope> {
+  const profile = foundationChainProfile(chainId);
+  const unavailable = () => unavailableFoundation(chainId === 1 ? FOUNDATION_AVAILABILITY_SCHEMA_V4 : FOUNDATION_AVAILABILITY_SCHEMA, chainId);
+  const params = new URLSearchParams(); if (chainId !== 4663) params.set("chainId", String(chainId));
   const selected = token === undefined ? undefined : tokenAddress(token);
+  if (selected) params.set("token", selected);
   for (let attempt = 0; attempt < 3; attempt++) {
     signal?.throwIfAborted();
-    const response = await fetch(`/api/module-foundation${selected ? `?token=${selected}` : ""}`, { cache: "no-store", credentials: "same-origin", redirect: "error", signal });
+    const response = await fetch(`/api/module-foundation${params.size ? `?${params}` : ""}`, { cache: "no-store", credentials: "same-origin", redirect: "error", signal });
     if (response.redirected || !response.headers.get("content-type")?.startsWith("application/json")) throw new Error("Launch availability could not be checked.");
     const value: unknown = await response.json();
-    if (!response.ok && (!value || typeof value !== "object" || !("schemaVersion" in value))) return unavailableFoundation();
+    if (!response.ok && (!value || typeof value !== "object" || !("schemaVersion" in value))) return unavailable();
     const envelope = parseFoundationAvailability(value);
+    if (foundationBindingChainId(envelope.binding ?? envelope) !== profile.chainId) throw new Error("The source authority belongs to a different network.");
     if (envelope.token !== selected?.toLowerCase()) throw new Error("The release authority belongs to a different token request.");
     if (!response.ok && envelope.available) throw new Error("An unsuccessful response cannot authorize a release.");
     // Robinhood RPCs occasionally disagree at a fresh checkpoint. A new server proof is required on every retry.

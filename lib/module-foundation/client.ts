@@ -5,13 +5,13 @@ import {
   fallback, getAddress, getCreate2Address, http, keccak256, multicall3Abi, toHex, zeroAddress,
   type Address, type Hex, type PublicClient,
 } from "viem";
-import { assertFoundationNativeBalance, assertFoundationWrapRuntime, foundationWrappedAmount, prepareFoundationNativeFunding, FOUNDATION_WETH } from "./native-funding";
-import { robinhoodChain, ROBINHOOD_MULTICALL3_ADDRESS, ROBINHOOD_MULTICALL3_RUNTIME_CODE_HASH } from "@/lib/chains";
+import { assertFoundationNativeBalance, assertFoundationWrapRuntime, foundationWrappedAmount, prepareFoundationNativeFunding } from "./native-funding";
+import { foundationChainProfile, foundationBindingChainId, foundationClientProfile, type FoundationChainId } from "./chains";
 import { hasUnsafeDisplayCharacters, isValidTokenSymbol, MAX_METADATA_URL_BYTES, MAX_TOKEN_DESCRIPTION_BYTES, MAX_TOKEN_NAME_BYTES, utf8ByteLength } from "@/lib/metadata-policy";
 import { moduleTokenMetadata, type ModuleSocialLinks } from "@/lib/module-mode/token-metadata";
 import { encodeFoundationLaunchEntry, foundationFactoryV2Abi, foundationHookAbi, foundationHookV2Abi, foundationLedgerAbi, foundationMetadataParameters, foundationPermit2Abi, foundationQuoterAbi, foundationTokenAbi,
   type FoundationContractModule, type FoundationLaunchParameters, type FoundationLaunchRecord, type FoundationMetadata } from "./abi";
-import { FOUNDATION_ABI_ID, FOUNDATION_CHAIN_ID, FOUNDATION_INFRASTRUCTURE,
+import { FOUNDATION_ABI_ID,
   FOUNDATION_INT128_MAX, FOUNDATION_PLATFORM_RECIPIENT, FOUNDATION_ZERO_HASH, FOUNDATION_DEAD_ADDRESS, FOUNDATION_FACTORY_V2_ID, FOUNDATION_FACTORY_V3_ID, FOUNDATION_LP_CUSTODY_DEAD_ID } from "./constants";
 import { foundationParseAmount, planFoundationPrice } from "./price";
 import { parseFoundationStartPrice, planFoundationStartPrice, type FoundationStartPrice } from "./start-price";
@@ -27,11 +27,14 @@ import { assertFoundationV2Result, decodeFoundationLaunchResult, foundationFacto
   foundationV2PositionCalls, foundationV2PositionSpecs, verifyFoundationV2PositionData, type FoundationDeploymentBinding } from "./protocol";
 export type { FoundationDeploymentBinding } from "./protocol";
 
-export function createFoundationClient({ batchRpc = false }: { batchRpc?: boolean } = {}): PublicClient {
-  return createPublicClient({ chain: robinhoodChain, transport: fallback([
-    http("https://rpc-robinhood.blockmachine.io", { timeout: 20_000, retryCount: 0, batch: batchRpc ? { batchSize: 10, wait: 8 } : false }),
-    http("https://rpc.mainnet.chain.robinhood.com", { timeout: 20_000, retryCount: 0, batch: batchRpc ? { batchSize: 10, wait: 8 } : false }),
-  ], { rank: false, retryCount: 0 }), batch: { multicall: false } });
+export function createFoundationClient({ batchRpc = false, chainId = 4663, rpcUrls }: {
+  batchRpc?: boolean; chainId?: FoundationChainId; rpcUrls?: readonly string[];
+} = {}): PublicClient {
+  const profile = foundationChainProfile(chainId), endpoints = rpcUrls ?? profile.publicRpcUrls;
+  if (endpoints.length < 1 || endpoints.length > 2) throw new Error("Choose one or two chain-bound RPC providers.");
+  return createPublicClient({ chain: profile.chain, transport: fallback(endpoints.map(url =>
+    http(url, { timeout: 20_000, retryCount: 0, batch: batchRpc ? { batchSize: 10, wait: 8 } : false })),
+  { rank: false, retryCount: 0 }), batch: { multicall: false } });
 }
 
 export interface FoundationTransaction {
@@ -44,9 +47,6 @@ export interface FoundationPreparedStep {
 }
 export interface FoundationCheckpoint { blockNumber: bigint; blockHash: Hex; timestamp: bigint }
 export interface FoundationBalanceCheck { token: Address; account: Address; delta?: bigint; minimumDelta?: bigint; newToken?: boolean }
-
-// Public RPCs can expose the sequencer head before all of its state is readable.
-const FOUNDATION_CHECKPOINT_LAG = 16n;
 
 const preparedSequences = new WeakSet<object>();
 function sealFoundationSequence<T extends object>(value: T): T {
@@ -73,7 +73,9 @@ export async function prepareFoundationModuleAction(input: FoundationPrepareModu
 
 export async function assertFoundationInfrastructure(client: PublicClient, binding: FoundationDeploymentBinding, blockNumber?: bigint): Promise<FoundationCheckpoint> {
   const factoryVersion = foundationFactoryVersion(binding), factoryAbi = foundationFactoryAbiFor(binding);
-  if (await client.getChainId() !== FOUNDATION_CHAIN_ID) throw new Error("The RPC is connected to a different network.");
+  const profile = foundationChainProfile(foundationBindingChainId(binding));
+  const FOUNDATION_INFRASTRUCTURE = profile.infrastructure, FOUNDATION_CHECKPOINT_LAG = profile.preparationLag;
+  if ((client.chain && client.chain.id !== profile.chainId) || await client.getChainId() !== profile.chainId) throw new Error("The RPC is connected to a different network.");
   let checkpointNumber = blockNumber;
   if (checkpointNumber === undefined) {
     const latest = await client.getBlock({ blockTag: "latest" });
@@ -114,6 +116,7 @@ export async function assertFoundationInfrastructure(client: PublicClient, bindi
 }
 
 export async function readFoundationQuote(client: PublicClient, raw: Address, account?: Address, blockNumber?: bigint) {
+  const FOUNDATION_INFRASTRUCTURE = foundationClientProfile(client).infrastructure;
   const address = getAddress(raw);
   if (BigInt(address) <= 2n || Object.values(FOUNDATION_INFRASTRUCTURE).some(pin => pin.address === address)) throw new Error("Choose an ERC20 quote token.");
   const [code, name, symbol, decimals, totalSupply, balance] = await Promise.all([
@@ -126,7 +129,7 @@ export async function readFoundationQuote(client: PublicClient, raw: Address, ac
   ]);
   if (!code || code === "0x" || decimals > 36 || totalSupply === 0n || utf8ByteLength(name) > 256 || utf8ByteLength(symbol) > 64
     || hasUnsafeDisplayCharacters(name) || hasUnsafeDisplayCharacters(symbol)) throw new Error("This quote token's metadata or decimals are unsupported.");
-  return { address, name, symbol, decimals, codeHash: keccak256(code), balance,
+  return { chainId: foundationClientProfile(client).chainId, address, name, symbol, decimals, codeHash: keccak256(code), balance,
     transferQualification: "exact-launch-simulation-required" as const };
 }
 
@@ -208,17 +211,19 @@ async function erc20Approvals(client: PublicClient, input: { account: Address; t
 
 /** Executes every approval and operation in one ephemeral RPC state, never a broadcast or fabricated allowance slot. */
 export async function simulateFoundationSequence(client: PublicClient, steps: readonly FoundationPreparedStep[], checkpoint: FoundationCheckpoint, checks: readonly FoundationBalanceCheck[] = [], postReads: readonly { to: Address; data: Hex }[] = []) {
+  const { chainId, multicall3 } = foundationClientProfile(client);
+  const nativeBalanceReaderAddress = multicall3.address, nativeBalanceReaderCodeHash = multicall3.runtimeCodeHash;
   if (steps.length === 0 || steps.length > 8) throw new Error("Invalid transaction sequence.");
   const account = steps[0].transaction.from;
   if (steps.some(step => getAddress(step.transaction.from) !== getAddress(account))) throw new Error("A sequence must have one payer.");
   if (checks.length > 4) throw new Error("Too many balance checks.");
   if (postReads.length > 11) throw new Error("Too many launch NFT and settlement checks.");
   if (checks.some(check => getAddress(check.token) === zeroAddress)) {
-    const code = await client.getCode({ address: ROBINHOOD_MULTICALL3_ADDRESS, blockNumber: checkpoint.blockNumber });
-    if (!code || keccak256(code) !== ROBINHOOD_MULTICALL3_RUNTIME_CODE_HASH) throw new Error("The native balance reader changed.");
+    const code = await client.getCode({ address: nativeBalanceReaderAddress, blockNumber: checkpoint.blockNumber });
+    if (!code || keccak256(code) !== nativeBalanceReaderCodeHash) throw new Error("The native balance reader changed.");
   }
   const readBalance = (check: FoundationBalanceCheck) => getAddress(check.token) === zeroAddress
-    ? { to: ROBINHOOD_MULTICALL3_ADDRESS, data: encodeFunctionData({ abi: multicall3Abi, functionName: "getEthBalance", args: [check.account] }) }
+    ? { to: nativeBalanceReaderAddress, data: encodeFunctionData({ abi: multicall3Abi, functionName: "getEthBalance", args: [check.account] }) }
     : { to: check.token, data: encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [check.account] }) };
   for (const check of checks.filter(check => check.newToken)) {
     const code = await client.getCode({ address: check.token, blockNumber: checkpoint.blockNumber });
@@ -248,7 +253,7 @@ export async function simulateFoundationSequence(client: PublicClient, steps: re
     const before = check.newToken ? 0n : balanceAt(previousChecks.indexOf(check));
     const after = balanceAt(offset + steps.length + index), delta = after - before;
     const wrapped = steps.some(step => step.kind === "wrap" && getAddress(step.transaction.to) === getAddress(check.token))
-      && getAddress(check.account) === getAddress(account) ? foundationWrappedAmount(steps, check.token) : 0n;
+      && getAddress(check.account) === getAddress(account) ? foundationWrappedAmount(steps, check.token, chainId) : 0n;
     if ((check.delta !== undefined && delta !== check.delta + wrapped) || (check.minimumDelta !== undefined && delta < check.minimumDelta + wrapped)) {
       throw new Error("The actual simulated wallet balances do not meet the reviewed amounts.");
     }
@@ -287,7 +292,7 @@ export async function simulateFoundationV2Launch(input: {
     if (getAddress(result.token) !== getAddress(input.expected.token) || getAddress(result.hook) !== getAddress(input.expected.hook)
       || result.poolId !== input.expected.poolId || result.baseTokenPrincipal !== input.price.base.principal
       || result.baseTokenRounding !== input.price.base.dust || result.creatorQuotePrincipal !== (input.price.creator?.principal ?? 0n)
-      || simulation.balances[0]?.delta !== foundationWrappedAmount(input.steps, input.parameters.quote) + result.actualQuoteRefund - (launchCall?.native ? 0n : input.parameters.initialBuyQuoteAmount + input.parameters.additionalQuoteAmount)
+      || simulation.balances[0]?.delta !== foundationWrappedAmount(input.steps, input.parameters.quote, foundationBindingChainId(input.binding)) + result.actualQuoteRefund - (launchCall?.native ? 0n : input.parameters.initialBuyQuoteAmount + input.parameters.additionalQuoteAmount)
       || result.initialBuyTokenAmount !== simulation.balances[1]?.delta) throw new Error("The V2 simulated launch differs from its exact source, principal or wallet movement.");
     return result;
   };
@@ -295,7 +300,7 @@ export async function simulateFoundationV2Launch(input: {
   const predicted = decode(first);
   const specs = foundationV2PositionSpecs(predicted, input.parameters.quote, input.parameters.initialTick,
     { base: input.price.base.liquidity, creator: input.price.creator?.liquidity });
-  const nftCalls = foundationV2PositionCalls(specs);
+  const nftCalls = foundationV2PositionCalls(specs, foundationBindingChainId(input.binding));
   const settlementCalls = [
     { to: input.parameters.quote, data: encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [input.binding.factory.address] }) },
     { to: predicted.token, data: encodeFunctionData({ abi: erc20Abi, functionName: "balanceOf", args: [input.binding.factory.address] }) },
@@ -415,6 +420,8 @@ export async function prepareFoundationTrade(input: { client: PublicClient; bind
   pool: FoundationPool; side: "buy" | "sell"; amountIn: bigint; slippageBps: number; moduleReview?: FoundationTradeModuleReview;
   nativeEth?: boolean; externalRoute?: AnyQuoteExternalRouteV1 }) {
   const { client, binding } = input, account = getAddress(input.account);
+  const chainId = foundationBindingChainId(binding), profile = foundationChainProfile(chainId);
+  const FOUNDATION_WETH = profile.wrappedEth.address, FOUNDATION_INFRASTRUCTURE = profile.infrastructure;
   let checkpoint = await assertFoundationInfrastructure(client, binding);
   if (input.amountIn <= 0n || input.amountIn > FOUNDATION_INT128_MAX || !Number.isInteger(input.slippageBps)
     || input.slippageBps < 1 || input.slippageBps > 1_000) throw new Error("Invalid trade amount or slippage.");
@@ -437,7 +444,7 @@ export async function prepareFoundationTrade(input: { client: PublicClient; bind
   const singleCurrencyIn = input.side === "buy" ? input.pool.quote : input.pool.token;
   const currencyIn = input.nativeEth && input.side === "buy" ? zeroAddress : singleCurrencyIn;
   const path = input.nativeEth && getAddress(input.pool.quote) !== FOUNDATION_WETH
-    ? input.externalRoute ? foundationNativeTradePath(input.pool, input.side, input.externalRoute) : null : null;
+    ? input.externalRoute ? foundationNativeTradePath(input.pool, input.side, input.externalRoute, chainId) : null : null;
   if (input.nativeEth && getAddress(input.pool.quote) !== FOUNDATION_WETH && !path) throw new Error("An ETH route is required for this pool.");
   // A modular hook may authenticate Universal Router.msgSender(). A Quoter
   // cannot supply that identity; quote the actual payer's router sequence instead.
@@ -451,7 +458,7 @@ export async function prepareFoundationTrade(input: { client: PublicClient; bind
   if (minimumOutput === 0n) throw new Error("The trade is too small for a positive minimum output.");
   const deadline = checkpoint.timestamp + 300n;
   const makeRoute = (minimumOutput: bigint) => {
-    const routeInput = { ...input, owner: account, recipient: account, minimumOutput, deadline, now: checkpoint.timestamp };
+    const routeInput = { ...input, chainId, owner: account, recipient: account, minimumOutput, deadline, now: checkpoint.timestamp };
     return input.nativeEth ? buildFoundationNativeExactInput(routeInput) : buildFoundationExactInput(routeInput);
   };
   let route = makeRoute(minimumOutput);
@@ -509,6 +516,7 @@ export async function readFoundationPoolAssetPins(client: PublicClient, pool: Fo
 export async function prepareFoundationClaim(input: { client: PublicClient; binding: FoundationDeploymentBinding;
   account: Address; pool: FoundationPool; beneficiary: "platform" | "creator" }) {
   const { client, binding, pool, beneficiary } = input, account = getAddress(input.account);
+  const FOUNDATION_INFRASTRUCTURE = foundationChainProfile(foundationBindingChainId(binding)).infrastructure;
   if (beneficiary !== "platform" && beneficiary !== "creator") throw new Error("Choose an existing fee account.");
   const checkpoint = await assertFoundationInfrastructure(client, binding);
   const provenance = await assertFoundationPool(client, binding, pool, checkpoint.blockNumber);

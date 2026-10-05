@@ -12,8 +12,9 @@ import { composeFoundationUiSelectionsV1, decodeFoundationFieldsV1, foundationAs
   FOUNDATION_CREATOR_SHARE_FIELD_V1 } from "@/lib/module-foundation/presentation";
 import { FOUNDATION_HOST_ADAPTER_ID_V1, foundationRequire } from "@/lib/module-foundation/manifest";
 import { foundationAssetAddressesForFieldsV1, resolveFoundationAssetsV1 } from "@/lib/module-foundation/assets";
-import { assertFoundationInfrastructure, createFoundationClient, foundationMetadata, readFoundationQuote } from "@/lib/module-foundation/client";
-import { FOUNDATION_CHAIN_ID, FOUNDATION_INFRASTRUCTURE } from "@/lib/module-foundation/constants";
+import { assertFoundationInfrastructure, foundationMetadata, readFoundationQuote } from "@/lib/module-foundation/client";
+import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
+import { createFoundationServerClient } from "@/lib/server/module-foundation/client";
 import { foundationFactoryAbiFor } from "@/lib/module-foundation/protocol";
 import { nativeJson } from "@/lib/module-mode/native-catalog";
 import { moduleHash, moduleRecord } from "@/lib/module-mode/release";
@@ -26,12 +27,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 90;
 const headers = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 
-async function readLaunchAvailability() {
+async function readLaunchAvailability(chainId: FoundationChainId) {
   const deadline = Date.now() + 55_000;
   // Retry only a fresh-checkpoint RPC disagreement. These are read-only proofs;
   // launch simulation and wallet submission still run at most once per click.
   for (const delay of [750, 1_500, 3_000, 0]) {
-    const availability = parseFoundationAvailability(await readFoundationAvailabilityResponse(fetch, Math.max(1, deadline - Date.now())));
+    const availability = parseFoundationAvailability(await readFoundationAvailabilityResponse(fetch, Math.max(1, deadline - Date.now()), undefined, chainId));
     if (!availability.providerDisagreement || delay === 0) return availability;
     const remaining = deadline - Date.now();
     if (remaining <= 1_000) return availability;
@@ -48,9 +49,11 @@ export async function POST(request: Request): Promise<NextResponse> {
     try { for (;;) { const { done, value } = await reader.read(); if (done) break;
       size += value.length; if (size > 262_144) throw new Error("The module configuration is too large."); chunks.push(value); }
     } finally { await reader.cancel().catch(() => undefined); }
-    const body = moduleRecord(nativeJson(JSON.parse(Buffer.concat(chunks).toString("utf8"))),
-      ["account", "releaseDigest", "tokenSalt", "draft", "launchFlow"], "foundation.compose") as unknown as {
-      account: string; releaseDigest: Hex; tokenSalt: Hex; draft: FoundationLaunchDraft; launchFlow: string };
+    const rawBody = nativeJson(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+    const body = moduleRecord(rawBody,
+      ["account", "releaseDigest", "tokenSalt", "draft", "launchFlow", ...(rawBody && typeof rawBody === "object" && Object.hasOwn(rawBody, "chainId") ? ["chainId"] : [])], "foundation.compose") as unknown as {
+      chainId?: FoundationChainId; account: string; releaseDigest: Hex; tokenSalt: Hex; draft: FoundationLaunchDraft; launchFlow: string };
+    const profile = foundationChainProfile(body.chainId), chainId = profile.chainId, FOUNDATION_INFRASTRUCTURE = profile.infrastructure;
     if (body.launchFlow !== "single-eth-v1") throw new Error("Refresh the page to use the current launch flow. Keep your coin details before refreshing.");
     const feeKeys = body.draft && typeof body.draft === "object" && Object.hasOwn(body.draft, "creatorFeeBps")
       ? ["creatorFeeBps"] : ["creatorBuyFeeBps", "creatorSellFeeBps"];
@@ -62,12 +65,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     if (!/^0x[0-9a-fA-F]{64}$/.test(body.tokenSalt)) throw new Error("The launch salt is invalid.");
     // The authority can spend 50 seconds checking runtime and finality. Match the
     // availability route's deadline and leave time for the remaining launch reads.
-    const availability = await readLaunchAvailability();
+    const availability = await readLaunchAvailability(chainId);
     if (availability.providerDisagreement) return NextResponse.json({
-      code: "MODULE_INDEX_PROVIDER_DISAGREEMENT", error: "Robinhood launch checks are temporarily out of sync.",
+      code: "MODULE_INDEX_PROVIDER_DISAGREEMENT", error: "Launch checks are temporarily out of sync.",
     }, { status: 503, headers });
     const binding = availability.binding;
-    if (!availability.available || !binding || binding.releaseDigest !== body.releaseDigest) throw new Error("The reviewed launch version is unavailable. Review again.");
+    if (!availability.available || !binding || foundationBindingChainId(binding) !== chainId || binding.releaseDigest !== body.releaseDigest) throw new Error("The reviewed launch version is unavailable. Review again.");
     if (binding.factoryVersion !== "v3" && feeRates.creatorBuyFeeBps !== feeRates.creatorSellFeeBps) throw new Error("Independent buy and sell fees are not live yet.");
     const catalog = bindFoundationCatalogV1(availability.catalog.document, availability.catalog.authority);
     foundationRequire(Array.isArray(draft.modules) && draft.modules.length <= 8,
@@ -78,7 +81,7 @@ export async function POST(request: Request): Promise<NextResponse> {
       const entry = resolveFoundationCatalogEntryV1(catalog, moduleHash(selection.id, "foundation.compose.packageId"));
       foundationRequire(entry.manifest.sourceDescriptor.version === selection.version && entry.manifestHash === selection.digest,
         "FOUNDATION_SELECTION_CHANGED", "The selected source version changed. Choose the current module version again.");
-      foundationRequire(entry.status === "available" && entry.release?.chainId === FOUNDATION_CHAIN_ID
+      foundationRequire(entry.status === "available" && entry.release?.chainId === chainId
         && entry.release.hostAdapterId === FOUNDATION_HOST_ADAPTER_ID_V1,
       "FOUNDATION_SELECTION_UNAVAILABLE", "The selected module has no current verified release for this host.");
       const configuration = raw.configuration;
@@ -89,14 +92,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     foundationRequire(new Set(selected.map(({ entry }) => entry.runtime.descriptor.moduleId)).size === selected.length,
       "FOUNDATION_MODULE_DUPLICATE", "Choose each module identity once.");
     request.signal.throwIfAborted();
-    const client = createFoundationClient({ batchRpc: true }), checkpoint = await assertFoundationInfrastructure(client, binding);
+    const client = createFoundationServerClient(chainId), checkpoint = await assertFoundationInfrastructure(client, binding);
     request.signal.throwIfAborted();
     const maximumEth = foundationParseAmount(draft.initialBuy, 18);
     if (maximumEth > 0n) await assertFoundationAtomicEth(client, binding, checkpoint.blockNumber);
-    const ethFunding = maximumEth > 0n ? await readFoundationEthFunding(getAddress(draft.quoteAsset), maximumEth) : undefined;
+    const ethFunding = maximumEth > 0n ? await readFoundationEthFunding(getAddress(draft.quoteAsset), maximumEth, chainId) : undefined;
     const quote = await readFoundationQuote(client, getAddress(draft.quoteAsset), account, checkpoint.blockNumber);
     const context: OpenConfigContext = { roles: { creator: account },
-      assets: { quote: { chainId: FOUNDATION_CHAIN_ID, address: quote.address, decimals: quote.decimals } },
+      assets: { quote: { chainId: chainId, address: quote.address, decimals: quote.decimals } },
       components: { factory: binding.factory.address,
         ...Object.fromEntries(Object.entries(FOUNDATION_INFRASTRUCTURE).map(([role, pin]) => [role, pin.address])) } };
     const addresses = selected.flatMap(({ entry, configuration }) => foundationAssetAddressesForFieldsV1({
@@ -105,7 +108,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     }));
     // One global bound applies across all selected modules, including defaults and fixed source values.
     const [resolved, startPrice] = await Promise.all([
-      resolveFoundationAssetsV1({ client, addresses, context, checkpoint }), readFoundationStartPrice(quote),
+      resolveFoundationAssetsV1({ client, addresses, context, checkpoint }), readFoundationStartPrice(quote, chainId),
     ]);
     const moduleAssetPins = resolved.pins;
     const metadata = foundationMetadata({ ...draft, imageURI: draft.image.url,
@@ -115,7 +118,7 @@ export async function POST(request: Request): Promise<NextResponse> {
     foundationRequire(getAddress(token) !== quote.address && !moduleAssetPins.some(([address]) => getAddress(address) === getAddress(token)),
       "FOUNDATION_ASSET_CONTEXT_CONFLICT", "The predicted coin overlaps an existing asset. Prepare with a new launch salt.");
     const finalContext: OpenConfigContext = { ...resolved.context, assets: { ...resolved.context.assets,
-      token: { chainId: FOUNDATION_CHAIN_ID, address: token, decimals: 18 } } };
+      token: { chainId: chainId, address: token, decimals: 18 } } };
     for (const { entry, configuration } of selected) {
       const schema = entry.manifest.sourceDescriptor.configuration;
       const value = decodeFoundationFieldsV1(schema, configuration, entry.runtime.defaults, finalContext);
@@ -127,10 +130,10 @@ export async function POST(request: Request): Promise<NextResponse> {
       }
     }
     const composition = composeFoundationUiSelectionsV1({ catalog,
-      selections: draft.modules, ...creatorFees, chainId: FOUNDATION_CHAIN_ID, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1,
+      selections: draft.modules, ...creatorFees, chainId: chainId, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1,
       context: finalContext });
     if (!composition.ok) return NextResponse.json({ error: "The selected modules cannot be composed.", diagnostics: composition.diagnostics }, { status: 422, headers });
-    return NextResponse.json({ releaseDigest: binding.releaseDigest, token, metadata, moduleAssetPins, modules: composition.modules,
+    return NextResponse.json({ chainId, releaseDigest: binding.releaseDigest, token, metadata, moduleAssetPins, modules: composition.modules,
       startPrice: parseFoundationStartPrice(startPrice, quote),
       ethFunding: ethFunding ? { maximumEth: ethFunding.maximumEth.toString(), quoteAmount: ethFunding.quoteAmount.toString(), path: ethFunding.path } : null,
       compositionHash: composition.compositionHash, totals: composition.totals }, { headers });

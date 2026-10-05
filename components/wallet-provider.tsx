@@ -2533,6 +2533,10 @@ function PrivyWalletBridge({
       if (sessionSubject === null) throw Object.assign(new Error("Your wallet session expired. Reconnect and try again"), {
         walletRequestAttempted: false, walletRequestRejected: false,
       });
+      const targetChain = "sourceKind" in prepared && prepared.sourceKind === "module-foundation-v1"
+        ? (await (await import("@/lib/module-foundation/wallet")).foundationPreparedWalletChainId(prepared) === 1 ? mainnet : robinhoodChain)
+        : robinhoodChain;
+      const targetChainHex = `0x${targetChain.id.toString(16)}`;
       const boundWallet = connectedWallet;
       const account = wallet.account;
       const expectedGeneration = walletSessionGenerationRef.current;
@@ -2551,20 +2555,20 @@ function PrivyWalletBridge({
       };
       try {
         return await runWithBrowserWalletRequestLock({
-          sessionSubject, account, chainId: String(robinhoodChain.id),
+          sessionSubject, account, chainId: String(targetChain.id),
           requestSubject: "module-mode-wallet-submit-v1", assertCurrentSession,
           execute: async () => {
             try {
               assertCurrentSession();
               const provider = await getWalletProviderOnChain({
-                wallet: boundWallet, chainId: robinhoodChain.id,
-                networkName: robinhoodChain.name, assertCurrentSession,
+                wallet: boundWallet, chainId: targetChain.id,
+                networkName: targetChain.name, assertCurrentSession,
               });
               const assertAuthority = async () => {
                 assertCurrentSession();
                 await assertExternalWalletAuthorityCurrent({
-                  expectedAccount: account, expectedChainId: robinhoodChainHex,
-                  networkName: robinhoodChain.name,
+                  expectedAccount: account, expectedChainId: targetChainHex,
+                  networkName: targetChain.name,
                   request: async (method) => {
                     assertCurrentSession();
                     const result = await provider.request({ method });
@@ -2581,7 +2585,7 @@ function PrivyWalletBridge({
                   () => revalidateModuleModeTransaction(prepared, account), assertCurrentSession)
                 : await revalidateModuleModeTransaction(prepared, account);
               enginePreparationPending = "sourceKind" in prepared && prepared.sourceKind === "module-engine-v1";
-              if (transaction.chainId !== robinhoodChain.id || transaction.from.toLowerCase() !== account.toLowerCase()) {
+              if (transaction.chainId !== targetChain.id || transaction.from.toLowerCase() !== account.toLowerCase()) {
                 throw new Error("The Module Mode transaction is bound to a different wallet or network");
               }
               await assertAuthority();
@@ -2605,7 +2609,7 @@ function PrivyWalletBridge({
                 walletRequestAttempted = true;
                 const result = await sendPrivyTransaction({
                   to: transaction.to, data: transaction.data, value: BigInt(transaction.value),
-                  chainId: robinhoodChain.id,
+                  chainId: targetChain.id,
                   ...(foundationNonce === undefined ? {} : { nonce: foundationNonce }),
                   ...(transaction.gas === undefined ? {} : { gas: BigInt(transaction.gas) }),
                 }, {

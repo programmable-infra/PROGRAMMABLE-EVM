@@ -1,6 +1,7 @@
 import { decodeFunctionResult, encodeFunctionData, encodeFunctionResult, getAddress, parseAbi, type Address, type Hex, type PublicClient } from "viem";
 import { foundationFactoryAbi, foundationFactoryV2Abi, foundationFactoryV3Abi, foundationFactoryNativeAbi, foundationFactoryV3NativeAbi, type FoundationLaunchParameters, type FoundationLaunchRecord, type FoundationLaunchResultV2 } from "./abi";
-import { FOUNDATION_DEAD_ADDRESS, FOUNDATION_INFRASTRUCTURE, FOUNDATION_LP_CUSTODY_DEAD_ID, FOUNDATION_SUPPLY } from "./constants";
+import { foundationBindingChainId, foundationChainProfile, foundationClientProfile, type FoundationChainId } from "./chains";
+import { FOUNDATION_DEAD_ADDRESS, FOUNDATION_LP_CUSTODY_DEAD_ID, FOUNDATION_SUPPLY } from "./constants";
 import { FOUNDATION_MAX_TICK, FOUNDATION_MIN_TICK } from "./price";
 import { foundationPoolId } from "./route";
 
@@ -8,7 +9,7 @@ export type FoundationFactoryVersion = "v1" | "v2" | "v3";
 export type FoundationFactoryIdentity = { factoryVersion?: "v1"; lpCustodyId?: never }
   | { factoryVersion: "v2" | "v3"; lpCustodyId: Hex };
 export type FoundationDeploymentBinding = FoundationFactoryIdentity & {
-  releaseDigest: Hex; sourceCommit: string; startBlock: bigint;
+  chainId?: FoundationChainId; releaseDigest: Hex; sourceCommit: string; startBlock: bigint;
   factory: { address: Address; runtimeCodeHash: Hex };
   hookDeployer: { address: Address; runtimeCodeHash: Hex };
 };
@@ -25,6 +26,7 @@ export function foundationFactoryVersion(binding: FoundationDeploymentBinding): 
     || !nonzero(binding.factory.address) || !hash(binding.factory.runtimeCodeHash)
     || !nonzero(binding.hookDeployer.address) || !hash(binding.hookDeployer.runtimeCodeHash)
     || same(binding.factory.address, binding.hookDeployer.address)) throw new Error("The foundation source binding is invalid.");
+  if (foundationBindingChainId(binding) === 1 && binding.factoryVersion !== "v3") throw new Error("Ethereum Module Mode requires an explicit V3 source binding.");
   if (binding.factoryVersion === undefined || binding.factoryVersion === "v1") {
     if (binding.lpCustodyId !== undefined) throw new Error("A V1 source cannot claim V2 LP custody.");
     return "v1";
@@ -127,9 +129,9 @@ export function foundationV2PositionSpecs(result: FoundationLaunchResultV2, quot
   ...(result.creatorPositionId === 0n ? [] : [{ kind: "creator" as const, id: result.creatorPositionId,
     lower: token0 ? FOUNDATION_MIN_TICK : initialTick, upper: token0 ? initialTick : FOUNDATION_MAX_TICK, liquidity: liquidity?.creator }])];
 }
-export function foundationV2PositionCalls(specs: readonly FoundationV2PositionSpec[]) {
+export function foundationV2PositionCalls(specs: readonly FoundationV2PositionSpec[], chainId: FoundationChainId = 4663) {
   return specs.flatMap(spec => (["ownerOf", "getApproved", "getPositionLiquidity", "getPoolAndPositionInfo"] as const).map(functionName => ({
-    to: FOUNDATION_INFRASTRUCTURE.positionManager.address,
+    to: foundationChainProfile(chainId).infrastructure.positionManager.address,
     data: encodeFunctionData({ abi: foundationPositionAbi, functionName, args: [spec.id] }),
   })));
 }
@@ -151,7 +153,7 @@ export function verifyFoundationV2PositionData(specs: readonly FoundationV2Posit
 }
 export async function readFoundationV2Positions(client: PublicClient, result: FoundationLaunchResultV2, quote: Address, initialTick: number, blockNumber: bigint) {
   const specs = foundationV2PositionSpecs(result, quote, initialTick);
-  const data = await Promise.all(foundationV2PositionCalls(specs).map(async call => {
+  const data = await Promise.all(foundationV2PositionCalls(specs, foundationClientProfile(client).chainId).map(async call => {
     const response = await client.call({ ...call, blockNumber });
     if (!response.data) throw new Error("A V2 launch NFT could not be read.");
     return response.data;
