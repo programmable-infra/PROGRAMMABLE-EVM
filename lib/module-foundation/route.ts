@@ -1,28 +1,14 @@
 import { CommandType, RoutePlanner, UniversalRouterVersion } from "@uniswap/universal-router-sdk";
 import { Actions, V4Planner, URVersion } from "@uniswap/v4-sdk";
-import { encodeAbiParameters, encodeFunctionData, getAddress, keccak256, parseAbi, parseAbiParameters, zeroAddress, type Address, type Hex } from "viem";
-import { FOUNDATION_INT128_MAX, FOUNDATION_LP_FEE, FOUNDATION_TICK_SPACING } from "./constants";
+import { encodeFunctionData, getAddress, parseAbi, zeroAddress, type Address, type Hex } from "viem";
+import { FOUNDATION_INT128_MAX } from "./constants";
 import { foundationChainProfile, type FoundationChainId } from "./chains";
 import { requireAnyQuoteNativeUnlockRouteV1 } from "@/lib/module-engine/any-quote/route";
 import type { AnyQuoteExternalRouteV1 } from "@/lib/module-engine/any-quote/types";
 
-export interface FoundationPoolKey { currency0: Address; currency1: Address; fee: number; tickSpacing: number; hooks: Address }
-export interface FoundationPool { token: Address; quote: Address; hook: Address; poolId: Hex }
+import { foundationPoolId, foundationPoolKey, type FoundationPool } from "./pool-key";
+export { foundationPoolId, foundationPoolKey, type FoundationPool, type FoundationPoolKey } from "./pool-key";
 const executeAbi = parseAbi(["function execute(bytes commands,bytes[] inputs,uint256 deadline) payable"]);
-
-export function foundationPoolKey(pool: Omit<FoundationPool, "poolId">): FoundationPoolKey {
-  const token = getAddress(pool.token), quote = getAddress(pool.quote), hook = getAddress(pool.hook);
-  if (BigInt(token) === 0n || BigInt(quote) === 0n || BigInt(hook) === 0n || token === quote || token === hook || quote === hook) throw new Error("Invalid launch pool identity.");
-  return { currency0: BigInt(token) < BigInt(quote) ? token : quote,
-    currency1: BigInt(token) < BigInt(quote) ? quote : token, fee: FOUNDATION_LP_FEE,
-    tickSpacing: FOUNDATION_TICK_SPACING, hooks: hook };
-}
-
-export function foundationPoolId(key: FoundationPoolKey): Hex {
-  if (BigInt(key.currency0) >= BigInt(key.currency1)) throw new Error("Pool currencies must be ordered.");
-  return keccak256(encodeAbiParameters(parseAbiParameters("address,address,uint24,int24,address"),
-    [key.currency0, key.currency1, key.fee, key.tickSpacing, key.hooks]));
-}
 
 /** Single-pool official UR 2.1.1 route. Existing router donations cannot fund a user's swap. */
 export function buildFoundationExactInput(input: { pool: FoundationPool; owner: Address; recipient: Address;

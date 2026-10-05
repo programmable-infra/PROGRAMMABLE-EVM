@@ -1,37 +1,14 @@
 import { foundationCreatorFeeRates } from "./creator-fees";
-import { decodeAbiParameters, decodeFunctionData, encodeAbiParameters, getAddress, keccak256, parseAbiParameters, stringToHex, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
+import { decodeAbiParameters, decodeFunctionData, getAddress, keccak256, stringToHex, zeroAddress, type Hex, type PublicClient } from "viem";
 import { encodeFoundationLaunchEntry, encodeFoundationParameters, type FoundationLaunchParameters } from "./abi";
 import { foundationFactoryAbiFor, foundationFactoryNativeAbiFor, foundationFactoryVersion, type FoundationDeploymentBinding } from "./protocol";
-import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "./chains";
+import { foundationBindingChainId, foundationChainProfile } from "./chains";
 import type { FoundationPoolKey } from "./route";
 
 export const FOUNDATION_NATIVE_FUNDING_ID = keccak256(stringToHex("programmable.module-foundation.native-funding.v2"));
 export const FOUNDATION_NO_FUNDING_POOL: FoundationPoolKey = { currency0: zeroAddress, currency1: zeroAddress, fee: 0, tickSpacing: 0, hooks: zeroAddress };
-/** Uniswap exact-output paths use each hop's input currency, in forward pool order. */
-export interface FoundationFundingHop { intermediateCurrency: Address; fee: number; tickSpacing: number; hooks: Address; hookData: Hex }
-export interface FoundationEthFunding { maximumEth: bigint; quoteAmount: bigint; path: readonly FoundationFundingHop[] }
-const fundingPathParameters = parseAbiParameters("(address intermediateCurrency,uint24 fee,int24 tickSpacing,address hooks,bytes hookData)[]");
-export function encodeFoundationFundingPath(path: readonly FoundationFundingHop[], chainId: FoundationChainId = 4663) {
-  foundationChainProfile(chainId);
-  return encodeAbiParameters(fundingPathParameters, [path]);
-}
-
-export function assertFoundationFundingPath(quote: Address, path: readonly FoundationFundingHop[], chainId: FoundationChainId = 4663) {
-  const FOUNDATION_WETH = foundationChainProfile(chainId).wrappedEth.address;
-  if (getAddress(quote) === FOUNDATION_WETH) {
-    if (path.length !== 0) throw new Error("WETH funding requires an empty path.");
-    return;
-  }
-  if (path.length < 1 || path.length > 4 || getAddress(path[0].intermediateCurrency) !== zeroAddress) throw new Error("The funding path must start with native ETH.");
-  const currencies = [...path.map(hop => getAddress(hop.intermediateCurrency)), getAddress(quote)];
-  if (new Set(currencies).size !== currencies.length) throw new Error("The funding path must not repeat a currency.");
-  for (const hop of path) {
-    getAddress(hop.hooks);
-    if (!Number.isInteger(hop.fee) || hop.fee < 0 || (hop.fee > 1_000_000 && hop.fee !== 0x800000)
-      || !Number.isInteger(hop.tickSpacing) || hop.tickSpacing < 1 || hop.tickSpacing > 32_767
-      || !/^0x(?:[0-9a-f]{2}){0,2048}$/i.test(hop.hookData)) throw new Error("Invalid Uniswap funding path.");
-  }
-}
+import { assertFoundationFundingPath, encodeFoundationFundingPath, foundationFundingPathParameters as fundingPathParameters } from "./funding-path";
+export { assertFoundationFundingPath, encodeFoundationFundingPath, type FoundationFundingHop, type FoundationEthFunding } from "./funding-path";
 
 export async function assertFoundationAtomicEth(client: PublicClient, binding: FoundationDeploymentBinding, blockNumber: bigint) {
   try {

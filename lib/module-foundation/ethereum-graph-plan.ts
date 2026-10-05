@@ -3,7 +3,7 @@ import {
   keccak256, parseAbiParameters, stringToHex, type Address, type Hex,
 } from "viem";
 import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
-import type { FoundationPoolKey } from "./route";
+import type { FoundationPoolKey } from "./pool-key";
 import { foundationEthereumRouteParameters, foundationEthereumStampAbi } from "./ethereum-graph";
 
 const hash = (text: string) => keccak256(stringToHex(text));
@@ -81,7 +81,8 @@ export function prepareFoundationEthereumStamp(input: {
   const { identity, targets, outputs } = input;
   const { graphCommitment, totalValue } = foundationEthereumGraphCommitment(identity, targets);
   if (!nonzero(input.launchId) || BigInt(getAddress(input.account)) === 0n || outputs.length !== 3
-    || input.validAfter < 0n || input.deadline <= input.validAfter || input.deadline > (1n << 64n) - 1n) fail();
+    || input.validAfter < 0n || input.deadline <= input.validAfter || input.deadline - input.validAfter > 3_600n
+    || input.deadline > (1n << 64n) - 1n) fail();
   let graphDeploymentHash = graphCommitment;
   const outputHashes = outputs.map((output, index) => {
     const target = targets[index];

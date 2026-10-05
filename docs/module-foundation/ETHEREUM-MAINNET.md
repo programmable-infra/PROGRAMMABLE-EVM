@@ -22,6 +22,10 @@ The Ethereum graph readback adapter reuses the canonical stamp reader and verifi
 
 The graph-plan codec computes CREATE2 addresses, graph commitments, expected deployment results, component sets and stamp requests locally using the canonical contracts' exact encoding. It reproduces the complete fork-tested Router call byte for byte. The codec does not issue permits or establish source admission. Production composition and the wallet flow still require integration.
 
+The graph builder now materializes the exact proxy, token and hook creation bytes from a reproducible compiler export. Wallet, release and token salt separate CREATE2 namespaces. Hook mining runs locally, yields between batches and supports cancellation. Metadata is checked before mining. A shared package, `@programmable/module-foundation-ethereum`, gives the API the same implementation as the website without importing trading SDKs.
+
+The two-provider simulator executes the full graph on Ethereum state, checks dependencies and compiler runtime templates, and reproduces the canonical deployment commitment. Its only state override funds the simulated Router. It does not sign or broadcast. A launch with the deployed wallet-cap factory and an initial buy succeeded on both providers at block 26125608. The [read-only evidence](../../contracts/deployments/ethereum-module-readonly-simulation-v1.json) explicitly distinguishes simulated outputs from deployed coins.
+
 ## Ethereum deployments
 
 Deployment evidence is saved in [`contracts/deployments/ethereum-module-foundation-v1.json`](../../contracts/deployments/ethereum-module-foundation-v1.json). Both deployments use source commit `92ff1f513c47fe94ddc1022babffdf95ad47d76b`, Solidity 0.8.26, IR compilation and 200 optimizer runs.
@@ -31,7 +35,7 @@ Deployment evidence is saved in [`contracts/deployments/ethereum-module-foundati
 | Shared launch implementation | `0x487E8A196812fEC534f2D2514bfdc7c609EBAe35` | [Transaction](https://etherscan.io/tx/0x7cdd27a31d16179f9fb19573d20751baece76f38f499c06b610f12774f0eed61) |
 | Wallet-cap factory | `0x2960751d51a6559D630F9Fa9D94CD0011816d5D2` | [Transaction](https://etherscan.io/tx/0x228134c7d610c6a952c2cd12b99710b1dabff4a6d2be0ca06db21503b3ed3ed5) |
 
-Two RPC providers confirmed each receipt and the exact runtime returned by the pre-deployment simulation. Sourcify reports matching creation and runtime code for both contracts. Deployment gas cost 0.000632249848312916 ETH in total. The saved observation predates finalized deployment blocks; activation must refresh finality. No coin launch or production catalog change accompanied these deployments.
+Two RPC providers confirmed each receipt and the exact runtime returned by the pre-deployment simulation. Sourcify reports matching creation and runtime code for both contracts. Deployment gas cost 0.000632249848312916 ETH in total. The deployment evidence records the latest independent finality observations. No coin launch or production catalog change accompanied these deployments.
 
 ## Validation completed
 
@@ -41,11 +45,12 @@ Two RPC providers confirmed each receipt and the exact runtime returned by the p
 - The relevant existing web suites passed: 838 tests in 52 files. The additional Ethereum owner-finality case passed in the five-test owner suite. Six graph readback tests passed using the exported fork call.
 - The website production build passed. After adding graph readback, the full TypeScript check and focused lint both passed. The graph adapter is not yet imported by a production route.
 - The graph-plan and graph-readback suites pass 12 tests, including full equality with the fork-tested call, canonical target predictions, changed runtime and initializer commitments, funding destinations and unsigned-plan rejection. TypeScript and focused lint also pass with the new codec.
+- The builder, graph, plan and atomic-launch suites pass 23 tests. The shared pool-key and funding-path extraction passes 27 SDK/native-funding tests. The backend authorizer's rejection checks and existing Safe/Privy signer checks pass 17 tests. A real authority signing request and signed live launch remain unverified.
 
 ## Work required before activation
 
-1. Refresh deployment finality for the two recorded contracts. The old unsigned deployment plan has been consumed; do not broadcast it again.
-2. Add the host's graph source binding and permit preparation to the production authority. The existing Foundation authority describes direct factory launches on Robinhood. The general Ethereum API's current 3.3 profile is not a drop-in Module Mode profile: its metadata requirements and 0.1% fee policy differ. Do not reuse its approval or claim 0.3% conformance without the correct versioned integration.
+1. Retain the finalized deployment identities recorded by both providers. The old unsigned deployment plan has been consumed; do not broadcast it again.
+2. Install the host's graph source binding and connect the staged module authorizer to the authenticated backend runtime. The authorizer uses the shared builder, two-provider simulation and the existing canonical Safe signer, but has no public route yet. The general Ethereum API's current 3.3 profile is not a drop-in Module Mode profile: its metadata requirements and 0.1% fee policy differ. Do not reuse its approval or claim 0.3% conformance without the correct versioned integration.
 3. Connect Studio composition to graph prediction, the real canonical permit and exact wallet calldata. The current composition path still calls direct-factory prediction and cannot launch this graph account. Preserve immediate wallet interaction where possible and invalidate changed chain, wallet, source, fee or module inputs.
 4. Connect the graph readback adapter and admitted host inventory to recovery, market projection and background indexing. Do not classify a launch as a module merely from its name or optional metadata.
 5. Exercise a real funded mainnet launch, initial buy, later buy and sell, fee accounting, module behavior and recovery. Verify the exact production build and responsive Studio before enabling the network.

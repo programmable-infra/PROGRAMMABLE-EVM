@@ -63,10 +63,19 @@
       },
       "available": false,
       "finality": {
-        "observedHead": "26125562",
-        "finalizedBlock": "26125488",
-        "confirmations": "12",
-        "finalized": false
+        "finalized": true,
+        "independentObservations": [
+          {
+            "observedHead": "26125627",
+            "finalizedBlock": "26125552",
+            "finalizedBlockHash": "0x288ee9da9bca010642136b013c5a3068daa54e930f508735e51993808790cf82"
+          },
+          {
+            "observedHead": "26125627",
+            "finalizedBlock": "26125552",
+            "finalizedBlockHash": "0x288ee9da9bca010642136b013c5a3068daa54e930f508735e51993808790cf82"
+          }
+        ]
       }
     },
     {
@@ -111,10 +120,19 @@
       },
       "available": false,
       "finality": {
-        "observedHead": "26125562",
-        "finalizedBlock": "26125488",
-        "confirmations": "11",
-        "finalized": false
+        "finalized": true,
+        "independentObservations": [
+          {
+            "observedHead": "26125627",
+            "finalizedBlock": "26125552",
+            "finalizedBlockHash": "0x288ee9da9bca010642136b013c5a3068daa54e930f508735e51993808790cf82"
+          },
+          {
+            "observedHead": "26125627",
+            "finalizedBlock": "26125552",
+            "finalizedBlockHash": "0x288ee9da9bca010642136b013c5a3068daa54e930f508735e51993808790cf82"
+          }
+        ]
       }
     }
   ],

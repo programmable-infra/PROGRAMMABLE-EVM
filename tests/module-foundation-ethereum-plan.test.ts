@@ -62,6 +62,7 @@ describe("Ethereum Module Mode launch plan", () => {
     } : target) })).toThrow();
     expect(() => prepareFoundationEthereumStamp({ ...sample, poolKey: { ...sample.poolKey, hooks: sample.outputs[0].account } })).toThrow();
     expect(() => prepareFoundationEthereumStamp({ ...sample, deadline: sample.validAfter })).toThrow();
+    expect(() => prepareFoundationEthereumStamp({ ...sample, deadline: sample.validAfter + 3_601n })).toThrow();
   });
 
   it("keeps a newly prepared graph separate from a signed permit", () => {

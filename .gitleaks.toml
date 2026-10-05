@@ -474,3 +474,18 @@ condition = "AND"
 regexTarget = "match"
 paths = ['''^config/module-engine/historical-releases\.json$''']
 regexes = ['''^token":\s*"0xcf7ed3acca5a467e9e704c703e8d87f634fb0fc9"$''']
+
+[[allowlists]]
+description = "Exact public Solidity source hashes in the reproducible Ethereum graph compiler export"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''^contracts/spec/module-foundation/ethereum-graph-bytecode\.v1\.json$''',
+  '''^packages/module-foundation-ethereum/dist/index\.mjs$''',
+]
+regexes = [
+  '''^\s*"lib/v4-core/src/types/PoolKey\.sol": "0xf89856e0580d7a4856d3187a76858377ccee9d59702d230c338d84388221b786",?$''',
+  '''^\s*"lib/v4-periphery-v211/src/libraries/PathKey\.sol": "0xbbd79ffefe045f025263e389539021266fb4d371463aefba405e1ff1d3fcf9bc",?$''',
+  '''^\s*"src/module-foundation/FoundationTokenV1\.sol": "0x28ad9a130f32c14d931da364f529c63a207b9476bfc19c67751d9df0d568397d",?$''',
+]

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "programmable.ethereum-module-readonly-simulation.v1",
+  "state": "read-only-not-launched-not-authorized",
+  "chainId": 1,
+  "sourceCommit": "92ff1f513c47fe94ddc1022babffdf95ad47d76b",
+  "sourceAdmission": false,
+  "providerCount": 2,
+  "block": {
+    "number": "26125608",
+    "hash": "0x8719dcd4b4fa2bc14b9e9f2f3210ccf1bcc8ef99d2dfe38d2f970d419aec4809",
+    "timestamp": "1791196535"
+  },
+  "implementation": {
+    "address": "0x487E8A196812fEC534f2D2514bfdc7c609EBAe35",
+    "runtimeCodeHash": "0x4013d721f43d3061e4593c5da8e1dfa64a943573240c7e247905c3a1986dbbec"
+  },
+  "proxyRuntimeCodeHash": "0xbcd79a29bbf85a76fd696e196516bfd23aae5e00b56a1dc21cc3e6b2599c40cf",
+  "graphCommitment": "0x3502dd50a5c34cce55da2d834cd1971c831b5c3810e24e6b6c5272690ac87412",
+  "graphDeploymentHash": "0x483db7b5c1434069ef8c5b3e0f90f0fe6eb61d29b2824c0e6e9e98670a6f32a2",
+  "outputs": [
+    {
+      "account": "0x5e5FC7a749048eb0D03363404ECb23210230Efe1",
+      "targetIndex": 0,
+      "targetIdHash": "0xafbf4fd33114da9fe722791df85cceab226b4246bd2b6ee6febfc7125deb6524",
+      "runtimeCodeHash": "0xbcd79a29bbf85a76fd696e196516bfd23aae5e00b56a1dc21cc3e6b2599c40cf"
+    },
+    {
+      "account": "0x7c8Db9281a6870BccAa55D4B03B480f4cB37F0B7",
+      "targetIndex": 1,
+      "targetIdHash": "0x9b9b0454cadcb5884dd3faa6ba975da4d2459aa3f11d31291a25a8358f84946d",
+      "runtimeCodeHash": "0xb409e6cfcfa4dd1f0bfb586277b6396460bd53c57cfca24247a4c2636286790a"
+    },
+    {
+      "account": "0xF6C65a91F105A1CF99C7aA1DCEF39e3767A9e0Cc",
+      "targetIndex": 2,
+      "targetIdHash": "0x67e3949ef8db66aae8e09e9bf74c58b8aac1ab66624af799b92148365c9e7ca9",
+      "runtimeCodeHash": "0x767e23004d49550922253a00b2f34484b9a7d5f6781e66f0d4b88c8abad83f2e"
+    }
+  ],
+  "initialBuyQuoteAmount": "100000000000000",
+  "modules": [
+    {
+      "factory": "0x2960751d51a6559D630F9Fa9D94CD0011816d5D2",
+      "factoryCodeHash": "0x984c80e16fa4da55c7f1c69ca25a3fa4e60206aa1d67c73d5c0eb9849dabf39a",
+      "moduleCodeHash": "0x5be365d8785b43fc8e47d75b0006d59cca48ab93ebf67c91d3aa9414066564f6",
+      "descriptorHash": "0x1bd5aa9a4e6ca7771b3946b1ad429fdc7d301f5774e341b9ccf53e1cdeb1ac75",
+      "configuration": "0x00000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000003",
+      "creatorShareBps": 0
+    }
+  ],
+  "authoritySignatureObtained": false,
+  "transactionBroadcast": false
+}
