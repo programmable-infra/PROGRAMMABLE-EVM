@@ -234,6 +234,20 @@ test.describe("Module Studio", () => {
   });
   test.afterAll(async () => { if (studioServer) { studioServer.close(); await once(studioServer, "close"); } });
 
+  test("a recovered wallet clears its old network error and keeps the coin draft", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${studioOrigin}?mode=wallet-recovery`);
+    await page.getByLabel("Name", { exact: true }).fill("My coin");
+    await page.getByLabel("Ticker", { exact: true }).fill("MINE");
+    await page.getByRole("button", { name: "Switch to Ethereum", exact: true }).click();
+    await expect(page.getByText("Network change cancelled.", { exact: true })).toBeVisible();
+    await page.getByTestId("wallet-switch").click();
+    await expect(page.getByText("Network change cancelled.", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Launch coin", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue("My coin");
+    await expect(page.getByLabel("Ticker", { exact: true })).toHaveValue("MINE");
+  });
+
   test("quote toggle restores a saved choice but respects an explicitly cleared address", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 }); await page.goto(studioOrigin);
     const toggle = page.getByRole("switch", { name: "Any Quote Pool", exact: true });

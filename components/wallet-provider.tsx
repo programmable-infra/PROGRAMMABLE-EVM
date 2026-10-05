@@ -1283,10 +1283,13 @@ function PrivyWalletBridge({
     userId: string;
     account: string;
     chainId: string;
-    walletSnapshot: object;
+    walletSnapshot: { getEthereumProvider: unknown; switchChain: unknown };
   } | null>(null);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
   const networkSwitchPendingRef = useRef(false);
+  const networkSwitchRequestRef = useRef<{
+    chainId: number; account: string; userId: string; generation: number; promise: Promise<boolean>;
+  } | null>(null);
   const [error, setError] = useState("");
   const [providerTimedOut, setProviderTimedOut] = useState(false);
   const [selectedWallet, setSelectedWallet] = useState<{
@@ -1595,7 +1598,8 @@ function PrivyWalletBridge({
 
     const verified = verifiedWalletNetwork !== null && verifiedWalletNetwork.userId === user?.id
       && verifiedWalletNetwork.account.toLowerCase() === connectedWalletAddress.toLowerCase()
-      && verifiedWalletNetwork.walletSnapshot === connectedWallet;
+      && verifiedWalletNetwork.walletSnapshot.getEthereumProvider === connectedWallet?.getEthereumProvider
+      && verifiedWalletNetwork.walletSnapshot.switchChain === connectedWallet?.switchChain;
     return {
       account: connectedWalletAddress,
       chainId: verified ? verifiedWalletNetwork.chainId
@@ -1657,6 +1661,7 @@ function PrivyWalletBridge({
     const owner = user.id;
     let disposed = false;
     let accountRevision = 0;
+    let chainRevision = 0;
     const isCurrent = () => {
       const current = sdkSessionRef.current;
       return !disposed && current.authenticated && current.userId === owner
@@ -1681,10 +1686,12 @@ function PrivyWalletBridge({
       setWalletLoginStatus("");
     };
     const chainChanged = (value: unknown) => {
-      if (!isCurrent() || typeof value !== "string" || !/^0x[0-9a-f]+$/i.test(value)) return;
+      if (!isCurrent()) return;
+      const chainId = normalizeWalletChainId(value);
+      if (chainId === null) return;
+      chainRevision += 1;
       const current = walletRequestSessionRef.current;
       if (!current.account || !current.walletCapability) return;
-      const chainId = normalizeChainId(value);
       if (current.chainId === chainId) return;
       current.chainId = chainId;
       if (!networkSwitchPendingRef.current) walletSessionGenerationRef.current += 1;
@@ -1697,11 +1704,22 @@ function PrivyWalletBridge({
     // One local read covers events that occurred before hydration. Returning
     // to the tab rechecks selection without polling or opening a wallet prompt.
     const readSelectedAccount = () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden" || networkSwitchPendingRef.current) return;
       const revision = accountRevision;
+      const networkRevision = chainRevision;
+      const generation = walletSessionGenerationRef.current;
       void provider.request({ method: "eth_accounts" }).then(accounts => {
         if (isCurrent() && revision === accountRevision) accountsChanged(accounts);
-      }).catch(() => { /* Reconnect remains available; never prompt from a read. */ });
+      }).catch(() => { /* Never prompt from a background read. */ });
+      // A remembered injected provider may outlive the SDK connection during
+      // reconnect. It can report accounts, but cannot yet verify this session's chain.
+      if (!walletRequestSessionRef.current.authenticated || !walletRequestSessionRef.current.walletCapability) return;
+      void provider.request({ method: "eth_chainId" }).then(chainId => {
+        // Network reads must not hold up account updates. Newer events and
+        // explicit switches win over a read started before either one.
+        if (isCurrent() && !networkSwitchPendingRef.current && generation === walletSessionGenerationRef.current
+          && networkRevision === chainRevision) chainChanged(chainId);
+      }).catch(() => { /* Retain the last observed network until the next event. */ });
     };
     readSelectedAccount();
     document.addEventListener("visibilitychange", readSelectedAccount);
@@ -2246,7 +2264,7 @@ function PrivyWalletBridge({
   }, [accountSwitchRequested, authenticated, disconnecting, ready, sessionSuppressed, startLogin, user]);
 
   const switchWalletNetwork = useCallback(async (expectedChainId?: string) => {
-    if (!connectedWallet || !wallet || !ownerUserId || networkSwitchPendingRef.current) return false;
+    if (!connectedWallet || !wallet || !ownerUserId) return false;
     const expectedAccount = wallet.account.toLowerCase();
     const expectedUser = ownerUserId;
     const expectedGeneration = walletSessionGenerationRef.current;
@@ -2267,49 +2285,59 @@ function PrivyWalletBridge({
       setError("The approved launch network is not available in this environment.");
       return false;
     }
+    const pending = networkSwitchRequestRef.current;
+    if (pending) return pending.chainId === target.chain.id && pending.account === expectedAccount
+      && pending.userId === expectedUser && pending.generation === expectedGeneration ? pending.promise : false;
 
     networkSwitchPendingRef.current = true;
     setSwitchingNetwork(true);
     setError("");
 
-    try {
-      const provider = await getWalletProviderOnChain({
-        wallet: connectedWallet, chainId: target.chain.id, networkName: target.name,
-        assertCurrentSession: () => {
-          if (!isCurrentSession()) throw new Error("The wallet session changed. Reconnect and try again.");
-        },
-      });
-      if (!isCurrentSession()) return false;
-      const walletAtVerification = walletRequestSessionRef.current.walletCapability;
-      if (connectedWallet.walletClientType !== "privy" && connectedWallet.walletClientType !== "privy-v2") {
-        const accounts = await provider.request({ method: "eth_accounts" });
-        if (!isCurrentSession()) return false;
-        if (!Array.isArray(accounts) || typeof accounts[0] !== "string"
-          || accounts[0].toLowerCase() !== expectedAccount) {
-          setError("The active wallet changed. Reconnect and try again.");
-          return false;
-        }
-      }
-      // Switching to an already active network need not emit chainChanged.
-      // Use the verified readback only while this SDK snapshot and wallet still match.
-      if (walletAtVerification !== null) {
-        setVerifiedWalletNetwork({
-          userId: expectedUser, account: expectedAccount,
-          chainId: target.chainHex, walletSnapshot: walletAtVerification,
+    const request = (async () => {
+      try {
+        const provider = await getWalletProviderOnChain({
+          wallet: connectedWallet, chainId: target.chain.id, networkName: target.name,
+          assertCurrentSession: () => {
+            if (!isCurrentSession()) throw new Error("The wallet session changed. Reconnect and try again.");
+          },
         });
+        if (!isCurrentSession()) return false;
+        if (connectedWallet.walletClientType !== "privy" && connectedWallet.walletClientType !== "privy-v2") {
+          const accounts = await provider.request({ method: "eth_accounts" });
+          if (!isCurrentSession()) return false;
+          if (!Array.isArray(accounts) || typeof accounts[0] !== "string"
+            || accounts[0].toLowerCase() !== expectedAccount) {
+            setError("The active wallet changed. Reconnect and try again.");
+            return false;
+          }
+        }
+        // Switching to an already active network need not emit chainChanged.
+        // Bind the readback to the connection, not the SDK's replaceable wrapper.
+        const walletAtVerification = walletRequestSessionRef.current.walletCapability;
+        if (walletAtVerification !== null) {
+          walletRequestSessionRef.current.chainId = target.chainHex;
+          setVerifiedWalletNetwork({
+            userId: expectedUser, account: expectedAccount,
+            chainId: target.chainHex, walletSnapshot: walletAtVerification,
+          });
+        }
+        return true;
+      } catch (cause) {
+        if (isCurrentSession()) {
+          const rejected = typeof cause === "object" && cause !== null
+            && "code" in cause && cause.code === 4001;
+          setError(rejected ? "Network change cancelled." : `Unable to switch to ${target.name}. Try again.`);
+        }
+        return false;
+      } finally {
+        networkSwitchRequestRef.current = null;
+        networkSwitchPendingRef.current = false;
+        setSwitchingNetwork(false);
       }
-      return true;
-    } catch (cause) {
-      if (isCurrentSession()) {
-        const rejected = typeof cause === "object" && cause !== null
-          && "code" in cause && cause.code === 4001;
-        setError(rejected ? "Network change cancelled." : `Unable to switch to ${target.name}. Try again.`);
-      }
-      return false;
-    } finally {
-      networkSwitchPendingRef.current = false;
-      setSwitchingNetwork(false);
-    }
+    })();
+    networkSwitchRequestRef.current = { chainId: target.chain.id, account: expectedAccount,
+      userId: expectedUser, generation: expectedGeneration, promise: request };
+    return request;
   }, [connectedWallet, ownerUserId, wallet]);
 
   const sendTransaction = useCallback(
