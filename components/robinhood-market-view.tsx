@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { ChainMark } from "./chain-mark";
 import { ArrowLeft, ArrowRight, Check, Copy } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { useWalletAddressCopy } from "@/lib/wallet-address-copy";
 import { AnimatedMarketCap } from "./animated-market-cap";
 import { RobinhoodChart } from "./robinhood-chart";
 import { RobinhoodCoinArtwork } from "./robinhood-coin-artwork";
@@ -39,19 +40,7 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
   const change = market?.change24hPercent;
   const description = presentation?.description?.trim();
   const explorerHref = `${chainId === 1 ? "https://etherscan.io" : EXPLORER}/${launch?.launchProjection ? "address" : "token"}/${address}`;
-  const [copyResult, setCopyResult] = useState<{ address: string; state: "copied" | "failed" } | null>(null);
-  const copyState = copyResult?.address === address ? copyResult.state : "idle";
-
-  useEffect(() => {
-    if (!copyResult) return;
-    const timer = setTimeout(() => setCopyResult(null), 3_000);
-    return () => clearTimeout(timer);
-  }, [copyResult]);
-
-  async function copyAddress() {
-    try { await navigator.clipboard.writeText(address); setCopyResult({ address, state: "copied" }); }
-    catch { setCopyResult({ address, state: "failed" }); }
-  }
+  const { copied, copyUnavailable, copyAddress } = useWalletAddressCopy(address);
 
   return <div className={`${styles.page} page-width`}>
     <Link className={styles.back} href="/explore"><ArrowLeft aria-hidden="true" size={16} /> Explore</Link>
@@ -72,14 +61,14 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
         </div>
         <div className={styles.headerActions}>
           <button className={`${styles.secondaryButton} ${styles.copyButton}`} onClick={copyAddress} type="button" title={address}>
-            {copyState === "copied" ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
-            {copyState === "copied" ? "Copied" : "Copy address"}
+            {copied ? <Check aria-hidden="true" size={16} /> : <Copy aria-hidden="true" size={16} />}
+            {copied ? "Copied" : "Copy address"}
           </button>
           {creator && /^0x(?!0{40}$)[\da-f]{40}$/i.test(creator) ? <Link className={styles.secondaryButton} href={`/profile?account=${creator}&chain=${chainId}`} prefetch={false} title={`Dev wallet: ${creator}`}>Dev wallet</Link> : null}
         </div>
       </header>
-      <p className="sr-only" role="status">{copyState === "copied" ? "Contract address copied" : ""}</p>
-      {copyState === "failed" ? <p className={styles.notice} role="status">Could not copy. <a href={explorerHref} target="_blank" rel="noreferrer">View the address on Explorer.</a></p> : null}
+      <p className="sr-only" role="status">{copied ? "Contract address copied" : ""}</p>
+      {copyUnavailable ? <p className={styles.notice} role="status">Could not copy. <a href={explorerHref} target="_blank" rel="noreferrer">View the address on Explorer.</a></p> : null}
 
       {manageHref ? <div className={styles.launchActions}><Link className={styles.secondaryButton} href={manageHref} prefetch={false} aria-label="Manage coin">Manage <ArrowRight aria-hidden="true" size={16} /></Link></div> : null}
       {hasAsset ? <>
