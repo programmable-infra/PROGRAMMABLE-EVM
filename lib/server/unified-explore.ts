@@ -2,7 +2,7 @@ import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereu
 import "server-only";
 
 import { readRobinhoodExploreCatalog } from "./robinhood-index/read";
-import { readEthereumCustomExploreCatalog } from "./ethereum-explore";
+import { readEthereumUnifiedExploreCatalog } from "./ethereum-explore";
 import { readRobinhoodMarkets, readRobinhoodPresentations } from "./robinhood-presentation";
 import { readCodexMarkets } from "./codex-market";
 import { isRobinhoodModuleSourceKind } from "@/lib/robinhood-launches";
@@ -12,7 +12,7 @@ import type { RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
 
 const readers = {
   robinhood: readRobinhoodExploreCatalog,
-  ethereum: readEthereumCustomExploreCatalog,
+  ethereum: readEthereumUnifiedExploreCatalog,
   robinhoodMarkets: readRobinhoodMarkets,
   ethereumMarkets: readCodexMarkets,
   robinhoodPresentations: readRobinhoodPresentations,
@@ -24,7 +24,7 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
   const [rh, eth] = await Promise.all([dependencies.robinhood(), dependencies.ethereum()]);
   const sources = { robinhood: rh.status, ethereum: eth.status };
   const available = [rh, eth].filter(source => source.status !== "unavailable");
-  const status = !available.length ? "unavailable" as const : available.length < 2 ? "partial" as const
+  const status = !available.length ? "unavailable" as const : available.length < 2 || eth.status === "partial" ? "partial" as const
     : available.some(source => source.status === "stale") ? "stale" as const
       : available.some(source => source.status === "syncing") ? "syncing" as const : "ready" as const;
   const updatedAt = available.flatMap(source => source.updatedAt ? [source.updatedAt] : [])
@@ -36,7 +36,9 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
   const rhRows = rh.items.map(row => ({ ...row, chainId: 4663 as const,
     mode: isRobinhoodModuleSourceKind(row.sourceKind) ? "module" as const : "custom" as const }));
   const ethRows = eth.entries.map(entry => ({
-    chainId: 1 as const, mode: isEthereumModuleLaunchCandidate(entry) ? "module" as const : "custom" as const, category: "custom" as const,
+    chainId: 1 as const, mode: entry.launchCategoryProvenance.category === "classic" ? "classic" as const
+      : isEthereumModuleLaunchCandidate(entry) ? "module" as const : "custom" as const,
+    category: entry.launchCategoryProvenance.category,
     launchId: entry.launchStampProvenance?.launchId ?? entry.id, tokenAddress: entry.tokenAddress,
     hookAddress: entry.hookAddress, creator: entry.creatorAddress, transactionHash: entry.launchTransactionHash,
     blockNumber: entry.launchBlockNumber, launchedAt: entry.launchedAt, name: entry.name, symbol: entry.symbol,

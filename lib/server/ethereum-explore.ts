@@ -64,6 +64,31 @@ export async function readEthereumCustomExploreCatalog(dependencies: Pick<Depend
   }
 }
 
+// Owner-selected Classic identities still come from the verified launch catalog.
+// This controls discovery only and does not create or relabel launch evidence.
+const PUBLIC_CLASSIC_TOKENS = new Set(["0x9c355950bd5634ef2b2935d356075c7c19b2386a"]);
+
+export async function readEthereumUnifiedExploreCatalog(dependencies: Dependencies = readers) {
+  const [custom, classic] = await Promise.all([
+    readEthereumCustomExploreCatalog(dependencies),
+    dependencies.classic().catch(() => null),
+  ]);
+  const selected = classic ? publicExploreCatalogEntriesV1(classic.entries)
+    .filter((entry): entry is CanonicalTokenExploreEntry => entry.exploreKind === "token"
+      && entry.launchCategoryProvenance.category === "classic"
+      && PUBLIC_CLASSIC_TOKENS.has(entry.tokenAddress.toLowerCase()) && isPublicExploreIdentityV1(entry, 1)) : [];
+  const entries = [...custom.entries, ...selected];
+  if (new Set(entries.map(entry => entry.tokenAddress.toLowerCase())).size !== entries.length) {
+    throw new Error("Conflicting Ethereum launch identities");
+  }
+  const available = [custom.status !== "unavailable", classic !== null].filter(Boolean).length;
+  const status = available === 0 ? "unavailable" as const : available < 2 ? "partial" as const
+    : custom.status === "stale" || classic?.status === "last-known-good" ? "stale" as const : "ready" as const;
+  const updatedAt = [custom.updatedAt, classic?.generatedAt].filter((time): time is string => Boolean(time))
+    .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
+  return { status, updatedAt, entries, sourceEvidence: { custom: custom.sourceEvidence, classic: classic?.evidence ?? null } };
+}
+
 /** Each source retains its existing release, provenance and finality checks. */
 export async function readEthereumExploreCatalog(dependencies: Dependencies = readers) {
   const [classic, custom] = await Promise.allSettled([dependencies.classic(), dependencies.custom()]);

@@ -9,7 +9,7 @@ export type UnifiedExploreIdentity = Readonly<{
   name: string | null;
   symbol: string | null;
   launchedAt: string | null;
-  mode: "module" | "custom";
+  mode: "module" | "custom" | "classic";
 }>;
 
 export function exploreIdentityKey(identity: Readonly<{ chainId?: ViewChainId; tokenAddress: string }>) {
