@@ -4,15 +4,43 @@ import { unavailableFoundation } from "@/lib/module-foundation/availability";
 import { foundationV2Fixture } from "./module-foundation-v2-fixture";
 
 const readQuote = vi.hoisted(() => vi.fn());
+const readSuggestedBuy = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/module-foundation/client", () => ({ readFoundationQuote: readQuote }));
+vi.mock("@/lib/module-foundation/first-buy", () => ({ readFoundationSuggestedBuy: readSuggestedBuy }));
 const client = { chain: { id: 4663 } } as PublicClient;
 const address = "0x1111111111111111111111111111111111111111";
 const quote = { address, name: "Quote", symbol: "Q", decimals: 18, balance: null, codeHash: `0x${"1".repeat(64)}` };
 
-beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); readQuote.mockReset().mockResolvedValue(quote); });
+beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); readQuote.mockReset().mockResolvedValue(quote); readSuggestedBuy.mockReset().mockResolvedValue("0.001"); });
 afterEach(() => vi.useRealTimers());
 
 describe("Foundation presentation reads", () => {
+  it("joins first-buy reads and reuses the suggestion briefly across route visits", async () => {
+    const { readFoundationSuggestedBuyForDisplay } = await import("@/lib/module-foundation/launch-display-cache");
+    const first = readFoundationSuggestedBuyForDisplay(client);
+    const second = readFoundationSuggestedBuyForDisplay({ chain: { id: 4663 } } as PublicClient);
+    expect(second).toBe(first);
+    await expect(first).resolves.toBe("0.001");
+    expect(readSuggestedBuy).toHaveBeenCalledExactlyOnceWith(client);
+    await vi.advanceTimersByTimeAsync(29_999);
+    await readFoundationSuggestedBuyForDisplay(client);
+    expect(readSuggestedBuy).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    await readFoundationSuggestedBuyForDisplay(client);
+    expect(readSuggestedBuy).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps first-buy suggestions separate by chain and allows failed reads to retry", async () => {
+    const { readFoundationSuggestedBuyForDisplay } = await import("@/lib/module-foundation/launch-display-cache");
+    readSuggestedBuy.mockRejectedValueOnce(new Error("Unavailable"));
+    await expect(readFoundationSuggestedBuyForDisplay(client)).rejects.toThrow("Unavailable");
+    await expect(readFoundationSuggestedBuyForDisplay(client)).resolves.toBe("0.001");
+    readSuggestedBuy.mockResolvedValueOnce("0.0011");
+    await expect(readFoundationSuggestedBuyForDisplay({ chain: { id: 1 } } as PublicClient)).resolves.toBe("0.0011");
+    await expect(readFoundationSuggestedBuyForDisplay(client)).resolves.toBe("0.001");
+    expect(readSuggestedBuy).toHaveBeenCalledTimes(3);
+  });
+
   it("retains a bounded launch catalog, clears withdrawn authority and ignores retained-token releases", async () => {
     const display = await import("@/lib/module-foundation/launch-display-cache");
     const ready = { ...unavailableFoundation(), available: true, binding: foundationV2Fixture(false, true).binding };

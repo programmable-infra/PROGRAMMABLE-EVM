@@ -18,9 +18,8 @@ import { presentFoundationCatalogV1 } from "@/lib/module-foundation/presentation
 import { FOUNDATION_HOST_ADAPTER_ID_V1 } from "@/lib/module-foundation/manifest";
 import { parseFoundationAssetPinsV1 } from "@/lib/module-foundation/assets";
 import { createFoundationClient, foundationMetadata, prepareFoundationLaunch } from "@/lib/module-foundation/client";
-import { readFoundationQuoteForDisplay } from "@/lib/module-foundation/launch-display-cache";
+import { readFoundationQuoteForDisplay, readFoundationSuggestedBuyForDisplay } from "@/lib/module-foundation/launch-display-cache";
 import { isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
-import { readFoundationSuggestedBuy } from "@/lib/module-foundation/first-buy";
 import { retryFoundationReadOnlyPreparation } from "@/lib/module-foundation/preparation-retry";
 import { foundationSupportsEth } from "@/lib/module-foundation/native-funding";
 import { nativeCanonicalJson, nativeJson } from "@/lib/module-mode/native-catalog";
@@ -112,7 +111,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
   }
 
   const resolveSuggestedInitialBuy = useCallback(() => {
-    if (!suggestedBuyRequest.current) suggestedBuyRequest.current = readFoundationSuggestedBuy(session.client)
+    if (!suggestedBuyRequest.current) suggestedBuyRequest.current = readFoundationSuggestedBuyForDisplay(session.client)
       .then(amount => { setSuggestedInitialBuy(amount); return amount; })
       .catch(error => { suggestedBuyRequest.current = null; throw error; });
     return suggestedBuyRequest.current;

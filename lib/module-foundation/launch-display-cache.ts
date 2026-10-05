@@ -1,10 +1,29 @@
 import { getAddress, type Address, type PublicClient } from "viem";
 import type { FoundationAvailabilityEnvelope } from "./availability";
 import { readFoundationQuote } from "./client";
-import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "./chains";
+import { foundationBindingChainId, foundationChainProfile, foundationClientProfile, type FoundationChainId } from "./chains";
+import { readFoundationSuggestedBuy } from "./first-buy";
 
 const listeners = new Set<() => void>();
 const catalogs = new Map<FoundationChainId, { value: FoundationAvailabilityEnvelope; expiresAt: number }>();
+const suggestedBuys = new Map<FoundationChainId, { promise: Promise<string>; expiresAt: number }>();
+
+/** Share the editable suggestion across route visits, never an execution quote. */
+export function readFoundationSuggestedBuyForDisplay(client: PublicClient, now = Date.now()): Promise<string> {
+  const chainId = foundationClientProfile(client).chainId;
+  const existing = suggestedBuys.get(chainId);
+  if (existing && existing.expiresAt > now) return existing.promise;
+  const entry = { promise: null as unknown as Promise<string>, expiresAt: Number.POSITIVE_INFINITY };
+  entry.promise = readFoundationSuggestedBuy(client).then(value => {
+    entry.expiresAt = Date.now() + 30_000;
+    return value;
+  }).catch(error => {
+    if (suggestedBuys.get(chainId) === entry) suggestedBuys.delete(chainId);
+    throw error;
+  });
+  suggestedBuys.set(chainId, entry);
+  return entry.promise;
+}
 
 /** Display only. The session still fetches fresh authority before it can prepare a launch. */
 export function readFoundationLaunchDisplay(now = Date.now(), chainId: FoundationChainId = 4663): FoundationAvailabilityEnvelope | null {
