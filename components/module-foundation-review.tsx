@@ -8,21 +8,11 @@ import { CopyIcon } from "@phosphor-icons/react/dist/csr/Copy";
 import type { FoundationLaunchReview, FoundationPoolIdentity, FoundationPositionIdentity, FoundationTransactionResult, FoundationTransactionSummary } from "@/lib/module-foundation/ui-types";
 import { FOUNDATION_PLATFORM_FEE_RECIPIENT, foundationPublicUrl, foundationReviewError } from "@/lib/module-foundation/ui-types";
 import { foundationCreatorFeeFields, foundationCreatorFeeRates, type FoundationCreatorFees } from "@/lib/module-foundation/creator-fees";
+import { useWalletAddressCopy } from "@/lib/wallet-address-copy";
 import styles from "./module-foundation-ui.module.css";
 
 export function FoundationAddress({ value, label }: { value: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const [error, setError] = useState(false);
-  const reset = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(reset.current), []);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true); setError(false);
-      clearTimeout(reset.current);
-      reset.current = setTimeout(() => setCopied(false), 2_000);
-    } catch { setError(true); }
-  }
+  const { copied, copyUnavailable: error, copyAddress: copy } = useWalletAddressCopy(value);
   return <span className={styles.addressGroup}><code className={styles.address}>{value}</code><button type="button" className={styles.iconButton} onClick={() => void copy()} aria-label={`Copy ${label}`}>{copied ? <CheckIcon size={16} aria-hidden="true" /> : <CopyIcon size={16} aria-hidden="true" />}</button><span className={styles.srOnly} role="status">{copied ? `${label} copied.` : error ? `Copy unavailable. Select the ${label} to copy it.` : ""}</span></span>;
 }
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { isGitHubUrl } from "@/lib/public-link-visibility";
+import { useWalletAddressCopy } from "@/lib/wallet-address-copy";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -11,7 +12,7 @@ import {
   Copy,
   ExternalLink,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   formatUnits,
   getAddress,
@@ -1628,12 +1629,11 @@ function TokenDetailContent({
   platformFeeCertification?: PlatformFeeCertificationV1 | null;
   sourceVerification?: SourceVerificationDisplay | null;
 }) {
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState("");
+  const { copied, copyUnavailable, copyAddress } = useWalletAddressCopy(token.tokenAddress);
+  const copyError = copyUnavailable ? "Could not copy address" : "";
   const [chartVolume, setChartVolume] = useState<TokenChartVolume | null>(null);
   const [publishedCreatorArticle, setPublishedCreatorArticle] =
     useState<CreatorArticleV1 | null>(null);
-  const copyResetTimer = useRef<number | null>(null);
   const imageUrl =
     token.imageUrl?.trim() || getFallbackTokenImage(token.tokenAddress);
   const imageSource = getTokenCardImageSource(imageUrl);
@@ -1701,15 +1701,6 @@ function TokenDetailContent({
     visibleCreatorArticle,
   ]);
 
-  useEffect(
-    () => () => {
-      if (copyResetTimer.current !== null) {
-        window.clearTimeout(copyResetTimer.current);
-      }
-    },
-    [],
-  );
-
   const metrics = useMemo(() => {
     return buildTokenDetailMetrics(
       token,
@@ -1722,22 +1713,6 @@ function TokenDetailContent({
     token,
     platformFeeCertification,
   );
-
-  async function copyAddress() {
-    if (copyResetTimer.current !== null) {
-      window.clearTimeout(copyResetTimer.current);
-    }
-    setCopyError("");
-    try {
-      await navigator.clipboard.writeText(token.tokenAddress);
-      setCopied(true);
-      copyResetTimer.current = window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setCopied(false);
-      setCopyError("Could not copy address");
-      copyResetTimer.current = window.setTimeout(() => setCopyError(""), 2400);
-    }
-  }
 
   return (
     <div className={`${styles.page} page-width`}>
@@ -2054,11 +2029,10 @@ function CustomProjectDetailContent({
   preview?: boolean;
   creatorArticle?: CreatorArticleV1 | null;
 }) {
-  const [copied, setCopied] = useState(false);
-  const [copyError, setCopyError] = useState("");
+  const { copied, copyUnavailable, copyAddress } = useWalletAddressCopy(project.tokenAddress);
+  const copyError = copyUnavailable ? "Could not copy address" : "";
   const [publishedCreatorArticle, setPublishedCreatorArticle] =
     useState<CreatorArticleV1 | null>(null);
-  const copyResetTimer = useRef<number | null>(null);
   const imageUrl = project.imageUrl?.trim()
     || getFallbackTokenImage(project.tokenAddress ?? project.customProjectId);
   const imageSource = getTokenCardImageSource(imageUrl);
@@ -2093,25 +2067,6 @@ function CustomProjectDetailContent({
         : null,
     });
   }, [chainId, project, visibleCreatorArticle]);
-
-  useEffect(() => () => {
-    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
-  }, []);
-
-  async function copyAddress() {
-    if (project.tokenAddress === undefined) return;
-    if (copyResetTimer.current !== null) window.clearTimeout(copyResetTimer.current);
-    setCopyError("");
-    try {
-      await navigator.clipboard.writeText(project.tokenAddress);
-      setCopied(true);
-      copyResetTimer.current = window.setTimeout(() => setCopied(false), 1600);
-    } catch {
-      setCopied(false);
-      setCopyError("Could not copy address");
-      copyResetTimer.current = window.setTimeout(() => setCopyError(""), 2400);
-    }
-  }
 
   return (
     <div className={`${styles.page} page-width`}>
