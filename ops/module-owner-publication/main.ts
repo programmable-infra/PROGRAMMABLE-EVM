@@ -156,7 +156,9 @@ export async function publishCatalogBatch(batch: FoundationOwnerPublicationV1[],
   for (const p of batch) await verifyFoundationOwnerPublicationV1(p, publishers.wallets);
   const publicationDigest = publication.publicationDigest;
   for (let attempt = 0; attempt < 3; attempt++) {
-    const existing = await get(FOUNDATION_OWNER_CATALOG_PATH, { token: storageToken, access: "private", useCache: false });
+    // Compression can turn the response ETag into a weak validator, which cannot satisfy If-Match.
+    const existing = await get(FOUNDATION_OWNER_CATALOG_PATH, { token: storageToken, access: "private", useCache: false,
+      headers: { "accept-encoding": "identity" } });
     let publications: FoundationOwnerPublicationV1[] = [], etag: string | undefined;
     if (existing) {
       if (existing.statusCode !== 200 || !existing.stream) throw Error("Catalogue read failed.");
@@ -166,6 +168,7 @@ export async function publishCatalogBatch(batch: FoundationOwnerPublicationV1[],
         await Promise.all(old.publications.slice(offset, offset + 4).map((p: unknown) => verifyFoundationOwnerPublicationV1(p, publishers.wallets)));
       }
       publications = old.publications; etag = existing.blob.etag;
+      if (!etag || etag.startsWith("W/")) throw Error("Catalogue requires a strong version validator.");
     }
     const alreadyStored = batch.every(p => publications.some(old => old.publicationDigest === p.publicationDigest));
     if (batch.length === 1 && publications.some(p => p.release.chainId === 1 || (p.manifest.familyId === publication.manifest.familyId && p.release.chainId !== publication.release.chainId))) throw Error("This module requires a shared two-chain publication.");

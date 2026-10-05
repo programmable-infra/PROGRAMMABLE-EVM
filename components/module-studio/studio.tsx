@@ -164,7 +164,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
               {errors["social-other"] ? <span id="foundation-other-error" className={styles.error}>{errors["social-other"]}</span> : null}
             </StudioDetails>
           </> : panel === "quote" ? <>
-            <p className={styles.moduleDescription}>This module lets you choose another asset people use to buy and sell your coin. Enter its token contract address on Robinhood Chain. Turn the module off to use ETH.</p>
+            <p className={styles.moduleDescription}>This module lets you choose another asset people use to buy and sell your coin. Enter its token contract address on the selected network. Turn the module off to use ETH.</p>
             <button type="button" className={styles.quoteChoice} aria-pressed={!props.customQuote} onClick={disableQuote}><Waves size={22} /><strong>ETH</strong>{!props.customQuote ? <Check size={18} /> : null}</button>
             <StudioField id="foundation-quote" label="Quote token address"><input id="foundation-quote" name="quoteAsset" value={props.customQuote ? draft.quoteAsset : ""} autoComplete="off" spellCheck={false} aria-invalid={Boolean(errors.quoteAsset) || undefined} aria-describedby={props.quoteStatus || errors.quoteAsset ? "foundation-quote-status" : undefined} placeholder="Token address · 0x…" onChange={event => props.onQuoteChange(event.target.value)} /></StudioField>
             {props.quoteStatus || errors.quoteAsset ? <div id="foundation-quote-status" className={errors.quoteAsset ? styles.error : styles.settingStatus} role="status">{errors.quoteAsset || props.quoteStatus}</div> : null}

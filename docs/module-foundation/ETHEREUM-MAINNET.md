@@ -1,6 +1,6 @@
 # Ethereum Module Mode implementation status
 
-Status on 2026-10-05: Ethereum contracts are deployed and source-matched. A real canary completed launch, buy, sell and creator-fee claim. The website SDK also completed an unbroadcast launch preparation with the production signing authority. Website activation is still pending the integrated release.
+Status on 2026-10-05: Ethereum Module Mode is available at `/launch/modules/foundation?chainId=1`. Ethereum contracts are deployed and source-matched. A real canary completed launch, buy, sell and creator-fee claim, and a second canary completed the website SDK preparation, wallet revalidation and onchain launch. The live website and API admit the Ethereum host release. The shared catalog publishes the same source package on Ethereum and Robinhood.
 
 ## Existing identity and indexing
 
