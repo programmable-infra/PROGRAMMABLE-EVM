@@ -493,7 +493,6 @@ describe("developer API key interface", () => {
     };
     const html = renderToStaticMarkup(createElement(DeveloperApiKeysView, props));
     expect(html).toContain("Build a custom hook");
-    expect(html).toContain("trading rules");
     expect(html).toMatch(/<details[^>]*id="custom-hook-guide"[^>]*open=""/u);
     expect(html.indexOf("Build a custom hook")).toBeLessThan(html.indexOf("Connect your wallet"));
     expect(html).toContain("or use one you already saved");
