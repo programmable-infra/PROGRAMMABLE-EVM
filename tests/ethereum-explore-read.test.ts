@@ -7,7 +7,7 @@ import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/market-data/envio-classic-v3-catalog.server", () => ({ readEnvioClassicV3CatalogV1: vi.fn() }));
 vi.mock("@/lib/alchemy/router-custom-public.server", () => ({ readWebsiteRouterCustomIdentitySnapshotV1: vi.fn() }));
-import { readEthereumCustomExploreCatalog, readEthereumLaunches, readEthereumToken } from "@/lib/server/ethereum-explore";
+import { readEthereumCustomExploreCatalog, readEthereumUnifiedExploreCatalog, readEthereumLaunches, readEthereumToken } from "@/lib/server/ethereum-explore";
 const hex = (n: number, size: number) => `0x${n.toString(16).padStart(size, "0")}` as `0x${string}`;
 function entry(n: number): CanonicalTokenExploreEntry {
   return canonicalTokenExploreEntryV1({ id: `1:${hex(n,40)}`, name: `Coin ${n}`, symbol: `C${n}`, tokenAddress: hex(n,40),
@@ -20,6 +20,22 @@ const source = (entries: CanonicalTokenExploreEntry[], status: "current" | "last
 const unavailable = async (): Promise<never> => { throw new Error("source unavailable"); };
 
 describe("Ethereum verified Explore adapter", () => {
+  it("adds only the selected verified Classic identity to unified discovery", async () => {
+    const helixAddress = "0x9C355950bd5634eF2b2935d356075C7c19b2386a";
+    const helix = { ...entry(1), tokenAddress: helixAddress };
+    const classic = vi.fn(source([helix, entry(2)]));
+    const custom = vi.fn(source([customGraphExploreEntry]));
+    const catalog = await readEthereumUnifiedExploreCatalog({ classic, custom });
+    expect(catalog.status).toBe("ready");
+    expect(catalog.entries).toEqual([customGraphExploreEntry, helix]);
+    expect(classic).toHaveBeenCalledTimes(1); expect(custom).toHaveBeenCalledTimes(1);
+    const absent = await readEthereumUnifiedExploreCatalog({ classic: source([]), custom });
+    expect(absent.entries).toEqual([customGraphExploreEntry]);
+    const partial = await readEthereumUnifiedExploreCatalog({ classic: unavailable, custom });
+    expect(partial).toMatchObject({ status: "partial", entries: [customGraphExploreEntry] });
+    const customUnavailable = await readEthereumUnifiedExploreCatalog({ classic, custom: unavailable });
+    expect(customUnavailable).toMatchObject({ status: "partial", entries: [helix] });
+  });
   it("refreshes public presentation after identity checks without changing the canonical source evidence", async () => {
     const evidence = { source: "canonical-launch-stamp-router" as const, asOfBlock: "26113816", asOfBlockHash: hex(10,64),
       commitment: `sha256:${"ab".repeat(32)}`, generatedAt: "2026-10-03T19:23:00Z" };

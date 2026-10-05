@@ -6,7 +6,7 @@ import type { RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
 vi.mock("server-only", () => ({}));
 const sources = vi.hoisted(() => ({ rh: vi.fn(), eth: vi.fn(), rhMarkets: vi.fn(), ethMarkets: vi.fn(), presentations: vi.fn() }));
 vi.mock("@/lib/server/robinhood-index/read", () => ({ readRobinhoodExploreCatalog: sources.rh }));
-vi.mock("@/lib/server/ethereum-explore", () => ({ readEthereumCustomExploreCatalog: sources.eth }));
+vi.mock("@/lib/server/ethereum-explore", () => ({ readEthereumUnifiedExploreCatalog: sources.eth }));
 vi.mock("@/lib/server/robinhood-presentation", () => ({ readRobinhoodMarkets: sources.rhMarkets, readRobinhoodPresentations: sources.presentations }));
 vi.mock("@/lib/server/codex-market", () => ({ readCodexMarkets: sources.ethMarkets }));
 import { readUnifiedLaunches } from "@/lib/server/unified-explore";
@@ -32,6 +32,16 @@ beforeEach(() => {
 });
 
 describe("Unified verified source adapter", () => {
+  it("keeps a selected Classic launch's category and existing artwork and links", async () => {
+    const classic = { ...eth, name: "Helix", symbol: "HELIX", imageUrl: "https://helixlev.fun/brand/helix-logo.png",
+      links: [{ kind: "website", url: "https://helixlev.fun/" }, { kind: "x", url: "https://x.com/Helixlevdotfun" }],
+      launchCategoryProvenance: { category: "classic" } };
+    sources.eth.mockResolvedValue({ status: "ready", updatedAt: null, entries: [classic], sourceEvidence: {} });
+    const result = await readUnifiedLaunches();
+    expect(result.items.find(row => row.chainId === 1)).toMatchObject({ name: "Helix", category: "classic", mode: "classic" });
+    expect(result.presentations.find(row => row.chainId === 1)).toMatchObject({ imageUrl: classic.imageUrl,
+      links: [{ label: "website", url: "https://helixlev.fun/" }, { label: "x", url: "https://x.com/Helixlevdotfun" }] });
+  });
   it("keeps each network identity and valuation separate and does not admit provider-only tokens", async () => {
     const result = await readUnifiedLaunches();
     expect(result.items.map(row => [row.chainId, row.name])).toEqual([[1, "ETH custom"], [4663, "RH token"]]);
