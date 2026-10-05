@@ -1,5 +1,10 @@
 import { formatUnits, parseUnits } from "viem";
 
+/** Decimal keyboards use either separator. Never parse through floating point. */
+export function normalizeSwapAmountInput(value: string): string {
+  return value.replace(/,/g, ".").replace(/^\./, "0.");
+}
+
 export function parseSwapAmount(value: string, decimals: number): bigint | null {
   if (!Number.isInteger(decimals) || decimals < 0 || decimals > 255 || !/^(?:\d+\.?\d*|\.\d+)$/.test(value)) return null;
   const fraction = value.split(".")[1] ?? "";

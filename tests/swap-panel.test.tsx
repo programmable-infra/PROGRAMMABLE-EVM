@@ -3,11 +3,24 @@ import { describe, expect, it, vi } from "vitest";
 import { parseUnits } from "viem";
 import { useWallet } from "../components/wallet-provider";
 import { SwapPanel } from "../components/swap-panel";
-import { displaySwapAmount, maximumSwapInput, parseSwapAmount } from "../components/swap-amount";
+import { displaySwapAmount, maximumSwapInput, normalizeSwapAmountInput, parseSwapAmount } from "../components/swap-amount";
+import { foundationDecimalError } from "@/lib/module-foundation/ui-types";
 
 vi.mock("../components/wallet-provider", () => ({ useWallet: vi.fn() }));
 
 describe("swap input precision and spend limits", () => {
+  it("accepts decimal keyboards consistently in classic and module trading", () => {
+    for (const input of ["0.01", "0,01", ".01", ",01"]) {
+      const normalized = normalizeSwapAmountInput(input);
+      expect(normalized).toBe("0.01");
+      expect(foundationDecimalError(normalized, 18, false)).toBeNull();
+      expect(parseSwapAmount(normalized, 18)).toBe(10_000_000_000_000_000n);
+    }
+    expect(normalizeSwapAmountInput("12345678901,234567890123456789")).toBe("12345678901.234567890123456789");
+    for (const input of ["1,2,3", "1e4", "-2", "1.23,45"]) {
+      expect(parseSwapAmount(normalizeSwapAmountInput(input), 18)).toBeNull();
+    }
+  });
   it("preserves the entire sell balance even beyond Number precision", () => {
     const balance = 12345678901234567890123456789n;
     expect(maximumSwapInput({ side: "sell", chainId: 4663, tokenBalanceRaw: balance, nativeBalanceWei: 1n, gasPriceWei: 1n })).toBe(balance);
