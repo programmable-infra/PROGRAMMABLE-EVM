@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowRight, Clock3, Puzzle } from "lucide-react";
+import { ArrowRight, Puzzle } from "lucide-react";
 
 import launchExperience from "@/components/launch-experience.module.css";
 import { useViewChain, type ViewChainId } from "@/components/view-chain";
@@ -38,7 +38,7 @@ function LaunchArtworkImage() {
 }
 
 /** Opening a draft is always available; the builder checks authority before review and submission. */
-export function ModuleFoundationLaunchCard() {
+export function ModuleFoundationLaunchCard({ chainId = DEFAULT_VIEW_CHAIN_ID }: { chainId?: ViewChainId }) {
   const cardProps = {
     className: `launch-model-card ${launchExperience.modelCard} liquid-glass-surface`,
     "data-launch-model-option": "modules",
@@ -63,7 +63,7 @@ export function ModuleFoundationLaunchCard() {
       </span>
     </span>
   </>;
-  return <Link {...cardProps} href="/launch/modules/foundation">{content}</Link>;
+  return <Link {...cardProps} href={`/launch/modules/foundation?chainId=${chainId}`}>{content}</Link>;
 }
 
 export function LaunchExperience({
@@ -159,8 +159,6 @@ function LaunchExperienceRuntime({
 export function LaunchModelPicker({
   chainId = DEFAULT_VIEW_CHAIN_ID,
   modelLoadError = "",
-  onChoose,
-  preparingModel = null,
 }: {
   chainId?: ViewChainId;
   onChangeChain?: (chainId: ViewChainId) => void;
@@ -168,10 +166,6 @@ export function LaunchModelPicker({
   onChoose: (model: LaunchPickerChoice) => void | Promise<void>;
   preparingModel?: LaunchModel | null;
 }) {
-  const isEthereum = chainId === 1;
-  const preloadAvailableForm = () => {
-    void loadLaunchForm().catch(() => undefined);
-  };
 
   const customCardContent = (
     <>
@@ -227,76 +221,7 @@ export function LaunchModelPicker({
         key={chainId}
         className={`launch-model-grid ${launchExperience.modelGrid}`}
       >
-        {isEthereum ? (
-          <button
-            className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
-            data-launch-model-option="classic"
-            data-launch-model-available={classicV3LaunchAvailable}
-            data-launch-model-launchable={classicV3LaunchAvailable}
-            type="button"
-            disabled={!classicV3LaunchAvailable || preparingModel !== null}
-            aria-busy={preparingModel === "classic-v3"}
-            aria-labelledby="launch-model-classic-title"
-            aria-describedby={classicV3LaunchAvailable ? "launch-model-classic-description" : "launch-model-classic-description launch-model-classic-status"}
-            onPointerEnter={
-              classicV3LaunchAvailable ? preloadAvailableForm : undefined
-            }
-            onPointerDown={
-              classicV3LaunchAvailable ? preloadAvailableForm : undefined
-            }
-            onFocus={classicV3LaunchAvailable ? preloadAvailableForm : undefined}
-            onClick={() => void onChoose("classic-v3")}
-          >
-            <span
-              className={`launch-model-art launch-model-art-classic ${launchExperience.modelArt} ${launchExperience.classicArt}`}
-              aria-hidden="true"
-            >
-              <LaunchArtworkImage />
-              <Image
-                className={launchExperience.classicLogo}
-                src="/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png"
-                alt=""
-                width={1536}
-                height={1536}
-                sizes="128px"
-              />
-            </span>
-
-            <span
-              className={`launch-model-card-body ${launchExperience.modelBody}`}
-            >
-              <span
-                className={`launch-model-card-heading ${launchExperience.modelHeading}`}
-              >
-                <strong id="launch-model-classic-title">Classic</strong>
-              </span>
-              <span
-                className={`launch-model-description ${launchExperience.modelDescription}`}
-                id="launch-model-classic-description"
-              >
-                Create a fixed-supply token with locked liquidity and optional
-                trading fees.
-              </span>
-              {!classicV3LaunchAvailable ? (
-                <span className={launchExperience.maintenanceStatus} id="launch-model-classic-status">
-                  <Clock3 aria-hidden="true" size={14} />
-                  Getting updated currently
-                </span>
-              ) : (
-                <span
-                  className={`launch-model-action ${launchExperience.modelAction}`}
-                >
-                  {preparingModel === "classic-v3"
-                    ? "Opening Classic"
-                    : "Create a coin"}
-                  <ArrowRight aria-hidden="true" size={16} />
-                </span>
-              )}
-            </span>
-          </button>
-        ) : (
-          <ModuleFoundationLaunchCard />
-        )}
+        <ModuleFoundationLaunchCard chainId={chainId} />
 
         <Link
           className={`launch-model-card ${launchExperience.modelCard} liquid-glass-surface`}
@@ -304,7 +229,7 @@ export function LaunchModelPicker({
           data-launch-model-available="true"
           data-launch-model-entry="developer-launch"
           data-launch-model-launchable="false"
-          href="/developers/api-keys?start=custom&chainId=4663"
+          href={`/developers/api-keys?start=custom&chainId=${chainId}`}
           aria-label="Launch a custom hook"
           aria-describedby="launch-model-custom-description launch-model-custom-status"
         >

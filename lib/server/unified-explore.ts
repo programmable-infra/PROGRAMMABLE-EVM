@@ -21,7 +21,16 @@ const readers = {
 /** Two independently verified catalogs, one global ranking, and at most one market batch per chain per cache window. */
 export async function readUnifiedLaunches(page = 1, query = "", filters: RobinhoodExploreFilters = { sort: "highest", mode: "all" },
   size: 6 | 8 | 10 | 50 = 10, dependencies: typeof readers = readers) {
-  const [rh, eth] = await Promise.all([dependencies.robinhood(), dependencies.ethereum()]);
+  // Each network can enrich its catalog as soon as it arrives. A slower index
+  // must not hold up the other network's independent market request.
+  const [[rh, rhMarkets], [eth, ethMarkets]] = await Promise.all([
+    dependencies.robinhood().then(async catalog => [catalog,
+      await dependencies.robinhoodMarkets(catalog.items).catch(() => new Map<string, RobinhoodCoinMarket>()),
+    ] as const),
+    dependencies.ethereum().then(async catalog => [catalog,
+      await dependencies.ethereumMarkets(catalog.entries, 1).catch(() => new Map<string, RobinhoodCoinMarket>()),
+    ] as const),
+  ]);
   const sources = { robinhood: rh.status, ethereum: eth.status };
   const available = [rh, eth].filter(source => source.status !== "unavailable");
   const status = !available.length ? "unavailable" as const : available.length < 2 || eth.status === "partial" ? "partial" as const
@@ -29,10 +38,6 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
       : available.some(source => source.status === "syncing") ? "syncing" as const : "ready" as const;
   const updatedAt = available.flatMap(source => source.updatedAt ? [source.updatedAt] : [])
     .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
-  const [rhMarkets, ethMarkets] = await Promise.all([
-    dependencies.robinhoodMarkets(rh.items).catch(() => new Map<string, RobinhoodCoinMarket>()),
-    dependencies.ethereumMarkets(eth.entries, 1).catch(() => new Map<string, RobinhoodCoinMarket>()),
-  ]);
   const rhRows = rh.items.map(row => ({ ...row, chainId: 4663 as const,
     mode: isRobinhoodModuleSourceKind(row.sourceKind) ? "module" as const : "custom" as const }));
   const ethRows = eth.entries.map(entry => ({

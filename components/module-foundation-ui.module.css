@@ -428,7 +428,12 @@
 .marketExtras { margin-top: 24px; }
 .marketScope :is(button, a, summary, select):focus-visible { outline: 2px solid var(--mf-focus); outline-offset: 3px; }
 
-.networkChoice { display: inline-flex; margin-top: 10px; }
-.networkChoice select { min-height: 32px; padding: 4px 12px; color: inherit; background: rgba(15, 19, 29, 0.78); border: 0; border-radius: 8px; font: inherit; font-size: 13px; cursor: pointer; }
-.networkChoice select:focus-visible { outline: 2px solid #88cba3; outline-offset: 3px; }
-.networkChoice select:disabled { opacity: 0.6; cursor: wait; }
+.networkChoice { display: inline-flex; gap: 4px; margin: 0; padding: 4px; min-width: 0; border: 0; border-radius: 12px; background: rgba(15, 19, 29, 0.68); }
+.networkChoice label { position: relative; cursor: pointer; }
+.networkChoice input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.networkChoice label > span { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; border-radius: 9px; font-size: 14px; line-height: 20px; color: #b9bec8; transition: background 180ms ease, color 180ms ease; }
+.networkChoice label > span > span { display: flex; align-items: center; }
+.networkChoice input:checked + span { color: #f4fff6; background: rgba(115, 175, 142, 0.24); }
+.networkChoice input:focus-visible + span { outline: 2px solid #88cba3; outline-offset: 2px; }
+.networkChoice:disabled label { opacity: .6; cursor: wait; }
+@media (prefers-reduced-motion: reduce) { .networkChoice label > span { transition: none; } }

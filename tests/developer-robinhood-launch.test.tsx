@@ -65,7 +65,7 @@ describe("Robinhood API launch website handoff", () => {
 
   it("keeps old Custom links and wallet handoffs on the prepared launch view", () => {
     expect(launchEntrySource).toContain(
-      'href="/developers/api-keys?start=custom&chainId=4663"',
+      'href={`/developers/api-keys?start=custom&chainId=${chainId}`}',
     );
     expect(launchEntrySource).toContain('data-launch-model-entry="developer-launch"');
     expect(apiKeysSource).not.toContain("DeveloperRobinhoodLaunch");

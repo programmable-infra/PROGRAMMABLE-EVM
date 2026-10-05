@@ -169,72 +169,17 @@ describe("unreleased launch model gating", () => {
     ).toEqual([-1, -1, 0, -1, -1, -1]);
   });
 
-  it("offers Classic and Custom on Ethereum without bypassing launch authority", () => {
-    const html = renderToStaticMarkup(
-      createElement(LaunchModelPicker, {
-        chainId: 1,
-        onChoose: () => undefined,
-      }),
-    );
-
+  it("offers Module Mode and Custom on Ethereum without claiming launch authority", () => {
+    const html = renderToStaticMarkup(createElement(LaunchModelPicker, { chainId: 1, onChoose: () => undefined }));
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
-    expect(html).toContain('<h1 class="sr-only">Launch</h1>');
-    expect(html).not.toContain('<legend class="sr-only">Launch chain</legend>');
-    expect(html).not.toContain('aria-label="Ethereum"');
-    expect(html).not.toContain('aria-label="Robinhood"');
-    expect(html).not.toContain("Choose a chain");
-    expect(html).not.toContain('name="launch-chain"');
-    expect(html).not.toContain('data-launch-model-option="prediction"');
-    expect(html).toContain('data-launch-model-option="classic"');
-    const classicCard = html.match(
-      /<button[^>]*data-launch-model-option="classic"[^>]*>/,
-    )?.[0];
-    expect(classicCard).toContain('data-launch-model-launchable="false"');
-    expect(classicCard).toContain('disabled=""');
-    expect(html).toContain(
-      'id="launch-model-classic-title">Classic</strong>',
-    );
-    expect(html).not.toContain("Ethereum only");
-    expect(html).toContain('id="launch-model-classic-status"');
-    expect(html).toContain(
-      'aria-describedby="launch-model-classic-description launch-model-classic-status"',
-    );
-    expect(html).toContain('data-launch-model-option="custom"');
-    const customCard = html.match(
-      /<a[^>]*data-launch-model-option="custom"[^>]*>/,
-    )?.[0];
-    expect(customCard).toContain('data-launch-model-available="true"');
-    expect(customCard).toContain('data-launch-model-entry="developer-launch"');
-    expect(customCard).toContain('data-launch-model-launchable="false"');
-    expect(customCard).toContain('href="/developers/api-keys?start=custom&amp;chainId=4663"');
-    expect(customCard).not.toContain("disabled");
-    expect(html).toContain(
-      'id="launch-model-custom-title">Custom hook</strong>',
-    );
-    expect(html).not.toContain("Create a coin");
-    expect(html).toContain(
-      "Create a Uniswap v4 hook with your own logic.",
-    );
-    expect(html.match(/Getting updated currently/g)).toHaveLength(1);
-    expect(html).not.toContain("approved GitHub revision");
-    expect(html.indexOf('data-launch-model-option="classic"')).toBeLessThan(
-      html.indexOf('data-launch-model-option="custom"'),
-    );
-    for (const marker of removedPartnerMarkers) {
-      expect(html).not.toContain(marker);
-    }
-    // Next/Image may emit the source as an encoded optimizer URL. Assert the
-    // asset identity without coupling this contract to that transport detail.
-    expect(html.match(/programmable-floral-hooks-v1\.webp/g)?.length).toBeGreaterThanOrEqual(2);
-    expect(html).not.toContain("In development");
-    expect(html).not.toContain("launch-model-classic-details");
-    expect(html).not.toContain('data-launch-model-option="stock-paired"');
-    expect(html).not.toContain("<strong>Stock-Paired</strong>");
-    expect(html).not.toContain('data-launch-model-option="deep"');
-    expect(html).not.toContain("<strong>Deep</strong>");
-    expect(html).not.toMatch(/adaptive/i);
-    expect(html).not.toContain("LiquidityGrowth");
-    expect(html).not.toContain("Liquidity Growth");
+    const modules = html.match(/<a[^>]*data-launch-model-option="modules"[^>]*>/u)?.[0];
+    expect(modules).toContain('href="/launch/modules/foundation?chainId=1"');
+    expect(modules).toContain('data-launch-model-launchable="false"');
+    const custom = html.match(/<a[^>]*data-launch-model-option="custom"[^>]*>/u)?.[0];
+    expect(custom).toContain('href="/developers/api-keys?start=custom&amp;chainId=1"');
+    expect(custom).toContain('data-launch-model-launchable="false"');
+    expect(html).not.toContain("Getting updated currently");
+    for (const marker of removedPartnerMarkers) expect(html).not.toContain(marker);
   });
 
   it("opens the Robinhood coin draft and the existing custom-launch workflow", () => {
@@ -246,7 +191,7 @@ describe("unreleased launch model gating", () => {
     );
     expect(html.match(/data-launch-model-option=/g)).toHaveLength(2);
     const modulesCard = html.match(/<a[^>]*data-launch-model-option="modules"[^>]*>/u)?.[0];
-    expect(modulesCard).toContain('href="/launch/modules/foundation"');
+    expect(modulesCard).toContain('href="/launch/modules/foundation?chainId=4663"');
     expect(modulesCard).not.toContain("disabled");
     expect(modulesCard).not.toContain("data-launch-model-available");
     expect(modulesCard).toContain('data-launch-model-entry="foundation"');
@@ -273,10 +218,16 @@ describe("unreleased launch model gating", () => {
     expect(html).not.toContain("Build or resume");
   });
 
+  it("keeps Ethereum selected when opening its Module Mode draft", () => {
+    const html = renderToStaticMarkup(createElement(ModuleFoundationLaunchCard, { chainId: 1 }));
+    expect(html).toContain('href="/launch/modules/foundation?chainId=1"');
+    expect(html).toContain('data-launch-model-launchable="false"');
+  });
+
   it("renders Foundation draft navigation before hydration without claiming launch authority", () => {
     const open = renderToStaticMarkup(createElement(ModuleFoundationLaunchCard));
     const modulesCard = open.match(/<a[^>]*data-launch-model-option="modules"[^>]*>/u)?.[0];
-    expect(modulesCard).toContain('href="/launch/modules/foundation"');
+    expect(modulesCard).toContain('href="/launch/modules/foundation?chainId=4663"');
     expect(modulesCard).not.toContain("data-launch-model-available");
     expect(modulesCard).toContain('data-launch-model-entry="foundation"');
     expect(modulesCard).toContain('data-launch-model-launchable="false"');

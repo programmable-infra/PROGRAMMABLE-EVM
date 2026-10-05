@@ -37,25 +37,17 @@ describe("launch model artwork", () => {
     expect(css).not.toMatch(/:hover[^{}]*\.modelArt img\s*\{/s);
     expect(source).not.toContain("onMouseEnter=");
     expect(source).not.toContain("onMouseLeave=");
-    expect(source).toContain(
-      "classicV3LaunchAvailable ? preloadAvailableForm : undefined",
-    );
   });
 
   it("uses native card semantics and keeps decorative art out of the accessibility tree", () => {
     const source = read("components/launch-entry.tsx");
     const route = read("app/launch/page.tsx");
 
-    expect(source).toContain('data-launch-model-option="classic"');
-    expect(source).toContain('type="button"');
+    expect(source).toContain('"data-launch-model-option": "modules"');
     expect(source).not.toContain('data-launch-model-option="prediction"');
     expect(source).toContain('data-launch-model-launchable="false"');
-    expect(source).toContain(
-      'aria-labelledby="launch-model-classic-title"',
-    );
-    expect(source).toContain(
-      'aria-describedby={classicV3LaunchAvailable ? "launch-model-classic-description" : "launch-model-classic-description launch-model-classic-status"}',
-    );
+    expect(source).toContain('"aria-label": "Launch a coin with Module Mode"');
+    expect(source).toContain('"aria-describedby": "launch-model-modules-description launch-model-modules-status"');
     expect(source).toContain(
       'aria-label="Launch a custom hook"',
     );
@@ -78,7 +70,7 @@ describe("launch model artwork", () => {
     for (const marker of removedPartnerMarkers) {
       expect(source).not.toContain(marker);
     }
-    expect(source.match(/<LaunchArtworkImage \/>/g)).toHaveLength(2);
+    expect(source.match(/<LaunchArtworkImage \/>/g)).toHaveLength(1);
     expect(source.match(/aria-hidden="true"/g)?.length).toBeGreaterThanOrEqual(2);
     expect(source).not.toContain("launchExperience.predictionRail");
   });
