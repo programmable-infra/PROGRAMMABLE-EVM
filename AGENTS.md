@@ -44,6 +44,13 @@
 
 See [docs/PROJECT-STRUCTURE.md](docs/PROJECT-STRUCTURE.md) for the directory map.
 
+## Shared Module Mode publication
+
+- The owner wants new Module Mode versions to become available on Robinhood and Ethereum mainnet together once Ethereum Module Mode is enabled.
+- Design new modules around one immutable source package, one configuration interface and one publication job targeting both chains. Keep deployment addresses, host releases, runtime evidence and wallet preparation separate per chain.
+- Retain the active version until both target deployments are verified and ready; do not publish a replacement on only one chain or treat one chain's evidence as proof for the other.
+- The implementation target and current rollout limitations are recorded in [docs/module-foundation/MULTICHAIN-PUBLICATION.md](docs/module-foundation/MULTICHAIN-PUBLICATION.md). This policy does not activate Ethereum launches or authorize spending by itself.
+
 ## Public documentation
 
 - Use factual, direct language. No marketing claims, em dashes, filler or rhetorical contrasts.
