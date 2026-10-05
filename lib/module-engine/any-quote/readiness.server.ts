@@ -15,6 +15,7 @@ import { enumerateAnyQuoteV4PathsV1 } from "./path-enumeration.server";
 
 import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 import { foundationMainnetRpcs } from "@/lib/server/module-foundation/rpc";
+import { foundationMainnetPoolHints } from "@/lib/server/module-foundation/pool-hints";
 
 const QUOTE_URL = "https://trade-api.gateway.uniswap.org/v1/quote";
 const ASSETS_URL = "https://api.robinhood.com/rhj/assets";
@@ -129,7 +130,8 @@ async function context(options: AnyQuoteReadinessOptionsV1, verifyAmmInfrastruct
   if (verifyAmmInfrastructure) await verifyAmm();
   let discovery: ReturnType<typeof createAnyQuoteV4InitializeDiscoveryV1> | undefined;
   return { profile, infra, now, checkpoint, block, code, call, pin, verifyAmm,
-    discovery: () => discovery ??= createAnyQuoteV4InitializeDiscoveryV1({ checkpoint, rpcs, chainId: profile.chainId }) };
+    discovery: () => discovery ??= createAnyQuoteV4InitializeDiscoveryV1({ checkpoint, rpcs, chainId: profile.chainId,
+      hintRpc: profile.chainId === 1 && !options.rpcs ? foundationMainnetPoolHints() : undefined }) };
 }
 type Context = Awaited<ReturnType<typeof context>>;
 
