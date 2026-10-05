@@ -379,6 +379,7 @@ export function FixtureControls() {
     <button onClick={() => update({ wallets: state.wallets.map((candidate) => wallet(
       candidate.address, candidate.linked, candidate.connectedAt + 1, candidate.chainId,
     )) })}>Replace connected wallet capability</button>
+    <button onClick={() => update({ wallets: state.wallets.map(candidate => ({ ...candidate })) })}>Refresh SDK wallet wrapper</button>
     <button onClick={() => update({ isOpen: true })}>Open SDK modal</button>
     <button onClick={() => update({ isOpen: false })}>Close SDK modal</button>
     <button onClick={() => update({ delayedLocks: !current.delayedLocks })} aria-pressed={current.delayedLocks}>Delay browser lock</button>

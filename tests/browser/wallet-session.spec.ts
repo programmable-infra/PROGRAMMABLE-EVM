@@ -721,6 +721,8 @@ test("verified network readback updates Module Mode even without an SDK chainCha
   await expectNetworkResults(page, [true]);
   await expect(page.getByLabel("Selected wallet network", { exact: true })).toHaveText("0x1237");
   await expect(page.getByLabel("Module wallet step", { exact: true })).toHaveText("prepare");
+  await page.getByRole("button", { name: "Refresh SDK wallet wrapper", exact: true }).click();
+  await expect(page.getByLabel("Module wallet step", { exact: true })).toHaveText("prepare");
   await page.getByRole("button", { name: "Replace connected wallet capability", exact: true }).click();
   await expect(page.getByLabel("Module wallet step", { exact: true })).toHaveText("switch");
 });

@@ -1283,7 +1283,7 @@ function PrivyWalletBridge({
     userId: string;
     account: string;
     chainId: string;
-    walletSnapshot: object;
+    walletSnapshot: { getEthereumProvider: unknown; switchChain: unknown };
   } | null>(null);
   const [switchingNetwork, setSwitchingNetwork] = useState(false);
   const networkSwitchPendingRef = useRef(false);
@@ -1598,7 +1598,8 @@ function PrivyWalletBridge({
 
     const verified = verifiedWalletNetwork !== null && verifiedWalletNetwork.userId === user?.id
       && verifiedWalletNetwork.account.toLowerCase() === connectedWalletAddress.toLowerCase()
-      && verifiedWalletNetwork.walletSnapshot === connectedWallet;
+      && verifiedWalletNetwork.walletSnapshot.getEthereumProvider === connectedWallet?.getEthereumProvider
+      && verifiedWalletNetwork.walletSnapshot.switchChain === connectedWallet?.switchChain;
     return {
       account: connectedWalletAddress,
       chainId: verified ? verifiedWalletNetwork.chainId
@@ -2298,7 +2299,6 @@ function PrivyWalletBridge({
           },
         });
         if (!isCurrentSession()) return false;
-        const walletAtVerification = walletRequestSessionRef.current.walletCapability;
         if (connectedWallet.walletClientType !== "privy" && connectedWallet.walletClientType !== "privy-v2") {
           const accounts = await provider.request({ method: "eth_accounts" });
           if (!isCurrentSession()) return false;
@@ -2309,7 +2309,8 @@ function PrivyWalletBridge({
           }
         }
         // Switching to an already active network need not emit chainChanged.
-        // Use the verified readback only while this SDK snapshot and wallet still match.
+        // Bind the readback to the connection, not the SDK's replaceable wrapper.
+        const walletAtVerification = walletRequestSessionRef.current.walletCapability;
         if (walletAtVerification !== null) {
           walletRequestSessionRef.current.chainId = target.chainHex;
           setVerifiedWalletNetwork({
