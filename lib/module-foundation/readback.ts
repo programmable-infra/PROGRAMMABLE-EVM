@@ -1,3 +1,6 @@
+import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
+import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
+import { foundationClientProfile } from "./chains";
 import { foundationCreatorFeeFields, foundationCreatorFeeRates, foundationCreatorFeesEqual } from "./creator-fees";
 import { assertFoundationLaunchCall } from "./atomic-launch";
 import {
@@ -14,7 +17,7 @@ import {
   type FoundationCheckpoint, type FoundationDeploymentBinding, type FoundationPreparedStep, type FoundationTransaction,
 } from "./client";
 import {
-  FOUNDATION_ABI_ID, FOUNDATION_INFRASTRUCTURE, FOUNDATION_INT128_MAX, FOUNDATION_PLATFORM_BPS,
+  FOUNDATION_ABI_ID, FOUNDATION_INT128_MAX, FOUNDATION_PLATFORM_BPS,
   FOUNDATION_PLATFORM_RECIPIENT, FOUNDATION_SUPPLY, FOUNDATION_TICK_SPACING, foundationCreatorFeeBps,
   FOUNDATION_DEAD_ADDRESS, FOUNDATION_LP_CUSTODY_DEAD_ID,
 } from "./constants";
@@ -125,7 +128,7 @@ function isBurnedOwnerError(error: unknown) {
 
 async function readPosition(client: PublicClient, id: bigint, pool: FoundationPool, blockNumber: bigint,
   expectedTicks: readonly [number, number], fixedOwner?: Address): Promise<FoundationPositionReadback> {
-  const address = FOUNDATION_INFRASTRUCTURE.positionManager.address;
+  const address = foundationClientProfile(client).infrastructure.positionManager.address;
   const [position, liquidity, owner] = await Promise.all([
     client.readContract({ address, abi: foundationReadbackAbi, functionName: "getPoolAndPositionInfo", args: [id], blockNumber }),
     client.readContract({ address, abi: foundationReadbackAbi, functionName: "getPositionLiquidity", args: [id], blockNumber }),
@@ -189,8 +192,8 @@ export async function readFoundationPoolDetails(input: {
     client.readContract({ address: hook, abi: foundationReadbackAbi, functionName: "moduleCount", blockNumber }),
     client.readContract({ address: hook, abi: foundationHookAbi, functionName: "feeCarry", args: [true], blockNumber }),
     client.readContract({ address: hook, abi: foundationHookAbi, functionName: "feeCarry", args: [false], blockNumber }),
-    client.readContract({ address: FOUNDATION_INFRASTRUCTURE.stateView.address, abi: foundationReadbackAbi, functionName: "getSlot0", args: [pool.poolId], blockNumber }),
-    client.readContract({ address: FOUNDATION_INFRASTRUCTURE.stateView.address, abi: foundationReadbackAbi, functionName: "getLiquidity", args: [pool.poolId], blockNumber }),
+    client.readContract({ address: foundationClientProfile(client).infrastructure.stateView.address, abi: foundationReadbackAbi, functionName: "getSlot0", args: [pool.poolId], blockNumber }),
+    client.readContract({ address: foundationClientProfile(client).infrastructure.stateView.address, abi: foundationReadbackAbi, functionName: "getLiquidity", args: [pool.poolId], blockNumber }),
     input.account ? client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [input.account], blockNumber }) : Promise.resolve(null),
     client.readContract({ address: token, abi: erc20Abi, functionName: "balanceOf", args: [inventoryRecipient], blockNumber }),
   ]);
@@ -228,7 +231,7 @@ export async function readFoundationPoolDetails(input: {
     client.readContract({ address: ledger, abi: foundationReadbackAbi, functionName: "creatorShareBps", blockNumber }),
     client.readContract({ address: ledger, abi: foundationReadbackAbi, functionName: "outstandingBacking", blockNumber }),
     client.readContract({ address: ledger, abi: foundationReadbackAbi, functionName: "unallocatedCreatorDust", blockNumber }),
-    client.readContract({ address: FOUNDATION_INFRASTRUCTURE.poolManager.address, abi: foundationReadbackAbi,
+    client.readContract({ address: foundationClientProfile(client).infrastructure.poolManager.address, abi: foundationReadbackAbi,
       functionName: "balanceOf", args: [ledger, BigInt(pool.quote)], blockNumber }),
     Promise.all(Array.from({ length: Number(moduleCount) }, async (_, index) => {
       const { instance, codeHash, configurationHash, descriptor } = await client.readContract({ address: hook,
@@ -257,11 +260,11 @@ export async function readFoundationPoolDetails(input: {
         shareBps, ...budget(credited, claimed), integrity, withdrawal: "own-active-module-action" as const };
     })),
   ]);
-  if (!sameAddress(ledgerManager, FOUNDATION_INFRASTRUCTURE.poolManager.address) || !sameAddress(ledgerHook, hook)
+  if (!sameAddress(ledgerManager, foundationClientProfile(client).infrastructure.poolManager.address) || !sameAddress(ledgerHook, hook)
     || !sameAddress(ledgerQuote, pool.quote) || !sameAddress(ledgerCreator, provenance.creator)
     || (vault !== null && (!vaultManager || !vaultManagerHash || !vaultBeneficiary
-      || !sameAddress(vaultManager, FOUNDATION_INFRASTRUCTURE.positionManager.address)
-      || !sameHex(vaultManagerHash, FOUNDATION_INFRASTRUCTURE.positionManager.runtimeCodeHash)
+      || !sameAddress(vaultManager, foundationClientProfile(client).infrastructure.positionManager.address)
+      || !sameHex(vaultManagerHash, foundationClientProfile(client).infrastructure.positionManager.runtimeCodeHash)
       || vaultId !== record.basePositionId || !sameAddress(vaultBeneficiary, provenance.creator)))) {
     throw new Error("The quote ledger or permanent vault has a foreign binding.");
   }
@@ -310,10 +313,18 @@ export async function verifyFoundationLaunchReceipt(input: {
    * The receipt checkpoint stays bound to the original transaction's block. */
   verificationBlock?: bigint;
 }) {
-  const { client, binding, expected, transactionHash } = input;
+  const { client, expected, transactionHash } = input;
+  let binding = input.binding;
   const planned = expected.transaction, p = expected.parameters;
+  if (binding.ethereumGraph) {
+    const { graph } = await assertFoundationEthereumTransaction({ source: binding.ethereumGraph, transaction: planned });
+    if (getAddress(binding.factory.address) !== getAddress(binding.ethereumGraph.implementation.address)
+      && getAddress(binding.factory.address) !== graph.engine) throw new Error("The Ethereum launch account differs from its binding.");
+    binding = { ...binding, factory: { address: graph.engine, runtimeCodeHash: binding.ethereumGraph.proxyRuntimeCodeHash } };
+  }
+  const transactionTarget = binding.ethereumGraph ? getAddress(ethereum.canonicalStamp.router.address) : binding.factory.address;
   assertFoundationLaunchCall(binding, planned, p);
-  if (!sameAddress(planned.to, binding.factory.address)
+  if (!sameAddress(planned.to, transactionTarget)
     || !sameHex(expected.metadataHash, keccak256(encodeAbiParameters(foundationMetadataParameters, [p.metadata])))) {
     throw new Error("The expected launch transaction or metadata does not match its reviewed parameters.");
   }
@@ -321,7 +332,7 @@ export async function verifyFoundationLaunchReceipt(input: {
     client.getTransactionReceipt({ hash: transactionHash }), client.getTransaction({ hash: transactionHash }),
   ]);
   if (receipt.status !== "success" || !sameHex(receipt.transactionHash, transactionHash) || !sameHex(transaction.hash, transactionHash)
-    || !receipt.to || !transaction.to || !sameAddress(receipt.to, binding.factory.address) || !sameAddress(transaction.to, planned.to)
+    || !receipt.to || !transaction.to || !sameAddress(receipt.to, transactionTarget) || !sameAddress(transaction.to, planned.to)
     || !sameAddress(receipt.from, planned.from) || !sameAddress(transaction.from, planned.from)
     || !sameHex(transaction.input, planned.data) || transaction.value !== planned.value
     || transaction.blockNumber !== receipt.blockNumber || !transaction.blockHash || !sameHex(transaction.blockHash, receipt.blockHash)
@@ -339,7 +350,7 @@ export async function verifyFoundationLaunchReceipt(input: {
     }
     launchCheckpoint = { blockNumber: block.number, blockHash: block.hash, timestamp: block.timestamp };
   }
-  if (foundationFactoryVersion(binding) !== "v1") return verifyV2LaunchReceipt({ ...input, receipt, launchCheckpoint });
+  if (foundationFactoryVersion(binding) !== "v1") return verifyV2LaunchReceipt({ ...input, binding, receipt, launchCheckpoint });
   const candidates = receipt.logs.filter(log => sameAddress(log.address, binding.factory.address) && log.topics[0]
     && sameHex(log.topics[0], launchTopic));
   if (candidates.length !== 1) throw new Error("The receipt must contain exactly one launch event emitted by the expected factory.");
@@ -407,7 +418,7 @@ async function verifyV2LaunchReceipt(input: {
     throw new Error("The V2 launch event differs from the signed source, metadata, custody or principal.");
   }
   for (const id of [r.basePositionId, ...(r.creatorPositionId === 0n ? [] : [r.creatorPositionId])]) {
-    const transfers = receipt.logs.filter(item => sameAddress(item.address, FOUNDATION_INFRASTRUCTURE.positionManager.address)
+    const transfers = receipt.logs.filter(item => sameAddress(item.address, foundationClientProfile(client).infrastructure.positionManager.address)
       && item.topics[0] && sameHex(item.topics[0], transferTopic)).map(item => ({ log: item,
       event: decodeEventLog({ abi: foundationPositionAbi, eventName: "Transfer", data: item.data, topics: item.topics, strict: true }).args }))
       .filter(item => item.event.id === id);

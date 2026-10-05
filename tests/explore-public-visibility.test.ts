@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import ethereumModuleRelease from "../contracts/deployments/ethereum-module-foundation-v1.json";
 import classicV3Release from
   "../contracts/deployments/mainnet-classic-v3.json";
 import classicV4Release from
@@ -57,11 +58,16 @@ describe("public Explore visibility", () => {
     expect(isPublicExploreIdentityV1({})).toBe(true);
   });
 
-  it("hides the owner-selected Ethereum launch only from discovery on that chain", () => {
-    const [hidden] = OWNER_HIDDEN_EXPLORE_IDENTITIES_V1;
-    expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity })).toBe(false);
-    expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity.toUpperCase() }, 1)).toBe(false);
-    expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity }, 4663)).toBe(true);
+  it("hides owner-selected Ethereum launches only from discovery on that chain", () => {
+    expect(sorted(OWNER_HIDDEN_EXPLORE_IDENTITIES_V1.map(({ identity }) => identity))).toEqual(expect.arrayContaining(sorted([
+      ethereumModuleRelease.lifecycleEvidence.canaryToken,
+      ethereumModuleRelease.sdkLifecycleEvidence.canaryToken,
+    ])));
+    for (const hidden of OWNER_HIDDEN_EXPLORE_IDENTITIES_V1) {
+      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity })).toBe(false);
+      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity.toUpperCase() }, 1)).toBe(false);
+      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity }, 4663)).toBe(true);
+    }
     expect(isPublicExploreIdentityV1({ tokenAddress: "0x1111111111111111111111111111111111111111" }, 1)).toBe(true);
   });
 

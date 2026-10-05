@@ -24,3 +24,23 @@ it("merges concurrent publications after an ETag conflict without losing another
     expect(save.mock.calls.some(call => call[0] === "complete.json")).toBe(true);
   } finally { log.mockRestore(); }
 });
+
+it("publishes both chain bindings in one write and rejects partial or mismatched source sets", async () => {
+  const { publishCatalogBatch } = await import("@/ops/module-owner-publication/main");
+  storage.get.mockReset(); storage.put.mockReset(); storage.put.mockResolvedValue({});
+  const record = (chainId: number, digest: string) => ({ publicationDigest: digest, manifest: { packageId: "same-source", requestDigest: "same-request", familyId: "family" },
+    release: { chainId, hostAdapterId: "host", factory: `factory-${chainId}` }, publisher: "owner" }) as unknown as FoundationOwnerPublicationV1;
+  const targets = [record(1, "eth"), record(4663, "rh")];
+  const old = record(1, "old"); old.manifest = { ...old.manifest, packageId: "0x1111" };
+  const result = { schemaVersion: "programmable.module-foundation.owner-catalog.v1", publications: [old, ...targets] };
+  storage.get.mockResolvedValueOnce({ statusCode: 200, blob: { etag: "before" }, stream: new Response(JSON.stringify({ ...result, publications: [old] })).body })
+    .mockResolvedValueOnce({ statusCode: 200, stream: new Response(JSON.stringify(result)).body });
+  const save = vi.fn().mockResolvedValue(undefined), log = vi.spyOn(console, "log").mockImplementation(() => {});
+  try {
+    await expect(publishCatalogBatch([targets[0], { ...targets[1], manifest: { ...targets[1].manifest, requestDigest: "0x2222" } }], "test", save)).rejects.toThrow("identical source");
+    expect(storage.put).not.toHaveBeenCalled();
+    await publishCatalogBatch(targets, "test", save);
+    expect(storage.put).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(storage.put.mock.calls[0][1]).publications).toEqual(result.publications);
+  } finally { log.mockRestore(); }
+});

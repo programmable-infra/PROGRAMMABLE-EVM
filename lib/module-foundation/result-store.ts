@@ -1,8 +1,9 @@
+import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "./chains";
 import { getAddress, type Address, type Hex, type TransactionReceipt } from "viem";
 import type { FoundationPendingOperation } from "./wallet";
 
-const PREFIX = "programmable:foundation-resolution:v1:4663:";
-const PENDING_LOCK_PREFIX = "programmable:foundation-pending:v1:4663:";
+const PREFIX = "programmable:foundation-resolution:v1:";
+const PENDING_LOCK_PREFIX = "programmable:foundation-pending:v1:";
 const MAX_BYTES = 4_096;
 const SCHEMA = "programmable.foundation.resolution.v1" as const;
 export const FOUNDATION_RESOLUTION_EVENT = "programmable:foundation-resolution-change";
@@ -15,6 +16,7 @@ export interface FoundationResolutionMetadata {
 /** A display/recovery record only. It never acts as a preparation or permission to send. */
 export interface FoundationResolution {
   schemaVersion: typeof SCHEMA;
+  chainId?: FoundationChainId;
   account: Address;
   operationId: string;
   releaseDigest: Hex;
@@ -33,7 +35,7 @@ export interface FoundationResolution {
 }
 
 function invalid(): never { throw new Error("The saved transaction result cannot be verified. Check wallet activity before continuing."); }
-function storageKey(account: Address) { return `${PREFIX}${getAddress(account).toLowerCase()}`; }
+function storageKey(account: Address, chainId: FoundationChainId = 4663) { return `${PREFIX}${foundationChainProfile(chainId).chainId}:${getAddress(account).toLowerCase()}`; }
 function address(value: unknown): Address {
   if (typeof value !== "string") return invalid();
   const result = getAddress(value);
@@ -70,16 +72,16 @@ function metadata(value: unknown): FoundationResolutionMetadata | undefined {
   if (!allowed.includes(stepKind)) return invalid();
   return Object.freeze({ stepKind, operationKind, ...(item.token === undefined ? {} : { token: address(item.token) }) });
 }
-function parse(value: unknown, account: Address): FoundationResolution {
+function parse(value: unknown, account: Address, chainId: FoundationChainId = 4663): FoundationResolution {
   const item = object(value);
-  if (item.schemaVersion !== SCHEMA || address(item.account) !== getAddress(account)
+  if (foundationBindingChainId({ chainId: item.chainId as FoundationChainId | undefined }) !== chainId || item.schemaVersion !== SCHEMA || address(item.account) !== getAddress(account)
     || typeof item.operationId !== "string" || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(item.operationId)
     || typeof item.value !== "string" || !/^0x[0-9a-f]{1,64}$/i.test(item.value)
     || (item.status !== "success" && item.status !== "reverted")) return invalid();
   const startBlock = quantity(item.startBlock), blockNumber = quantity(item.blockNumber);
   if (BigInt(blockNumber) < BigInt(startBlock)) return invalid();
   const extra = metadata(item.metadata);
-  return Object.freeze({ schemaVersion: SCHEMA, account: address(item.account), operationId: item.operationId,
+  return Object.freeze({ schemaVersion: SCHEMA, ...(item.chainId === undefined ? {} : { chainId }), account: address(item.account), operationId: item.operationId,
     releaseDigest: hash(item.releaseDigest), calldataHash: hash(item.calldataHash), to: address(item.to),
     value: item.value.toLowerCase() as Hex, nonce: integer(item.nonce), startBlock, createdAt: integer(item.createdAt),
     transactionHash: hash(item.transactionHash), status: item.status, blockNumber, blockHash: hash(item.blockHash),
@@ -87,25 +89,26 @@ function parse(value: unknown, account: Address): FoundationResolution {
 }
 function changed() { window.dispatchEvent(new Event(FOUNDATION_RESOLUTION_EVENT)); }
 
-export function readFoundationResolution(account: Address): FoundationResolution | null {
-  const raw = localStorage.getItem(storageKey(account));
+export function readFoundationResolution(account: Address, chainId: FoundationChainId = 4663): FoundationResolution | null {
+  const raw = localStorage.getItem(storageKey(account, chainId));
   if (raw === null) return null;
   if (!raw || raw.length > MAX_BYTES) return invalid();
-  return parse(JSON.parse(raw), account);
+  return parse(JSON.parse(raw), account, chainId);
 }
 
 /** Call while holding the wallet's account WebLock, after exact canonical receipt validation and before clearing pending. */
 export function writeFoundationResolution(pending: FoundationPendingOperation, receipt: TransactionReceipt,
   detail?: FoundationResolutionMetadata): FoundationResolution {
+  const chainId = foundationBindingChainId(pending);
   if (pending.schemaVersion !== "programmable.foundation.pending.v1" || !receipt.to
     || address(receipt.from) !== address(pending.account) || address(receipt.to) !== address(pending.to)
     || (pending.transactionHash !== null && hash(pending.transactionHash) !== hash(receipt.transactionHash))) return invalid();
-  const result = parse({ schemaVersion: SCHEMA, account: pending.account, operationId: pending.operationId,
+  const result = parse({ schemaVersion: SCHEMA, ...(pending.chainId === undefined ? {} : { chainId }), account: pending.account, operationId: pending.operationId,
     releaseDigest: pending.releaseDigest, calldataHash: pending.calldataHash, to: pending.to, value: pending.value,
     nonce: pending.nonce, startBlock: pending.startBlock, createdAt: pending.createdAt,
     transactionHash: receipt.transactionHash, status: receipt.status, blockNumber: receipt.blockNumber.toString(),
-    blockHash: receipt.blockHash, resolvedAt: Date.now(), metadata: detail }, pending.account);
-  const current = readFoundationResolution(result.account);
+    blockHash: receipt.blockHash, resolvedAt: Date.now(), metadata: detail }, pending.account, chainId);
+  const current = readFoundationResolution(result.account, chainId);
   if (current) {
     if (current.operationId !== result.operationId) throw new Error("Review the saved transaction result before resolving another operation.");
     // Retrying the same already saved receipt is safe, including after a failed pending-store cleanup.
@@ -114,21 +117,21 @@ export function writeFoundationResolution(pending: FoundationPendingOperation, r
   }
   const serialized = JSON.stringify(result);
   if (serialized.length > MAX_BYTES) return invalid();
-  localStorage.setItem(storageKey(result.account), serialized);
-  if (localStorage.getItem(storageKey(result.account)) !== serialized) throw new Error("The confirmed transaction result could not be saved. Keep its hash and retry recovery.");
+  localStorage.setItem(storageKey(result.account, chainId), serialized);
+  if (localStorage.getItem(storageKey(result.account, chainId)) !== serialized) throw new Error("The confirmed transaction result could not be saved. Keep its hash and retry recovery.");
   changed();
   return result;
 }
 
 /** The UI must explicitly acknowledge this exact displayed operation; another tab's newer result is preserved. */
-export async function acknowledgeFoundationResolution(account: Address, operationId: string): Promise<void> {
+export async function acknowledgeFoundationResolution(account: Address, operationId: string, chainId: FoundationChainId = 4663): Promise<void> {
   if (!navigator.locks) throw new Error("This browser cannot safely coordinate transaction results.");
-  await navigator.locks.request(`${PENDING_LOCK_PREFIX}${getAddress(account).toLowerCase()}`, { mode: "exclusive", ifAvailable: true }, async lock => {
+  await navigator.locks.request(`${PENDING_LOCK_PREFIX}${foundationChainProfile(chainId).chainId}:${getAddress(account).toLowerCase()}`, { mode: "exclusive", ifAvailable: true }, async lock => {
     if (!lock) throw new Error("A wallet request or recovery is active. Wait for it to complete.");
-    const current = readFoundationResolution(account);
+    const current = readFoundationResolution(account, chainId);
     if (!current || current.operationId !== operationId) throw new Error("The saved transaction result changed. Review the current result first.");
-    localStorage.removeItem(storageKey(account));
-    if (localStorage.getItem(storageKey(account)) !== null) throw new Error("The transaction result could not be acknowledged.");
+    localStorage.removeItem(storageKey(account, chainId));
+    if (localStorage.getItem(storageKey(account, chainId)) !== null) throw new Error("The transaction result could not be acknowledged.");
     changed();
   });
 }

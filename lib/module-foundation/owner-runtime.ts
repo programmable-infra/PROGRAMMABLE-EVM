@@ -1,3 +1,5 @@
+import { foundationChainProfile } from "./chains";
+import { assertFoundationLaunchFinality } from "./finality";
 import { keccak256, type PublicClient } from "viem";
 import type { FoundationOwnerPublicationV1 } from "./owner-publication";
 
@@ -15,6 +17,7 @@ export async function verifyFoundationOwnerRuntimeV1(publication: FoundationOwne
 }
 
 async function readRuntime(publication: FoundationOwnerPublicationV1, client: PublicClient): Promise<void> {
+  const expectedChainId = foundationChainProfile(publication.release.chainId).chainId;
   // All inputs are already signed, so independent reads need no serial RPC rounds.
   const [chainId, receipt, transaction, code, block] = await Promise.all([
     client.getChainId(),
@@ -23,10 +26,11 @@ async function readRuntime(publication: FoundationOwnerPublicationV1, client: Pu
     client.getCode({ address: publication.release.factory }),
     client.getBlock({ blockNumber: BigInt(publication.deployment.blockNumber) }),
   ]);
-  if (chainId !== 4663) throw new Error("Owner module RPC network differs.");
+  if (chainId !== expectedChainId || (transaction.chainId !== undefined && transaction.chainId !== expectedChainId)) throw new Error("Owner module RPC network differs.");
   if (receipt.status !== "success" || receipt.contractAddress?.toLowerCase() !== publication.release.factory.toLowerCase()
     || receipt.blockNumber.toString() !== publication.deployment.blockNumber || receipt.transactionHash !== transaction.hash
     || transaction.to !== null || transaction.value !== 0n || keccak256(transaction.input) !== publication.deployment.creationCodeHash
     || !code || code === "0x" || keccak256(code) !== publication.release.factoryCodeHash) throw new Error("Owner module deployment or runtime differs.");
   if (block.hash !== receipt.blockHash || transaction.blockHash !== receipt.blockHash) throw new Error("Owner module deployment is not canonical.");
+  if (expectedChainId === 1) await assertFoundationLaunchFinality(client, expectedChainId, receipt.blockNumber, await client.getBlockNumber({ cacheTime: 0 }));
 }

@@ -1,0 +1,193 @@
+{
+  "format": "programmable.modules.submission.v0.1",
+  "descriptor": {
+    "author": "0x0dBE4F551b318fbba7E7A1975C3A62b9392b8595",
+    "components": [
+      {
+        "entrypoint": "LaunchWalletCapV1",
+        "id": "module",
+        "runtime": "programmable.module-foundation.solidity@1",
+        "sourcePath": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapV1.sol"
+      },
+      {
+        "entrypoint": "LaunchWalletCapFactoryV1",
+        "id": "factory",
+        "runtime": "programmable.module-foundation.solidity@1",
+        "sourcePath": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapFactoryV1.sol"
+      },
+      {
+        "id": "ethereum-factory",
+        "entrypoint": "LaunchWalletCapEthereumFactoryV1",
+        "sourcePath": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapEthereumFactoryV1.sol",
+        "runtime": "programmable.module-foundation.solidity@1"
+      }
+    ],
+    "configuration": {
+      "fields": {
+        "durationMinutes": {
+          "bits": 32,
+          "help": "Measured from launch. Buys use the official Uniswap router during this time. Afterward, buys are unrestricted.",
+          "label": "Protection duration (minutes)",
+          "max": "4294967295",
+          "min": "1",
+          "type": "uint",
+          "unit": "minutes"
+        },
+        "supplyLimitBps": {
+          "bits": 16,
+          "help": "All purchases by the same initiating wallet count together. Selling does not reset the allowance. The creator's first buy counts too.",
+          "label": "Supply limit per wallet (%)",
+          "max": "10000",
+          "min": "1",
+          "type": "uint",
+          "unit": "programmable.percent-bps"
+        }
+      },
+      "required": [
+        "supplyLimitBps",
+        "durationMinutes"
+      ],
+      "type": "record"
+    },
+    "constraints": [],
+    "documentation": "README.md",
+    "extensions": {
+      "programmable.module-foundation@1": {
+        "actions": [],
+        "configurationAbi": [
+          {
+            "path": [
+              "supplyLimitBps"
+            ],
+            "type": "uint16"
+          },
+          {
+            "path": [
+              "durationMinutes"
+            ],
+            "type": "uint32"
+          }
+        ],
+        "configurationCodec": "programmable.foundation-abi@1",
+        "defaults": {
+          "durationMinutes": "3",
+          "supplyLimitBps": "200"
+        },
+        "descriptor": {
+          "abiVersion": 1,
+          "actionGas": 0,
+          "afterGas": 100000,
+          "beforeGas": 100000,
+          "exclusiveGroup": "0xfc666d16215b05fa4e4a8432f9560c568e62bee7bb56e0aa504e6655657aaa58",
+          "failOpenAfter": false,
+          "moduleId": "0x8c7238120a5af8c2b4fa09882682538dabe949dd2343ab6f08190f0f0f8abe6d",
+          "phases": 3,
+          "resources": 0
+        },
+        "descriptorHash": "0x1bd5aa9a4e6ca7771b3946b1ad429fdc7d301f5774e341b9ccf53e1cdeb1ac75",
+        "hostAdapterId": "programmable.module-foundation.host@1"
+      }
+    },
+    "familySalt": "0xfc666d16215b05fa4e4a8432f9560c568e62bee7bb56e0aa504e6655657aaa58",
+    "format": "programmable.classic.source-package.v0.1",
+    "management": {
+      "actions": [],
+      "reads": [
+        {
+          "component": "module",
+          "description": "Fixed token amount allowed across all buys during the window.",
+          "entrypoint": "walletTokenLimit",
+          "id": "wallet-limit",
+          "label": "Wallet token limit"
+        },
+        {
+          "component": "module",
+          "description": "Timestamp when buys become unrestricted automatically.",
+          "entrypoint": "protectionEndsAt",
+          "id": "protection-end",
+          "label": "Protection end"
+        }
+      ],
+      "summary": "Optional cumulative buy cap per initiating wallet for your chosen launch duration. Percentage and minutes are set at launch. Remove this module for unrestricted buys."
+    },
+    "name": "Initial wallet buy limit",
+    "ports": {
+      "inputs": {},
+      "outputs": {}
+    },
+    "requiresHost": [
+      "programmable.module-foundation.host@1",
+      "programmable.foundation-abi@1",
+      "programmable.module-foundation.before-swap@1",
+      "programmable.module-foundation.after-swap@1"
+    ],
+    "rewardWallet": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+    "source": {
+      "files": [
+        {
+          "path": "contracts/src/module-foundation/FoundationTypesV1.sol",
+          "sha256": "5d1c6b6f685bea5bc8dd67a8be56375d3c744b00b41d6b7dca0cae7a59f26ddd"
+        },
+        {
+          "path": "contracts/src/module-foundation/IFoundationModuleV1.sol",
+          "sha256": "ccf8c6dfe5fb5882f93ecf0b4e5d608592c8d598fe723b18646d280081526afc"
+        },
+        {
+          "path": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapV1.sol",
+          "sha256": "274e14b3d661dfff633f1c3366f35a5b19ef64bd0726a6779b52e62058306095"
+        },
+        {
+          "path": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapFactoryV1.sol",
+          "sha256": "1785884c3f148a9df3de7103e162e13def8b520160bd6cc45045c3bcc2496515"
+        },
+        {
+          "path": "README.md",
+          "sha256": "500e186ef0d94fa86b59f39cd33ef14a534d8cf253ebe6b8c4f2b58d02b7c61a"
+        },
+        {
+          "path": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapEthereumFactoryV1.sol",
+          "sha256": "8fd9450df801b603e00914983d54bfe2fd2d61b19a5634d2482f4b9dd06ae6d2"
+        }
+      ]
+    },
+    "version": "1.0.2"
+  },
+  "files": [
+    {
+      "path": "README.md",
+      "sha256": "500e186ef0d94fa86b59f39cd33ef14a534d8cf253ebe6b8c4f2b58d02b7c61a",
+      "encoding": "base64",
+      "bytes": "IyBMYXVuY2ggd2FsbGV0IGNhcCBWMQoKVGhpcyBvcHRpb25hbCBGb3VuZGF0aW9uIG1vZHVsZSBsaW1pdHMgYWxsIHB1cmNoYXNlcyBpbml0aWF0ZWQgYnkgb25lIHdhbGxldCBkdXJpbmcgYSBsYXVuY2ggd2luZG93LiBPbWl0dGluZyB0aGUgbW9kdWxlIGxlYXZlcyB0aGUgZXhpc3RpbmcgdW5yZXN0cmljdGVkIHB1cmNoYXNlIGJlaGF2aW9yIHVuY2hhbmdlZC4KCkluIHRoZSBjdXJyZW50IE1vZHVsZSBNb2RlIGJ1aWxkZXIsIHRoZSBwYWlyLXRva2VuIG9wdGlvbiAoc2hvd24gYXMgIlBhaXIgYW5vdGhlciB0b2tlbiIsIGFsc28gY2FsbGVkIEFueSBRdW90ZSkgaXMgaW5kZXBlbmRlbnQgb2YgdGhpcyBtb2R1bGUuIE5ldyBsYXVuY2hlcyBzdXBwb3J0IGFsbCBmb3VyIHNlbGVjdGlvbnM6IHRoZSBkZWZhdWx0IEVUSCBwYWlyIHdpdGggbm8gY2FwLCBhbm90aGVyIHF1b3RlIHRva2VuIHdpdGggbm8gY2FwLCB0aGUgZGVmYXVsdCBFVEggcGFpciB3aXRoIHRoZSBjYXAsIGFuZCBhbm90aGVyIHF1b3RlIHRva2VuIHdpdGggdGhlIGNhcC4gVGhlIGNhcCB1c2VzIHRva2VuIG91dHB1dCBhbmQgbGF1bmNoIHN1cHBseSwgbm90IHF1b3RlIGFtb3VudHMgb3IgcXVvdGUgZGVjaW1hbHMuIFJlbW92aW5nIG9yIGNoYW5naW5nIHRoZSBwYWlyIG9wdGlvbiBtdXN0IHByZXNlcnZlIHRoZSBjaG9zZW4gY2FwIHNldHRpbmdzLCBhbmQgcmVtb3ZpbmcgdGhlIGNhcCBtdXN0IHByZXNlcnZlIHRoZSBjaG9zZW4gcGFpciB0b2tlbi4gVGhpcyBkb2VzIG5vdCBhZGQgY2FsbGJhY2sgc3VwcG9ydCB0byB0aGUgb2xkZXIgQW55IFF1b3RlIEVuZ2luZSBob3N0LgoKVGhlIGxhdW5jaGVyIGNob29zZXMgYSBzdXBwbHkgcGVyY2VudGFnZSAoMC4wMSB0byAxMDAgcGVyY2VudCwgd2l0aCB1cCB0byB0d28gZGVjaW1hbCBwbGFjZXMpIGFuZCBgZHVyYXRpb25NaW51dGVzYCAoYSBwb3NpdGl2ZSB3aG9sZSBudW1iZXIgb2YgbWludXRlcykuIERlZmF1bHRzIGFyZSAyIHBlcmNlbnQgYW5kIDMgbWludXRlcy4gVGhlIGZvcm0gY29udmVydHMgdGhlIHBlcmNlbnRhZ2UgdG8gYHN1cHBseUxpbWl0QnBzYCAoMSB0byAxMCwwMDAgYmFzaXMgcG9pbnRzKSB3aXRob3V0IGZsb2F0aW5nLXBvaW50IGFyaXRobWV0aWMuIEJvdGggdmFsdWVzIGFyZSBjb21taXR0ZWQgaW4gYGFiaS5lbmNvZGUodWludDE2IHN1cHBseUxpbWl0QnBzLCB1aW50MzIgZHVyYXRpb25NaW51dGVzKWAgYXQgbGF1bmNoIGFuZCBjYW5ub3QgYmUgZWRpdGVkIGxhdGVyLgoKVGhlIGxpbWl0IHVzZXMgdGhlIGZpeGVkIGxhdW5jaCBzdXBwbHkgb2Ygb25lIGJpbGxpb24gdG9rZW5zLiBBbGwgc3VjY2Vzc2Z1bCBwdXJjaGFzZXMgYnkgYW4gaW5pdGlhdG9yIGNvdW50IHRvZ2V0aGVyLiBTZWxsaW5nIG9yIHRyYW5zZmVycmluZyB0b2tlbnMgZG9lcyBub3QgcmVwbGVuaXNoIHRoZSBwdXJjaGFzZSBhbGxvd2FuY2UuIFRoZSBjcmVhdG9yJ3MgYXRvbWljIGZpcnN0IGJ1eSBjb3VudHMgdG93YXJkIHRoZSBjcmVhdG9yJ3MgYWxsb3dhbmNlLiBTZWxscyByZW1haW4gcGVybWl0dGVkLiBBdCBgYmxvY2sudGltZXN0YW1wID49IHByb3RlY3Rpb25FbmRzQXRgLCBidXlzIGFyZSB1bnJlc3RyaWN0ZWQgYW5kIHRoZSBtb2R1bGUgbm8gbG9uZ2VyIHJlYWRzIHJvdXRlciBpZGVudGl0eSBvciB1cGRhdGVzIGNvdW50ZXJzLgoKRHVyaW5nIHRoZSB3aW5kb3csIGJ1eXMgbXVzdCB1c2UgdGhlIG9mZmljaWFsLCBydW50aW1lLXBpbm5lZCBSb2Jpbmhvb2QgVW5pdmVyc2FsIFJvdXRlci4gSXRzIGxvY2tlZCBgbXNnU2VuZGVyKClgIGlkZW50aWZpZXMgdGhlIGluaXRpYXRpbmcgd2FsbGV0LCBpbmNsdWRpbmcgc21hcnQgY29udHJhY3Qgd2FsbGV0cy4gQSBkaWZmZXJlbnQgdG9rZW4gcmVjaXBpZW50IGRvZXMgbm90IGNoYW5nZSB0aGlzIGlkZW50aXR5LiBBbiBhZ2dyZWdhdG9yIHRoYXQgaW5pdGlhdGVzIHRyYW5zYWN0aW9ucyBpdHNlbGYgc2hhcmVzIG9uZSBhbGxvd2FuY2U7IHVuc3VwcG9ydGVkIHJvdXRlcnMgYXJlIHJlamVjdGVkIGR1cmluZyB0aGUgd2luZG93LiBUaGUgbW9kdWxlIGNhbm5vdCBpZGVudGlmeSBhIGh1bWFuIG9yIHByZXZlbnQgdXNpbmcgc2V2ZXJhbCB3YWxsZXRzLCB0cmFuc2ZlcnMsIG9yIG90aGVyIHBvb2xzLgoKQmVmb3JlLXN3YXAgY2hlY2tzIHJlamVjdCB1bnN1cHBvcnRlZCByb3V0ZXMgYW5kIGV4Y2VzcyBleGFjdC1vdXRwdXQgcmVxdWVzdHMuIEFmdGVyLXN3YXAgY2hlY2tzIGNvdW50IHRoZSBhY3R1YWwgcG9zaXRpdmUgdG9rZW4gZGVsdGEgaW4gZWl0aGVyIHRva2VuIG9yZGVyaW5nLCBmb3IgYm90aCBleGFjdC1pbnB1dCBhbmQgZXhhY3Qtb3V0cHV0IHRyYWRlcy4gVGhlIGRlc2NyaXB0b3Igc2V0cyBgZmFpbE9wZW5BZnRlcjogZmFsc2VgLCBzbyBhbiBleGNlc3MgcHVyY2hhc2UgcmV2ZXJ0cyB0aGUgZW50aXJlIHRyYWRlLiBUaGUgbW9kdWxlIHJlY2VpdmVzIG5vIGZlZSBidWRnZXQgYW5kIGhhcyBubyBtYW5hZ2VtZW50IGFjdGlvbnMsIGV4ZW1wdGlvbnMsIG11dGFibGUgc2V0dGluZ3Mgb3IgdXBncmFkZSBwYXRoLgoKVGhpcyBwYWNrYWdlIHRhcmdldHMgbmV3IGxhdW5jaGVzLiBFeGlzdGluZyBwb29sIGhvb2tzIGFyZSBpbW11dGFibGUuIFNvdXJjZSwgZm9jdXNlZCBsb2NhbCBjaGVja3MsIGluZGVwZW5kZW50IHJldmlldywgZGVwbG95ZWQgZmFjdG9yeSBldmlkZW5jZSBhbmQgY2F0YWxvZyBhdmFpbGFiaWxpdHkgYXJlIHNlcGFyYXRlIHN0ZXBzLiBUaGlzIGRvY3VtZW50IGRvZXMgbm90IGFubm91bmNlIHByb2R1Y3Rpb24gYXZhaWxhYmlsaXR5Lgo="
+    },
+    {
+      "path": "contracts/src/module-foundation/FoundationTypesV1.sol",
+      "sha256": "5d1c6b6f685bea5bc8dd67a8be56375d3c744b00b41d6b7dca0cae7a59f26ddd",
+      "encoding": "base64",
+      "bytes": "Ly8gU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IE1JVApwcmFnbWEgc29saWRpdHkgMC44LjI2OwoKLy8vIEBub3RpY2UgVmVyc2lvbmVkLCBwcm9kdWN0LWluZGVwZW5kZW50IGxhdW5jaCBhbmQgbW9kdWxlIEFCSS4gQXNzZXQgYW1vdW50cyBhcmUgcmF3IEVSQzIwIHVuaXRzLgpsaWJyYXJ5IEZvdW5kYXRpb25UeXBlc1YxIHsKICAgIHVpbnQyNTYgaW50ZXJuYWwgY29uc3RhbnQgVE9LRU5fU1VQUExZID0gMV8wMDBfMDAwXzAwMCBldGhlcjsKICAgIHVpbnQxNiBpbnRlcm5hbCBjb25zdGFudCBQTEFURk9STV9CUFMgPSAzMDsKICAgIGFkZHJlc3MgaW50ZXJuYWwgY29uc3RhbnQgUExBVEZPUk1fUkVDSVBJRU5UID0gMHhEODg1MzlkM2M0QzQ2MDEzNmE3MzNBM0ZkNjBjZjZCRjI2OTA3OWRhOwogICAgdWludDE2IGludGVybmFsIGNvbnN0YW50IE1BWF9DUkVBVE9SX0JQUyA9IDEwMDA7CiAgICBpbnQyNCBpbnRlcm5hbCBjb25zdGFudCBUSUNLX1NQQUNJTkcgPSA2MDsKICAgIHVpbnQyNCBpbnRlcm5hbCBjb25zdGFudCBMUF9GRUUgPSAwOwogICAgdWludDggaW50ZXJuYWwgY29uc3RhbnQgTUFYX01PRFVMRVMgPSA4OwogICAgdWludDggaW50ZXJuYWwgY29uc3RhbnQgQkVGT1JFX1NXQVAgPSAxOwogICAgdWludDggaW50ZXJuYWwgY29uc3RhbnQgQUZURVJfU1dBUCA9IDI7CiAgICB1aW50OCBpbnRlcm5hbCBjb25zdGFudCBBQ1RJT04gPSA0OwogICAgdWludDggaW50ZXJuYWwgY29uc3RhbnQgT1dOX1FVT1RFX0JVREdFVCA9IDE7CiAgICBieXRlczMyIGludGVybmFsIGNvbnN0YW50IEFCSV9JRCA9IGtlY2NhazI1NigicHJvZ3JhbW1hYmxlLm1vZHVsZS1mb3VuZGF0aW9uLnYxIik7CgogICAgc3RydWN0IE1ldGFkYXRhIHsKICAgICAgICBzdHJpbmcgbmFtZTsKICAgICAgICBzdHJpbmcgc3ltYm9sOwogICAgICAgIHN0cmluZyBkZXNjcmlwdGlvbjsKICAgICAgICBzdHJpbmcgaW1hZ2VVUkk7CiAgICAgICAgc3RyaW5nIHdlYnNpdGU7CiAgICAgICAgYnl0ZXMgc29jaWFsRGF0YTsKICAgIH0KCiAgICAvLy8gQGRldiBBIHJldmlld2VkIGZhY3RvcnkgbXVzdCBkZXBsb3kgYSBmcmVzaCwgbm9uLXVwZ3JhZGVhYmxlIGluc3RhbmNlIGJvdW5kIHRvIHRoaXMgbGF1bmNoIGhvc3QuCiAgICAvLy8gRGVzY3JpcHRvci9oYXNoIHBsdXMgaW5zdGFuY2UgcnVudGltZSBhcmUgY29tbWl0dGVkIGF0IGNvbnN0cnVjdGlvbi4gTm8gcmVnaXN0cnkgdXBkYXRlIG11dGF0ZXMgYSBsaXZlIGhvc3QuCiAgICBzdHJ1Y3QgTW9kdWxlU2VsZWN0aW9uIHsKICAgICAgICBhZGRyZXNzIGZhY3Rvcnk7CiAgICAgICAgYnl0ZXMzMiBmYWN0b3J5Q29kZUhhc2g7CiAgICAgICAgYnl0ZXMzMiBtb2R1bGVDb2RlSGFzaDsKICAgICAgICBieXRlczMyIGRlc2NyaXB0b3JIYXNoOwogICAgICAgIGJ5dGVzIGNvbmZpZ3VyYXRpb247CiAgICAgICAgdWludDE2IGNyZWF0b3JTaGFyZUJwczsKICAgIH0KCiAgICBzdHJ1Y3QgRGVzY3JpcHRvciB7CiAgICAgICAgYnl0ZXMzMiBtb2R1bGVJZDsKICAgICAgICB1aW50MTYgYWJpVmVyc2lvbjsKICAgICAgICB1aW50OCBwaGFzZXM7CiAgICAgICAgdWludDggcmVzb3VyY2VzOwogICAgICAgIHVpbnQzMiBiZWZvcmVHYXM7CiAgICAgICAgdWludDMyIGFmdGVyR2FzOwogICAgICAgIHVpbnQzMiBhY3Rpb25HYXM7CiAgICAgICAgYm9vbCBmYWlsT3BlbkFmdGVyOwogICAgICAgIGJ5dGVzMzIgZXhjbHVzaXZlR3JvdXA7CiAgICB9CgogICAgc3RydWN0IE1vZHVsZUNvbnRleHQgewogICAgICAgIGFkZHJlc3MgaG9zdDsKICAgICAgICBhZGRyZXNzIHRva2VuOwogICAgICAgIGFkZHJlc3MgcXVvdGU7CiAgICAgICAgYWRkcmVzcyBjcmVhdG9yOwogICAgICAgIGFkZHJlc3MgbGVkZ2VyOwogICAgICAgIGJ5dGVzMzIgcG9vbElkOwogICAgfQoKICAgIHN0cnVjdCBTd2FwQ29udGV4dCB7CiAgICAgICAgYnl0ZXMzMiBwb29sSWQ7CiAgICAgICAgYWRkcmVzcyByb3V0ZXI7CiAgICAgICAgYm9vbCBidXk7CiAgICAgICAgYm9vbCBleGFjdElucHV0OwogICAgICAgIHVpbnQyNTYgc3BlY2lmaWVkQW1vdW50OwogICAgICAgIHVpbnQyNTYgZ3Jvc3NRdW90ZTsKICAgICAgICBpbnQxMjggY29yZUFtb3VudDA7CiAgICAgICAgaW50MTI4IGNvcmVBbW91bnQxOwogICAgfQoKICAgIHN0cnVjdCBMYXVuY2hQYXJhbXMgewogICAgICAgIE1ldGFkYXRhIG1ldGFkYXRhOwogICAgICAgIGFkZHJlc3MgcXVvdGU7CiAgICAgICAgdWludDggcXVvdGVEZWNpbWFsczsKICAgICAgICBpbnQyNCBpbml0aWFsVGljazsKICAgICAgICB1aW50MTYgY3JlYXRvckZlZUJwczsKICAgICAgICB1aW50MTI4IGFkZGl0aW9uYWxRdW90ZUFtb3VudDsKICAgICAgICB1aW50MTI4IGluaXRpYWxCdXlRdW90ZUFtb3VudDsKICAgICAgICB1aW50MTI4IGluaXRpYWxCdXlNaW5pbXVtVG9rZW5BbW91bnQ7CiAgICAgICAgdWludDY0IGRlYWRsaW5lOwogICAgICAgIGJ5dGVzMzIgdG9rZW5TYWx0OwogICAgICAgIGJ5dGVzMzIgaG9va1NhbHQ7CiAgICAgICAgTW9kdWxlU2VsZWN0aW9uW10gbW9kdWxlczsKICAgIH0KCiAgICBzdHJ1Y3QgTGF1bmNoUmVzdWx0IHsKICAgICAgICBhZGRyZXNzIHRva2VuOwogICAgICAgIGFkZHJlc3MgaG9vazsKICAgICAgICBhZGRyZXNzIGxlZGdlcjsKICAgICAgICBieXRlczMyIHBvb2xJZDsKICAgICAgICBhZGRyZXNzIGJhc2VWYXVsdDsKICAgICAgICB1aW50MjU2IGJhc2VQb3NpdGlvbklkOwogICAgICAgIHVpbnQyNTYgY3JlYXRvclBvc2l0aW9uSWQ7CiAgICAgICAgdWludDI1NiBpbml0aWFsQnV5VG9rZW5BbW91bnQ7CiAgICB9Cn0K"
+    },
+    {
+      "path": "contracts/src/module-foundation/IFoundationModuleV1.sol",
+      "sha256": "ccf8c6dfe5fb5882f93ecf0b4e5d608592c8d598fe723b18646d280081526afc",
+      "encoding": "base64",
+      "bytes": "Ly8gU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IE1JVApwcmFnbWEgc29saWRpdHkgMC44LjI2OwoKaW1wb3J0IHsgRm91bmRhdGlvblR5cGVzVjEgYXMgVCB9IGZyb20gIi4vRm91bmRhdGlvblR5cGVzVjEuc29sIjsKCmludGVyZmFjZSBJRm91bmRhdGlvbk1vZHVsZVYxIHsKICAgIGZ1bmN0aW9uIGNvbnRleHQoKSBleHRlcm5hbCB2aWV3IHJldHVybnMgKFQuTW9kdWxlQ29udGV4dCBtZW1vcnkpOwogICAgZnVuY3Rpb24gY29uZmlndXJhdGlvbkhhc2goKSBleHRlcm5hbCB2aWV3IHJldHVybnMgKGJ5dGVzMzIpOwogICAgZnVuY3Rpb24gZGVzY3JpcHRvcigpIGV4dGVybmFsIHZpZXcgcmV0dXJucyAoVC5EZXNjcmlwdG9yIG1lbW9yeSk7CiAgICBmdW5jdGlvbiBvbkJlZm9yZVN3YXAoVC5Td2FwQ29udGV4dCBjYWxsZGF0YSBjb250ZXh0XykgZXh0ZXJuYWwgcmV0dXJucyAoYnl0ZXM0KTsKICAgIGZ1bmN0aW9uIG9uQWZ0ZXJTd2FwKFQuU3dhcENvbnRleHQgY2FsbGRhdGEgY29udGV4dF8pIGV4dGVybmFsIHJldHVybnMgKGJ5dGVzNCk7CiAgICBmdW5jdGlvbiBvbkFjdGlvbihhZGRyZXNzIGFjdG9yLCBieXRlcyBjYWxsZGF0YSBkYXRhKSBleHRlcm5hbCByZXR1cm5zIChieXRlczQpOwp9CgppbnRlcmZhY2UgSUZvdW5kYXRpb25Nb2R1bGVGYWN0b3J5VjEgewogICAgZnVuY3Rpb24gY3JlYXRlTW9kdWxlKFQuTW9kdWxlQ29udGV4dCBjYWxsZGF0YSBjb250ZXh0XywgYnl0ZXMgY2FsbGRhdGEgY29uZmlndXJhdGlvbikKICAgICAgICBleHRlcm5hbAogICAgICAgIHJldHVybnMgKGFkZHJlc3MgbW9kdWxlKTsKfQo="
+    },
+    {
+      "path": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapFactoryV1.sol",
+      "sha256": "1785884c3f148a9df3de7103e162e13def8b520160bd6cc45045c3bcc2496515",
+      "encoding": "base64",
+      "bytes": "Ly8gU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IE1JVApwcmFnbWEgc29saWRpdHkgMC44LjI2OwoKaW1wb3J0IHsgRm91bmRhdGlvblR5cGVzVjEgYXMgVCB9IGZyb20gIi4uLy4uL0ZvdW5kYXRpb25UeXBlc1YxLnNvbCI7CmltcG9ydCB7IElGb3VuZGF0aW9uTW9kdWxlRmFjdG9yeVYxIH0gZnJvbSAiLi4vLi4vSUZvdW5kYXRpb25Nb2R1bGVWMS5zb2wiOwppbXBvcnQgeyBMYXVuY2hXYWxsZXRDYXBWMSB9IGZyb20gIi4vTGF1bmNoV2FsbGV0Q2FwVjEuc29sIjsKCi8vLyBAbm90aWNlIEZyZXNoIG9wdGlvbmFsIG1vZHVsZXMgYm91bmQgdG8gdGhlIHNvdXJjZS1waW5uZWQgUm9iaW5ob29kIFVuaXZlcnNhbCBSb3V0ZXIuCmNvbnRyYWN0IExhdW5jaFdhbGxldENhcEZhY3RvcnlWMSBpcyBJRm91bmRhdGlvbk1vZHVsZUZhY3RvcnlWMSB7CiAgICBlcnJvciBPbmx5Qm91bmRIb3N0KCk7CgogICAgYWRkcmVzcyBwdWJsaWMgY29uc3RhbnQgQlVZX1JPVVRFUiA9IDB4MDZBZkJBNDNGZDA2MjI3ZkE2NjNiMERBZWNGNTM2ZjZFYUE2YmY5OTsKICAgIGJ5dGVzMzIgcHVibGljIGNvbnN0YW50IEJVWV9ST1VURVJfQ09ERV9IQVNIID0gMHhiZThlODE5MWJiNDJkODQzYzJlOTQ4YTVhNTU3NzJlYWFiODY0Y2UwMWU1NGRjZDQ3YzlkMDg5MTcwYjMwMmQ1OwoKICAgIGZ1bmN0aW9uIGNyZWF0ZU1vZHVsZShULk1vZHVsZUNvbnRleHQgY2FsbGRhdGEgY29udGV4dF8sIGJ5dGVzIGNhbGxkYXRhIGNvbmZpZ3VyYXRpb24pIGV4dGVybmFsIHJldHVybnMgKGFkZHJlc3MpIHsKICAgICAgICBpZiAobXNnLnNlbmRlciAhPSBjb250ZXh0Xy5ob3N0KSByZXZlcnQgT25seUJvdW5kSG9zdCgpOwogICAgICAgIHJldHVybiBhZGRyZXNzKG5ldyBMYXVuY2hXYWxsZXRDYXBWMShjb250ZXh0XywgY29uZmlndXJhdGlvbiwgQlVZX1JPVVRFUiwgQlVZX1JPVVRFUl9DT0RFX0hBU0gpKTsKICAgIH0KfQo="
+    },
+    {
+      "path": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapV1.sol",
+      "sha256": "274e14b3d661dfff633f1c3366f35a5b19ef64bd0726a6779b52e62058306095",
+      "encoding": "base64",
+      "bytes": "Ly8gU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IE1JVApwcmFnbWEgc29saWRpdHkgMC44LjI2OwoKaW1wb3J0IHsgRm91bmRhdGlvblR5cGVzVjEgYXMgVCB9IGZyb20gIi4uLy4uL0ZvdW5kYXRpb25UeXBlc1YxLnNvbCI7CmltcG9ydCB7IElGb3VuZGF0aW9uTW9kdWxlVjEgfSBmcm9tICIuLi8uLi9JRm91bmRhdGlvbk1vZHVsZVYxLnNvbCI7CgppbnRlcmZhY2UgSUxhdW5jaFdhbGxldENhcFJvdXRlclYxIHsKICAgIGZ1bmN0aW9uIG1zZ1NlbmRlcigpIGV4dGVybmFsIHZpZXcgcmV0dXJucyAoYWRkcmVzcyk7Cn0KCmludGVyZmFjZSBJTGF1bmNoV2FsbGV0Q2FwSG9zdFYxIHsKICAgIGZ1bmN0aW9uIGluaXRpYWxpemVyKCkgZXh0ZXJuYWwgdmlldyByZXR1cm5zIChhZGRyZXNzKTsKfQoKLy8vIEBub3RpY2UgQ3VtdWxhdGl2ZSB0b2tlbiBwdXJjaGFzZXMgYnkgdGhlIGF1dGhlbnRpY2F0ZWQgcm91dGVyIGluaXRpYXRvciBkdXJpbmcgYW4gaW5pdGlhbCBsYXVuY2ggd2luZG93LgovLy8gQGRldiBTdG9yYWdlLWJvdW5kIHNldHRpbmdzIGtlZXAgdGhlIHJldmlld2VkIHJ1bnRpbWUgaWRlbnRpY2FsIGZvciBldmVyeSBsYXVuY2guIFRoZXJlIGFyZSBubyBzZXR0ZXJzLgpjb250cmFjdCBMYXVuY2hXYWxsZXRDYXBWMSBpcyBJRm91bmRhdGlvbk1vZHVsZVYxIHsKICAgIGVycm9yIEludmFsaWRDb25maWd1cmF0aW9uKCk7CiAgICBlcnJvciBJbnZhbGlkQ29udGV4dCgpOwogICAgZXJyb3IgT25seUhvc3QoKTsKICAgIGVycm9yIFVuc3VwcG9ydGVkQnV5Um91dGVyKCk7CiAgICBlcnJvciBJbnZhbGlkQnV5ZXIoKTsKICAgIGVycm9yIEludmFsaWRUb2tlbkRlbHRhKCk7CiAgICBlcnJvciBXYWxsZXRCdXlMaW1pdEV4Y2VlZGVkKGFkZHJlc3Mgd2FsbGV0LCB1aW50MjU2IHB1cmNoYXNlZCwgdWludDI1NiBsaW1pdCk7CiAgICBlcnJvciBOb0FjdGlvbnMoKTsKCiAgICBULk1vZHVsZUNvbnRleHQgcHJpdmF0ZSBfY29udGV4dDsKICAgIGJ5dGVzMzIgcHVibGljIGNvbmZpZ3VyYXRpb25IYXNoOwogICAgYWRkcmVzcyBwdWJsaWMgYnV5Um91dGVyOwogICAgYnl0ZXMzMiBwdWJsaWMgYnV5Um91dGVyQ29kZUhhc2g7CiAgICB1aW50MTYgcHVibGljIHN1cHBseUxpbWl0QnBzOwogICAgdWludDMyIHB1YmxpYyBkdXJhdGlvbk1pbnV0ZXM7CiAgICB1aW50MjU2IHB1YmxpYyBwcm90ZWN0aW9uRW5kc0F0OwogICAgdWludDI1NiBwdWJsaWMgd2FsbGV0VG9rZW5MaW1pdDsKICAgIG1hcHBpbmcoYWRkcmVzcyB3YWxsZXQgPT4gdWludDI1NiBhbW91bnQpIHB1YmxpYyBwdXJjaGFzZWRUb2tlbnM7CgogICAgY29uc3RydWN0b3IoVC5Nb2R1bGVDb250ZXh0IG1lbW9yeSBjb250ZXh0XywgYnl0ZXMgbWVtb3J5IGNvbmZpZ3VyYXRpb24sIGFkZHJlc3Mgcm91dGVyLCBieXRlczMyIHJvdXRlckNvZGVIYXNoKSB7CiAgICAgICAgaWYgKGNvbmZpZ3VyYXRpb24ubGVuZ3RoICE9IDY0KSByZXZlcnQgSW52YWxpZENvbmZpZ3VyYXRpb24oKTsKICAgICAgICAodWludDE2IGxpbWl0QnBzLCB1aW50MzIgbWludXRlc18pID0gYWJpLmRlY29kZShjb25maWd1cmF0aW9uLCAodWludDE2LCB1aW50MzIpKTsKICAgICAgICBpZiAobGltaXRCcHMgPT0gMCB8fCBsaW1pdEJwcyA+IDEwXzAwMCB8fCBtaW51dGVzXyA9PSAwKSByZXZlcnQgSW52YWxpZENvbmZpZ3VyYXRpb24oKTsKICAgICAgICBpZiAoCiAgICAgICAgICAgIGNvbnRleHRfLmhvc3QgPT0gYWRkcmVzcygwKSB8fCBjb250ZXh0Xy50b2tlbiA9PSBhZGRyZXNzKDApIHx8IGNvbnRleHRfLnF1b3RlID09IGFkZHJlc3MoMCkKICAgICAgICAgICAgICAgIHx8IGNvbnRleHRfLnRva2VuID09IGNvbnRleHRfLnF1b3RlIHx8IGNvbnRleHRfLmNyZWF0b3IgPT0gYWRkcmVzcygwKSB8fCBjb250ZXh0Xy5sZWRnZXIgPT0gYWRkcmVzcygwKQogICAgICAgICAgICAgICAgfHwgY29udGV4dF8ucG9vbElkID09IGJ5dGVzMzIoMCkgfHwgcm91dGVyID09IGFkZHJlc3MoMCkgfHwgcm91dGVyQ29kZUhhc2ggPT0gYnl0ZXMzMigwKQogICAgICAgICkgcmV2ZXJ0IEludmFsaWRDb250ZXh0KCk7CiAgICAgICAgX2NvbnRleHQgPSBjb250ZXh0XzsKICAgICAgICBjb25maWd1cmF0aW9uSGFzaCA9IGtlY2NhazI1Nihjb25maWd1cmF0aW9uKTsKICAgICAgICBidXlSb3V0ZXIgPSByb3V0ZXI7CiAgICAgICAgYnV5Um91dGVyQ29kZUhhc2ggPSByb3V0ZXJDb2RlSGFzaDsKICAgICAgICBzdXBwbHlMaW1pdEJwcyA9IGxpbWl0QnBzOwogICAgICAgIGR1cmF0aW9uTWludXRlcyA9IG1pbnV0ZXNfOwogICAgICAgIHByb3RlY3Rpb25FbmRzQXQgPSBibG9jay50aW1lc3RhbXAgKyB1aW50MjU2KG1pbnV0ZXNfKSAqIDYwOwogICAgICAgIHdhbGxldFRva2VuTGltaXQgPSBULlRPS0VOX1NVUFBMWSAqIGxpbWl0QnBzIC8gMTBfMDAwOwogICAgfQoKICAgIGZ1bmN0aW9uIGNvbnRleHQoKSBleHRlcm5hbCB2aWV3IHJldHVybnMgKFQuTW9kdWxlQ29udGV4dCBtZW1vcnkpIHsKICAgICAgICByZXR1cm4gX2NvbnRleHQ7CiAgICB9CgogICAgZnVuY3Rpb24gZGVzY3JpcHRvcigpIGV4dGVybmFsIHB1cmUgcmV0dXJucyAoVC5EZXNjcmlwdG9yIG1lbW9yeSkgewogICAgICAgIHJldHVybiBULkRlc2NyaXB0b3IoewogICAgICAgICAgICBtb2R1bGVJZDoga2VjY2FrMjU2KCJwcm9ncmFtbWFibGUuZm91bmRhdGlvbi5sYXVuY2gtd2FsbGV0LWNhcC52MSIpLAogICAgICAgICAgICBhYmlWZXJzaW9uOiAxLAogICAgICAgICAgICBwaGFzZXM6IFQuQkVGT1JFX1NXQVAgfCBULkFGVEVSX1NXQVAsCiAgICAgICAgICAgIHJlc291cmNlczogMCwKICAgICAgICAgICAgYmVmb3JlR2FzOiAxMDBfMDAwLAogICAgICAgICAgICBhZnRlckdhczogMTAwXzAwMCwKICAgICAgICAgICAgYWN0aW9uR2FzOiAwLAogICAgICAgICAgICBmYWlsT3BlbkFmdGVyOiBmYWxzZSwKICAgICAgICAgICAgZXhjbHVzaXZlR3JvdXA6IGtlY2NhazI1NigicHJvZ3JhbW1hYmxlLmZvdW5kYXRpb24ubGF1bmNoLXdhbGxldC1jYXAiKQogICAgICAgIH0pOwogICAgfQoKICAgIG1vZGlmaWVyIG9ubHlCb3VuZEhvc3QoYnl0ZXMzMiBwb29sSWQpIHsKICAgICAgICBpZiAobXNnLnNlbmRlciAhPSBfY29udGV4dC5ob3N0KSByZXZlcnQgT25seUhvc3QoKTsKICAgICAgICBpZiAocG9vbElkICE9IF9jb250ZXh0LnBvb2xJZCkgcmV2ZXJ0IEludmFsaWRDb250ZXh0KCk7CiAgICAgICAgXzsKICAgIH0KCiAgICBmdW5jdGlvbiBvbkJlZm9yZVN3YXAoVC5Td2FwQ29udGV4dCBjYWxsZGF0YSBzd2FwKSBleHRlcm5hbCB2aWV3IG9ubHlCb3VuZEhvc3Qoc3dhcC5wb29sSWQpIHJldHVybnMgKGJ5dGVzNCkgewogICAgICAgIGlmIChzd2FwLmJ1eSAmJiBibG9jay50aW1lc3RhbXAgPCBwcm90ZWN0aW9uRW5kc0F0KSB7CiAgICAgICAgICAgIGFkZHJlc3Mgd2FsbGV0ID0gX2J1eWVyKHN3YXAucm91dGVyKTsKICAgICAgICAgICAgLy8gRXhhY3Qtb3V0cHV0IGJ1eXMgZGVjbGFyZSB0aGUgdG9rZW4gYW1vdW50LiBFeGFjdC1pbnB1dCBidXlzIGFyZSBjaGVja2VkIGFnYWluc3QgdGhlIGFjdHVhbCBvdXRwdXQgYmVsb3cuCiAgICAgICAgICAgIGlmICghc3dhcC5leGFjdElucHV0KSBfY2hlY2tMaW1pdCh3YWxsZXQsIHN3YXAuc3BlY2lmaWVkQW1vdW50KTsKICAgICAgICB9CiAgICAgICAgcmV0dXJuIElGb3VuZGF0aW9uTW9kdWxlVjEub25CZWZvcmVTd2FwLnNlbGVjdG9yOwogICAgfQoKICAgIGZ1bmN0aW9uIG9uQWZ0ZXJTd2FwKFQuU3dhcENvbnRleHQgY2FsbGRhdGEgc3dhcCkgZXh0ZXJuYWwgb25seUJvdW5kSG9zdChzd2FwLnBvb2xJZCkgcmV0dXJucyAoYnl0ZXM0KSB7CiAgICAgICAgaWYgKHN3YXAuYnV5ICYmIGJsb2NrLnRpbWVzdGFtcCA8IHByb3RlY3Rpb25FbmRzQXQpIHsKICAgICAgICAgICAgYWRkcmVzcyB3YWxsZXQgPSBfYnV5ZXIoc3dhcC5yb3V0ZXIpOwogICAgICAgICAgICBpbnQxMjggdG9rZW5EZWx0YSA9IF9jb250ZXh0LnRva2VuIDwgX2NvbnRleHQucXVvdGUgPyBzd2FwLmNvcmVBbW91bnQwIDogc3dhcC5jb3JlQW1vdW50MTsKICAgICAgICAgICAgaWYgKHRva2VuRGVsdGEgPD0gMCkgcmV2ZXJ0IEludmFsaWRUb2tlbkRlbHRhKCk7CiAgICAgICAgICAgIHVpbnQyNTYgYm91Z2h0ID0gdWludDI1Nih1aW50MTI4KHRva2VuRGVsdGEpKTsKICAgICAgICAgICAgX2NoZWNrTGltaXQod2FsbGV0LCBib3VnaHQpOwogICAgICAgICAgICBwdXJjaGFzZWRUb2tlbnNbd2FsbGV0XSArPSBib3VnaHQ7CiAgICAgICAgfQogICAgICAgIHJldHVybiBJRm91bmRhdGlvbk1vZHVsZVYxLm9uQWZ0ZXJTd2FwLnNlbGVjdG9yOwogICAgfQoKICAgIGZ1bmN0aW9uIG9uQWN0aW9uKGFkZHJlc3MsIGJ5dGVzIGNhbGxkYXRhKSBleHRlcm5hbCBwdXJlIHJldHVybnMgKGJ5dGVzNCkgewogICAgICAgIHJldmVydCBOb0FjdGlvbnMoKTsKICAgIH0KCiAgICBmdW5jdGlvbiBfY2hlY2tMaW1pdChhZGRyZXNzIHdhbGxldCwgdWludDI1NiBib3VnaHQpIHByaXZhdGUgdmlldyB7CiAgICAgICAgdWludDI1NiBwdXJjaGFzZWQgPSBwdXJjaGFzZWRUb2tlbnNbd2FsbGV0XTsKICAgICAgICBpZiAoYm91Z2h0ID4gd2FsbGV0VG9rZW5MaW1pdCAtIHB1cmNoYXNlZCkgewogICAgICAgICAgICByZXZlcnQgV2FsbGV0QnV5TGltaXRFeGNlZWRlZCh3YWxsZXQsIHB1cmNoYXNlZCArIGJvdWdodCwgd2FsbGV0VG9rZW5MaW1pdCk7CiAgICAgICAgfQogICAgfQoKICAgIGZ1bmN0aW9uIF9idXllcihhZGRyZXNzIHJvdXRlcikgcHJpdmF0ZSB2aWV3IHJldHVybnMgKGFkZHJlc3Mgd2FsbGV0KSB7CiAgICAgICAgLy8gQSByb3V0ZXItc3VwcGxpZWQgYWRkcmVzcyBvciB0eC5vcmlnaW4gd291bGQgcGVybWl0IHNwb29maW5nIG9yIGJyZWFrIHNtYXJ0IGNvbnRyYWN0IHdhbGxldHMuCiAgICAgICAgaWYgKHJvdXRlciAhPSBidXlSb3V0ZXIgfHwgcm91dGVyLmNvZGVoYXNoICE9IGJ1eVJvdXRlckNvZGVIYXNoKSByZXZlcnQgVW5zdXBwb3J0ZWRCdXlSb3V0ZXIoKTsKICAgICAgICB3YWxsZXQgPSBJTGF1bmNoV2FsbGV0Q2FwUm91dGVyVjEocm91dGVyKS5tc2dTZW5kZXIoKTsKICAgICAgICBpZiAod2FsbGV0ID09IGFkZHJlc3MoMCkpIHJldmVydCBJbnZhbGlkQnV5ZXIoKTsKICAgICAgICAvLyBUaGUgYXRvbWljIGxhdW5jaCdzIGZpcnN0IGJ1eSBpcyBpbml0aWF0ZWQgYnkgdGhlIEZvdW5kYXRpb24gZmFjdG9yeSBmb3IgdGhlIGJvdW5kIGNyZWF0b3IuCiAgICAgICAgaWYgKHdhbGxldCA9PSBJTGF1bmNoV2FsbGV0Q2FwSG9zdFYxKF9jb250ZXh0Lmhvc3QpLmluaXRpYWxpemVyKCkpIHdhbGxldCA9IF9jb250ZXh0LmNyZWF0b3I7CiAgICB9Cn0K"
+    },
+    {
+      "path": "contracts/src/module-foundation/modules/launch-wallet-cap/LaunchWalletCapEthereumFactoryV1.sol",
+      "sha256": "8fd9450df801b603e00914983d54bfe2fd2d61b19a5634d2482f4b9dd06ae6d2",
+      "bytes": "Ly8gU1BEWC1MaWNlbnNlLUlkZW50aWZpZXI6IE1JVApwcmFnbWEgc29saWRpdHkgMC44LjI2OwoKaW1wb3J0IHsgRm91bmRhdGlvblR5cGVzVjEgYXMgVCB9IGZyb20gIi4uLy4uL0ZvdW5kYXRpb25UeXBlc1YxLnNvbCI7CmltcG9ydCB7IElGb3VuZGF0aW9uTW9kdWxlRmFjdG9yeVYxIH0gZnJvbSAiLi4vLi4vSUZvdW5kYXRpb25Nb2R1bGVWMS5zb2wiOwppbXBvcnQgeyBMYXVuY2hXYWxsZXRDYXBWMSB9IGZyb20gIi4vTGF1bmNoV2FsbGV0Q2FwVjEuc29sIjsKCi8vLyBAbm90aWNlIEV0aGVyZXVtIGRlcGxveW1lbnQgYmluZGluZyBmb3IgdGhlIHNhbWUgc3RvcmFnZS1ib3VuZCB3YWxsZXQtY2FwIG1vZHVsZS4KY29udHJhY3QgTGF1bmNoV2FsbGV0Q2FwRXRoZXJldW1GYWN0b3J5VjEgaXMgSUZvdW5kYXRpb25Nb2R1bGVGYWN0b3J5VjEgewogICAgZXJyb3IgT25seUJvdW5kSG9zdCgpOwogICAgZXJyb3IgSW52YWxpZEluZnJhc3RydWN0dXJlKCk7CgogICAgYWRkcmVzcyBwdWJsaWMgY29uc3RhbnQgQlVZX1JPVVRFUiA9IDB4NEM4MkQxZkJGZTI4Qzk3N2NCQjU4RDhDN0ZGOEZDRjlGNzBhMmNDQTsKICAgIGJ5dGVzMzIgcHVibGljIGNvbnN0YW50IEJVWV9ST1VURVJfQ09ERV9IQVNIID0gMHg3MGM5ZWEyYjI3NTA4N2FlYTNkNTdhZTQ4ZTJkMzBlMjcyYTA3ZmY1YjZjNzk3NGJkNDdjMjE0NzhiMzdmYWNlOwoKICAgIGNvbnN0cnVjdG9yKCkgewogICAgICAgIGlmIChibG9jay5jaGFpbmlkICE9IDEgfHwgQlVZX1JPVVRFUi5jb2RlaGFzaCAhPSBCVVlfUk9VVEVSX0NPREVfSEFTSCkgcmV2ZXJ0IEludmFsaWRJbmZyYXN0cnVjdHVyZSgpOwogICAgfQoKICAgIGZ1bmN0aW9uIGNyZWF0ZU1vZHVsZShULk1vZHVsZUNvbnRleHQgY2FsbGRhdGEgY29udGV4dF8sIGJ5dGVzIGNhbGxkYXRhIGNvbmZpZ3VyYXRpb24pIGV4dGVybmFsIHJldHVybnMgKGFkZHJlc3MpIHsKICAgICAgICBpZiAobXNnLnNlbmRlciAhPSBjb250ZXh0Xy5ob3N0KSByZXZlcnQgT25seUJvdW5kSG9zdCgpOwogICAgICAgIHJldHVybiBhZGRyZXNzKG5ldyBMYXVuY2hXYWxsZXRDYXBWMShjb250ZXh0XywgY29uZmlndXJhdGlvbiwgQlVZX1JPVVRFUiwgQlVZX1JPVVRFUl9DT0RFX0hBU0gpKTsKICAgIH0KfQo=",
+      "encoding": "base64"
+    }
+  ]
+}

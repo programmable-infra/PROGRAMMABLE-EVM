@@ -1,6 +1,7 @@
+import { decodeFoundationEthereumTransaction, foundationEthereumStampAbi } from "./ethereum-graph";
 import { foundationCreatorFeeFields, type FoundationCreatorFees } from "./creator-fees";
 import {
-  decodeAbiParameters, decodeFunctionData, encodeFunctionData, getAddress, keccak256, parseAbi,
+  decodeAbiParameters, decodeFunctionData, getAddress, keccak256, parseAbi,
   type AbiParameter, type Address, type Hex, type PublicClient,
 } from "viem";
 import type { OpenConfigContext, OpenConfigSchema, OpenConfigValue } from "@/packages/classic-modules/src/open-config.mjs";
@@ -13,7 +14,7 @@ import {
   assertFoundationInfrastructure, assertFoundationPool, readFoundationPoolAssetPins, readFoundationQuote, simulateFoundationSequence,
   type FoundationBalanceCheck, type FoundationCheckpoint, type FoundationDeploymentBinding, type FoundationPreparedStep,
 } from "./client";
-import { FOUNDATION_CHAIN_ID } from "./constants";
+import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "./chains";
 import {
   hashFoundationAssetPinsV1, mergeFoundationAssetPinsV1, refreshFoundationAssetsV1, resolveFoundationAssetFieldsV1, resolveFoundationAssetsV1,
   type FoundationAssetPinV1, type FoundationResolvedAssetV1,
@@ -73,11 +74,11 @@ function jsonObservation(value: unknown): unknown {
   if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, jsonObservation(item)]));
   return value;
 }
-function runtimeEnvironment(catalog: FoundationCatalogV1, context?: OpenConfigContext) {
-  return { catalog, chainId: FOUNDATION_CHAIN_ID, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1, context };
+function runtimeEnvironment(catalog: FoundationCatalogV1, context?: OpenConfigContext, chainId: FoundationChainId = 4663) {
+  return { catalog, chainId, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1, context };
 }
 function assertOriginalComposition(input: FoundationActionRuntimeInputV1, creatorFees: FoundationCreatorFees) {
-  const composition = composeFoundationUiSelectionsV1({ ...runtimeEnvironment(input.catalog, input.context), selections: input.selections, ...foundationCreatorFeeFields(creatorFees) });
+  const composition = composeFoundationUiSelectionsV1({ ...runtimeEnvironment(input.catalog, input.context, foundationBindingChainId(input.binding)), selections: input.selections, ...foundationCreatorFeeFields(creatorFees) });
   foundationRequire(composition.ok, "FOUNDATION_ACTION_COMPOSITION_INVALID", composition.diagnostics[0]?.message ?? "Restore the original admitted module selections.");
   return composition;
 }
@@ -89,15 +90,16 @@ async function codeHash(client: PublicClient, address: Address, checkpoint: Foun
 
 function originalAssetContext(input: FoundationActionRuntimeInputV1, creator: Address, quoteDecimals: number,
   pins: readonly FoundationAssetPinV1[]): OpenConfigContext {
+  const chainId = foundationBindingChainId(input.binding);
   const assets: NonNullable<OpenConfigContext["assets"]> = {
-    token: { chainId: FOUNDATION_CHAIN_ID, address: input.pool.token, decimals: 18 },
-    quote: { chainId: FOUNDATION_CHAIN_ID, address: input.pool.quote, decimals: quoteDecimals },
-    ...Object.fromEntries(pins.map(([address, decimals]) => [`erc20:${address.toLowerCase()}`, { chainId: FOUNDATION_CHAIN_ID, address, decimals }])),
+    token: { chainId: chainId, address: input.pool.token, decimals: 18 },
+    quote: { chainId: chainId, address: input.pool.quote, decimals: quoteDecimals },
+    ...Object.fromEntries(pins.map(([address, decimals]) => [`erc20:${address.toLowerCase()}`, { chainId: chainId, address, decimals }])),
   };
   for (const [key, claimed] of Object.entries(input.context?.assets ?? {})) {
     const address = moduleAddress(claimed.address, `foundation.assets.${key}`);
     const actual = Object.values(assets).find(asset => sameAddress(asset.address, address));
-    foundationRequire(actual && String(claimed.chainId) === String(FOUNDATION_CHAIN_ID) && claimed.decimals === actual.decimals
+    foundationRequire(actual && String(claimed.chainId) === String(chainId) && claimed.decimals === actual.decimals
       && (!Object.hasOwn(assets, key) || sameAddress(assets[key].address, address)),
     "FOUNDATION_ACTION_ASSET_CONTEXT", "Asset aliases must match the pool's actual base assets or immutable additional-asset metadata.");
     assets[key] = { ...actual };
@@ -111,6 +113,7 @@ export async function readFoundationActionRuntimeV1(raw: FoundationActionRuntime
   const input = { ...raw, binding: snapshot(raw.binding), pool: snapshot(raw.pool), selections: nativeJson(raw.selections) as FoundationModuleSelection[],
     context: raw.context === undefined ? undefined : nativeJson(raw.context) as OpenConfigContext };
   foundationRequire(Array.isArray(input.selections) && input.selections.length <= 8, "FOUNDATION_MODULE_LIMIT", "Restore at most eight original module selections.");
+  const chainId = foundationBindingChainId(input.binding);
   const { client, binding, pool } = input, checkpoint = await assertFoundationInfrastructure(client, binding);
   const provenance = await assertFoundationPool(client, binding, pool, checkpoint.blockNumber);
   const [moduleAssetPins, quote, metadata] = await Promise.all([
@@ -157,14 +160,14 @@ export async function readFoundationActionRuntimeV1(raw: FoundationActionRuntime
   const endBlock = await client.getBlock({ blockNumber: checkpoint.blockNumber });
   foundationRequire(endBlock.hash === checkpoint.blockHash, "FOUNDATION_ACTION_CHECKPOINT_CHANGED", "Chain state changed while reading the module composition. Refresh it.");
   const sourceVerificationDigest = foundationDataDigest("programmable.module-foundation.action-rpc-observations.v1", jsonObservation({
-    chainId: FOUNDATION_CHAIN_ID, binding, checkpoint, pool, registeredLaunch: provenance.record, creator: provenance.creator,
+    chainId: chainId, binding, checkpoint, pool, registeredLaunch: provenance.record, creator: provenance.creator,
     ...foundationCreatorFeeFields(provenance), hostCodeHash, compositionHash, modules: observed, moduleAssetPins, configurationContext, quote,
     modulePackageIds: modulePackageIds ?? [], sourceMetadataHash: keccak256(metadata[3]),
   }));
   const instances = observed.map(item => {
     const entry = resolveFoundationCatalogEntryV1(input.catalog, moduleHash(input.selections[item.moduleIndex].id, "foundation.packageId"));
-    return bindFoundationActionContextV1({ ...runtimeEnvironment(input.catalog, input.context), selections: input.selections, readback: {
-      chainId: FOUNDATION_CHAIN_ID, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1, releaseDigest: entry.release!.releaseDigest,
+    return bindFoundationActionContextV1({ ...runtimeEnvironment(input.catalog, input.context, foundationBindingChainId(input.binding)), selections: input.selections, readback: {
+      chainId: chainId, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1, releaseDigest: entry.release!.releaseDigest,
       sourceVerificationDigest, host: pool.hook, token: pool.token, quote: pool.quote, poolId: pool.poolId,
       creator: provenance.creator, ledger: provenance.record.ledger, ...foundationCreatorFeeFields(provenance), compositionHash,
       blockNumber: checkpoint.blockNumber.toString(), blockHash: checkpoint.blockHash, blockTimestamp: Number(checkpoint.timestamp),
@@ -216,6 +219,7 @@ function walletChecks(pool: FoundationPool, account: Address, minima: readonly F
 export async function prepareFoundationModuleActionV1(raw: FoundationPrepareModuleActionInputV1): Promise<FoundationPreparedModuleActionV1> {
   const input = { ...raw, binding: snapshot(raw.binding), pool: snapshot(raw.pool), selections: snapshot(raw.selections),
     selection: snapshot(raw.selection), context: snapshot(raw.context ?? {}), minimumWalletDeltas: snapshot(raw.minimumWalletDeltas ?? []) };
+  const chainId = foundationBindingChainId(input.binding);
   const account = moduleAddress(input.account, "foundation.action.account"), moduleIndex = moduleInteger(input.moduleIndex, "foundation.action.moduleIndex", 7);
   walletChecks(input.pool, account, input.minimumWalletDeltas);
   const runtime = await readFoundationActionRuntimeV1(input);
@@ -244,7 +248,7 @@ export async function prepareFoundationModuleActionV1(raw: FoundationPrepareModu
   ]);
   foundationRequire(token.decimals === 18 && quote.decimals === runtime.configurationContext.assets!.quote.decimals,
     "FOUNDATION_ACTION_ASSET_METADATA", "The pool's current asset metadata differs from its verified source context.");
-  const assets: FoundationResolvedAssetV1[] = [token, quote].map(asset => ({ chainId: FOUNDATION_CHAIN_ID, address: asset.address,
+  const assets: FoundationResolvedAssetV1[] = [token, quote].map(asset => ({ chainId: chainId, address: asset.address,
     decimals: asset.decimals, runtimeCodeHash: asset.codeHash, name: asset.name, symbol: asset.symbol }));
   assets.push(...pinnedAssets.assets);
   const intent = prepareFoundationActionIntentV1({ catalog: input.catalog, instance, selection: input.selection, account,
@@ -281,11 +285,11 @@ export async function revalidateFoundationModuleActionV1(prepared: FoundationPre
       "FOUNDATION_ACTION_BALANCE_MINIMUM", "The reviewed action contains an invalid caller balance check.");
     return { token: check.token, minimumDelta: check.minimumDelta };
   });
-  const reviewedAssetDigest = hashFoundationAssetPinsV1(prepared.moduleAssetPins);
+  const reviewedAssetDigest = hashFoundationAssetPinsV1(prepared.moduleAssetPins, foundationBindingChainId(prepared.binding));
   if (prepared.moduleAssetPins.length) await refreshFoundationAssetsV1({ client: input.client, pins: prepared.moduleAssetPins });
   const fresh = await prepareFoundationModuleActionV1({ ...input, pool: prepared.pool, selections: prepared.selections,
     context: prepared.configurationContext, moduleIndex: prepared.moduleIndex, selection: prepared.selection, minimumWalletDeltas });
-  foundationRequire(hashFoundationAssetPinsV1(fresh.moduleAssetPins) === reviewedAssetDigest, "FOUNDATION_ACTION_ASSET_PINS_CHANGED",
+  foundationRequire(hashFoundationAssetPinsV1(fresh.moduleAssetPins, foundationBindingChainId(fresh.binding)) === reviewedAssetDigest, "FOUNDATION_ACTION_ASSET_PINS_CHANGED",
     "The action's asset identities or metadata changed after review. Prepare the action again.");
   const original = prepared.steps[0].transaction, actual = fresh.steps[0].transaction;
   foundationRequire(sameAddress(actual.from, original.from) && sameAddress(actual.to, original.to) && sameHex(actual.data, original.data)
@@ -352,12 +356,15 @@ export type FoundationDecodedLaunchSelectionsV1 = FoundationCreatorFees & {
 }
 /** Restore exact admitted version/digest/configuration from calldata; the caller must separately establish transaction provenance. */
 export function decodeFoundationLaunchSelectionsV1(input: {
-  catalog: FoundationCatalogV1; calldata: Hex; context?: OpenConfigContext; packageIds?: readonly Hex[];
+  chainId?: FoundationChainId; catalog: FoundationCatalogV1; calldata: Hex; context?: OpenConfigContext; packageIds?: readonly Hex[];
 }): FoundationDecodedLaunchSelectionsV1 {
+  const chainId = foundationChainProfile(input.chainId).chainId;
   assertBoundFoundationCatalogV1(input.catalog);
   foundationRequire(/^0x(?:[0-9a-fA-F]{2})+$/.test(input.calldata) && input.calldata.length <= 2_097_154,
     "FOUNDATION_LAUNCH_CALLDATA_LIMIT", "Restore bounded canonical launch calldata.");
-  const decoded = decodeFunctionData({ abi: [...foundationFactoryNativeAbi, ...foundationFactoryV3NativeAbi], data: input.calldata });
+  const launchCalldata = chainId === 1 ? encodeFoundationLaunchEntry(decodeFoundationEthereumTransaction({ data: input.calldata,
+    value: decodeFunctionData({ abi: foundationEthereumStampAbi, data: input.calldata }).args[0].value }).parameters, { functionName: "launch" }) : input.calldata;
+  const decoded = decodeFunctionData({ abi: [...foundationFactoryNativeAbi, ...foundationFactoryV3NativeAbi], data: launchCalldata });
   foundationRequire((decoded.functionName === "launch" || decoded.functionName === "launchWithEth" || decoded.functionName === "launchWithEthRoute"), "FOUNDATION_LAUNCH_CALLDATA", "The transaction does not call this foundation factory's launch entrypoint.");
   const parameters = decoded.args[0];
   const creatorFees = foundationCreatorFeeFields(parameters);
@@ -366,13 +373,13 @@ export function decodeFoundationLaunchSelectionsV1(input: {
     : decoded.functionName === "launchWithEth"
     ? encodeFoundationLaunchEntry(parameters, { functionName: "launchWithEth", fundingPool: decoded.args[1] })
     : encodeFoundationLaunchEntry(parameters, { functionName: "launch" });
-  foundationRequire(sameHex(canonical, input.calldata),
+  foundationRequire(sameHex(canonical, launchCalldata),
     "FOUNDATION_LAUNCH_CALLDATA_NONCANONICAL", "The supplied launch bytes are not canonical ABI calldata.");
   foundationRequire(parameters.modules.length <= 8 && (!input.packageIds || input.packageIds.length === parameters.modules.length),
     "FOUNDATION_MODULE_LIMIT", "Restore one package identity for each of at most eight original modules.");
   const context = input.context ?? {};
   const selections = parameters.modules.map((selected, index): FoundationModuleSelection => {
-    const candidates = input.catalog.entries.filter(entry => entry.status === "available" && entry.release?.chainId === FOUNDATION_CHAIN_ID
+    const candidates = input.catalog.entries.filter(entry => entry.status === "available" && entry.release?.chainId === chainId
       && entry.runtime.hostAdapterId === FOUNDATION_HOST_ADAPTER_ID_V1 && entry.release.hostAdapterId === FOUNDATION_HOST_ADAPTER_ID_V1
       && sameAddress(entry.release.factory, selected.factory) && sameHex(entry.release.factoryCodeHash, selected.factoryCodeHash)
       && sameHex(entry.release.moduleCodeHash, selected.moduleCodeHash) && sameHex(entry.runtime.descriptorHash, selected.descriptorHash)
@@ -395,7 +402,7 @@ export function decodeFoundationLaunchSelectionsV1(input: {
     } else foundationRequire(selected.creatorShareBps === 0, "FOUNDATION_CREATOR_BUDGET_UNAUTHORIZED", "Original creator share exceeds this source's resource rights.");
     return { id: entry.manifest.packageId, version: entry.manifest.sourceDescriptor.version, digest: entry.manifestHash, configuration };
   });
-  const composition = composeFoundationUiSelectionsV1({ ...runtimeEnvironment(input.catalog, context), selections, ...creatorFees });
+  const composition = composeFoundationUiSelectionsV1({ ...runtimeEnvironment(input.catalog, context, chainId), selections, ...creatorFees });
   foundationRequire(composition.ok && sameHex(composition.compositionHash, hashFoundationCompositionV1(parameters.modules)),
     "FOUNDATION_ACTION_COMPOSITION_MISMATCH", composition.diagnostics[0]?.message ?? "The reconstructed UI selections do not match the launch bytes.");
   return freeze({ selections, ...creatorFees, quote: parameters.quote, quoteDecimals: parameters.quoteDecimals,

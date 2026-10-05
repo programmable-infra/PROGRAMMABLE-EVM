@@ -48,7 +48,7 @@ export type AnyQuoteV4PoolCandidateV1 = { poolId: Hex; key: AnyQuotePoolKeyV1 };
  * readiness independently verifies state and obtains both directional quotes. */
 export type AnyQuoteV4DiscoveryV1 = {
   schema: "programmable.any-quote.v4-candidates.v1";
-  chainId: 4663;
+  chainId: 1 | 4663;
   poolManager: Address;
   routes: readonly (readonly Extract<AnyQuoteAmmHopV1, { protocol: "V4" }>[])[];
 };
@@ -56,7 +56,7 @@ export type AnyQuoteV4DiscoveryV1 = {
 /** Typed discovery output. A route quote is not proof of ERC20 transfers or of the composed trade. */
 export type AnyQuoteExternalRouteV1 = {
   provider: "uniswap-trading-api" | "uniswap-v4-initialize" | "uniswap-v4-discovery" | "weth-identity";
-  chainId: 4663;
+  chainId: 1 | 4663;
   tokenIn: Address;
   tokenOut: Address;
   amountIn: string;
@@ -79,7 +79,7 @@ export type AnyQuotePriceEvidenceV1 = {
 
 export type AnyQuoteReadinessV1 =
   | {
-      status: "compatible"; chainId: 4663; quoteAsset: Address;
+      status: "compatible"; chainId: 1 | 4663; quoteAsset: Address;
       token: { name: string; symbol: string; decimals: number };
       checkpoint: AnyQuoteCheckpointV1;
       price: AnyQuotePriceEvidenceV1;
@@ -93,7 +93,7 @@ export type AnyQuoteReadinessV1 =
       };
     }
   | {
-      status: "incompatible" | "inconclusive"; chainId: 4663;
+      status: "incompatible" | "inconclusive"; chainId: 1 | 4663;
       quoteAsset: Address | null; code: string; retryable: boolean;
     };
 

@@ -1,13 +1,14 @@
 import "server-only";
 import { decodeEventLog, decodeFunctionResult, encodeFunctionData, keccak256, pad, parseAbi, stringToHex, toHex, type Address, type Hex } from "viem";
-import { ROBINHOOD_MULTICALL3_ADDRESS, ROBINHOOD_MULTICALL3_RUNTIME_CODE_HASH } from "@/lib/chains";
 import { canonicalBrowserJsonV2 } from "@/lib/custom-launch/browser-authority-v2";
 import { agreedTradeRpcV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 import { anyQuotePoolIdV1 } from "./route";
 import {
-  ANY_QUOTE_INFRASTRUCTURE, ANY_QUOTE_NATIVE, AnyQuoteErrorV1, anyQuoteAddressV1, anyQuoteSameAddressV1,
+  ANY_QUOTE_NATIVE, AnyQuoteErrorV1, anyQuoteAddressV1, anyQuoteSameAddressV1,
   type AnyQuoteAmmHopV1, type AnyQuoteCheckpointV1, type AnyQuoteV4DiscoveryV1, type AnyQuoteV4PoolCandidateV1,
 } from "./types";
+
+import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 
 // Official Uniswap v4-subgraph networks.json, robinhood-mainnet.PoolManager.startBlock.
 // The existing application's Graph deployment is Ethereum-only and is not a Robinhood binding.
@@ -30,7 +31,7 @@ const quantity = (value: unknown) => typeof value === "string" && /^0x[0-9a-f]{1
 /** Decode the indexed Initialize wire without trusting a provider-supplied PoolId or address.
  * Canonical records are compared across independent providers before use. */
 export function parseAnyQuoteV4InitializeV1(value: unknown, input: {
-  currency: Address; otherCurrency?: Address; fromBlock: bigint; toBlock: bigint;
+  currency: Address; otherCurrency?: Address; fromBlock: bigint; toBlock: bigint; chainId?: FoundationChainId;
 }): PoolRecord[] {
   if (!Array.isArray(value)) return invalid();
   if (value.length > MAX_DISCOVERY_HINTS) throw new AnyQuoteErrorV1("V4_DISCOVERY_CANDIDATE_LIMIT");
@@ -38,7 +39,7 @@ export function parseAnyQuoteV4InitializeV1(value: unknown, input: {
     const result = value.map((raw): PoolRecord => {
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) return invalid();
       const log = raw as Record<string, unknown>;
-      if (typeof log.address !== "string" || !anyQuoteSameAddressV1(log.address, ANY_QUOTE_INFRASTRUCTURE.poolManager)
+      if (typeof log.address !== "string" || !anyQuoteSameAddressV1(log.address, foundationChainProfile(input.chainId).infrastructure.poolManager.address)
         || log.removed !== false || typeof log.data !== "string" || !/^0x[0-9a-f]{320}$/i.test(log.data)
         || !Array.isArray(log.topics) || log.topics.length !== 4 || log.topics.some(t => typeof t !== "string" || !/^0x[0-9a-f]{64}$/i.test(t))
         || typeof log.blockHash !== "string" || !/^0x[0-9a-f]{64}$/i.test(log.blockHash)) return invalid();
@@ -66,12 +67,12 @@ export function anyQuoteV4CandidateHopV1(pool: AnyQuoteV4PoolCandidateV1, tokenI
 }
 
 /** Typed graph/index callbacks cannot supply quotes, calldata or a different chain binding. */
-export function parseAnyQuoteV4DiscoveryV1(value: unknown): AnyQuoteV4DiscoveryV1 {
+export function parseAnyQuoteV4DiscoveryV1(value: unknown, chainId: FoundationChainId = 4663): AnyQuoteV4DiscoveryV1 {
   try {
     if (!value || typeof value !== "object") return invalid();
     const root = value as AnyQuoteV4DiscoveryV1;
-    if (root.schema !== "programmable.any-quote.v4-candidates.v1" || root.chainId !== 4663
-      || !anyQuoteSameAddressV1(root.poolManager, ANY_QUOTE_INFRASTRUCTURE.poolManager)
+    if (root.schema !== "programmable.any-quote.v4-candidates.v1" || root.chainId !== chainId
+      || !anyQuoteSameAddressV1(root.poolManager, foundationChainProfile(chainId).infrastructure.poolManager.address)
       || !Array.isArray(root.routes) || root.routes.length > ANY_QUOTE_V4_MAX_POOL_CANDIDATES) return invalid();
     const routes = root.routes.map(path => {
       if (!Array.isArray(path) || path.length < 1 || path.length > 4) return invalid();
@@ -85,7 +86,7 @@ export function parseAnyQuoteV4DiscoveryV1(value: unknown): AnyQuoteV4DiscoveryV
         return { ...normalized, hookData: hop.hookData };
       });
     });
-    return { schema: root.schema, chainId: 4663, poolManager: ANY_QUOTE_INFRASTRUCTURE.poolManager, routes };
+    return { schema: root.schema, chainId, poolManager: foundationChainProfile(chainId).infrastructure.poolManager.address, routes };
   } catch { return invalid(); }
 }
 
@@ -93,9 +94,14 @@ export function parseAnyQuoteV4DiscoveryV1(value: unknown): AnyQuoteV4DiscoveryV
  * providers must independently agree on every hinted log in bounded canonical block ranges.
  * This verifies candidates, not index completeness; absent hints never prove no market.
  * Buy/sell and intermediate searches share one checkpoint, cache and request budget. */
-export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQuoteCheckpointV1; rpcs: readonly [TradeRpcV1, TradeRpcV1] }) {
+export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQuoteCheckpointV1; rpcs: readonly [TradeRpcV1, TradeRpcV1]; chainId?: FoundationChainId }) {
+  const profile = foundationChainProfile(input.chainId), chainId = profile.chainId;
+  const infrastructure = profile.infrastructure;
+  const ANY_QUOTE_INFRASTRUCTURE = { poolManager: infrastructure.poolManager.address, stateView: infrastructure.stateView.address, stateViewCodeHash: infrastructure.stateView.runtimeCodeHash };
+  const ROBINHOOD_MULTICALL3_ADDRESS = profile.multicall3.address, ROBINHOOD_MULTICALL3_RUNTIME_CODE_HASH = profile.multicall3.runtimeCodeHash;
+  const startBlock = chainId === 1 ? 21_688_329n : ANY_QUOTE_V4_START_BLOCK;
   const toBlock = BigInt(input.checkpoint.number);
-  if (toBlock < ANY_QUOTE_V4_START_BLOCK) throw new AnyQuoteErrorV1("V4_DISCOVERY_CHECKPOINT_UNAVAILABLE");
+  if (toBlock < startBlock) throw new AnyQuoteErrorV1("V4_DISCOVERY_CHECKPOINT_UNAVAILABLE");
   let requests = 0;
   let incompleteCoverage = false;
   const agreed = agreedTradeRpcV1(input.rpcs);
@@ -162,7 +168,7 @@ export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQu
       let verified: PoolRecord[];
       try {
         verified = await agreed("eth_getLogs", filter(topics, fromBlock, end),
-          value => parseAnyQuoteV4InitializeV1(value, { currency, otherCurrency, fromBlock, toBlock: end }));
+          value => parseAnyQuoteV4InitializeV1(value, { currency, otherCurrency, fromBlock, toBlock: end, chainId }));
       } catch (error) {
         const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
         throw new AnyQuoteErrorV1(code === "TRADE_PROVIDER_DISAGREEMENT" ? "V4_DISCOVERY_PROVIDER_DISAGREEMENT" : "V4_DISCOVERY_PROVIDER_UNAVAILABLE");
@@ -179,7 +185,7 @@ export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQu
     const responses = await Promise.allSettled(input.rpcs.map(rpc => rpc("eth_getLogs", filter(topics, fromBlock, end))));
     // Invalid successful responses are terminal, not provider outages eligible for fallback.
     const records = responses.map(response => response.status === "fulfilled"
-      ? parseAnyQuoteV4InitializeV1(response.value, { currency, otherCurrency, fromBlock, toBlock: end }) : null);
+      ? parseAnyQuoteV4InitializeV1(response.value, { currency, otherCurrency, fromBlock, toBlock: end, chainId }) : null);
     if (records[0] !== null && records[1] !== null) { requireSame(records[0], records[1]); return shortlist(records[0]); }
     const hints = records[0] ?? records[1];
     if (hints !== null) return verifyHints(hints, currency, otherCurrency, topics);
@@ -201,7 +207,7 @@ export function createAnyQuoteV4InitializeDiscoveryV1(input: { checkpoint: AnyQu
         ? [[initializeTopic, null, topic], [initializeTopic, null, null, topic]]
         : BigInt(currency) < BigInt(otherCurrency)
           ? [[initializeTopic, null, topic, pad(otherCurrency)]] : [[initializeTopic, null, pad(otherCurrency), topic]];
-      pending = Promise.all(filters.map(topics => readRange(currency, otherCurrency, topics, ANY_QUOTE_V4_START_BLOCK, toBlock))).then(parts => {
+      pending = Promise.all(filters.map(topics => readRange(currency, otherCurrency, topics, startBlock, toBlock))).then(parts => {
         const result = parts.flat();
         if (result.length > ANY_QUOTE_V4_MAX_POOL_CANDIDATES) throw new AnyQuoteErrorV1("V4_DISCOVERY_CANDIDATE_LIMIT");
         return result.sort((a, b) => a.poolId.localeCompare(b.poolId));

@@ -68,6 +68,15 @@ describe("initial coin authority propagation", () => {
     expect(fetchFoundationAvailability).toHaveBeenCalledOnce();
   });
 
+  it("does not rapidly retry an Ethereum token still waiting for index finality", async () => {
+    const pending = { ...unavailable, chainId: 1 as const, indexPending: true };
+    vi.mocked(fetchFoundationAvailability).mockResolvedValue(pending);
+    const controller = new AbortController();
+    await expect(loadFoundationSessionAvailability(controller.signal, token, 1)).resolves.toBe(pending);
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect(fetchFoundationAvailability).toHaveBeenCalledExactlyOnceWith(controller.signal, token, 1);
+  });
+
   it("keeps launch-form availability as a single read", async () => {
     vi.mocked(fetchFoundationAvailability).mockResolvedValue(unavailable);
     await expect(loadFoundationSessionAvailability(new AbortController().signal)).resolves.toBe(unavailable);

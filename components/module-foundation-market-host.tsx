@@ -20,8 +20,7 @@ import { foundationMetadataLinks, foundationPoolPresentation, foundationPosition
 import { foundationParseAmount } from "@/lib/module-foundation/price";
 import { foundationStepSummary } from "@/lib/module-foundation/wallet";
 import { foundationLedgerAbi } from "@/lib/module-foundation/abi";
-import { FOUNDATION_INFRASTRUCTURE } from "@/lib/module-foundation/constants";
-import { FOUNDATION_WETH } from "@/lib/module-foundation/native-funding";
+import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 import type { AnyQuoteReadinessV1 } from "@/lib/module-engine/any-quote/types";
 import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, type FoundationTradeDraft,
   type FoundationTradeReview, type FoundationTransactionResult, type FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
@@ -33,12 +32,14 @@ import type { RobinhoodLaunch } from "@/lib/robinhood-launches";
 import styles from "./module-foundation-ui.module.css";
 import tradeStyles from "./swap-panel.module.css";
 
-export function ModuleFoundationMarketHost({ token, transactionHash, initialName, initialLaunch, initialPresentation }: {
+export function ModuleFoundationMarketHost({ token, transactionHash, initialName, initialLaunch, initialPresentation, chainId = 4663 }: {
+  chainId?: FoundationChainId;
   token: Address; transactionHash?: Hex; initialName?: string; initialLaunch?: RobinhoodLaunch;
   initialPresentation?: Promise<RobinhoodCoinPresentation | null>;
 }) {
-  const session = useFoundationSession(token);
-  const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(token)}`, true, initialPresentation);
+  const profile = foundationChainProfile(chainId), FOUNDATION_INFRASTRUCTURE = profile.infrastructure, FOUNDATION_WETH = profile.wrappedEth.address;
+  const session = useFoundationSession(token, chainId);
+  const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(token)}`, true, initialPresentation, chainId);
   const coinPresentation = presentation.items.find(item => item.tokenAddress.toLowerCase() === token.toLowerCase());
   const market = coinPresentation?.market;
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); }, [token]);
@@ -62,10 +63,10 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
     let active = true;
     void Promise.all([session.client.getBalance({ address: session.account }), session.client.getGasPrice()]).then(([balance, gasPrice]) => {
       if (active) setNativeFunds({ context: session.contextKey, balance: formatUnits(balance, 18),
-        maximum: formatUnits(maximumSwapInput({ side: "buy", chainId: 4663, nativeBalanceWei: balance, tokenBalanceRaw: 0n, gasPriceWei: gasPrice }), 18) });
+        maximum: formatUnits(maximumSwapInput({ side: "buy", chainId, nativeBalanceWei: balance, tokenBalanceRaw: 0n, gasPriceWei: gasPrice }), 18) });
     }).catch(() => { if (active) setNativeFunds(null); });
     return () => { active = false; };
-  }, [session.client, session.account, session.contextKey, refreshKey]);
+  }, [session.client, session.account, session.contextKey, refreshKey, chainId]);
   useEffect(() => {
     if (!binding || !session.envelope?.available) return;
     let active = true;
@@ -78,12 +79,12 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
     if (!details || details.ledger.modules.length === 0 || !binding || !catalog || !session.account) return;
     const controller = new AbortController(), account = session.account;
     const context: OpenConfigContext = { roles: { creator: details.creator }, assets: {
-      token: { chainId: 4663, address: token, decimals: 18 }, quote: { chainId: 4663, address: details.quote.address, decimals: details.quote.decimals } },
+      token: { chainId, address: token, decimals: 18 }, quote: { chainId, address: details.quote.address, decimals: details.quote.decimals } },
     components: { factory: binding.factory.address, ...Object.fromEntries(Object.entries(FOUNDATION_INFRASTRUCTURE).map(([role, pin]) => [role, pin.address])) } };
     void (async () => {
       const discovered = await discoverFoundationLaunch({ client: session.client, binding, token, transactionHash: selectedHash, signal: controller.signal,
         locator: async (address, options) => {
-          const response = await fetch(`/api/module-foundation/locate?token=${address}`, { credentials: "same-origin", redirect: "error", cache: "no-store", signal: options?.signal });
+          const response = await fetch(`/api/module-foundation/locate?token=${address}${chainId === 1 ? "&chainId=1" : ""}`, { credentials: "same-origin", redirect: "error", cache: "no-store", signal: options?.signal });
           if (!response.ok) throw new Error("The original launch transaction could not be located. Enter its transaction hash below.");
           const value = await response.json() as { transactionHash?: Hex | null };
           return value.transactionHash ?? null;
@@ -91,7 +92,7 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
       const restored = await refreshFoundationAssetsV1({ client: session.client,
         pins: readFoundationAssetPins(discovered.parameters.metadata.socialData), context });
       const decoded = decodeFoundationLaunchSelectionsV1({ catalog, calldata: discovered.transaction.data, context: restored.context,
-        packageIds: readFoundationModulePackages(discovered.parameters.metadata.socialData, discovered.moduleSelections.length) });
+        chainId, packageIds: readFoundationModulePackages(discovered.parameters.metadata.socialData, discovered.moduleSelections.length) });
       const runtime = await readFoundationActionRuntimeV1({ client: session.client, binding, catalog, pool: details.pool, selections: decoded.selections, context: restored.context });
       const actions = runtime.instances.flatMap((instance, moduleIndex) => presentFoundationActionsV1({ catalog, instance, account,
         context: runtime.configurationContext }).map(action => ({ ...action, moduleIndex })));
@@ -99,7 +100,7 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
     })().catch(caught => { if (!controller.signal.aborted) setModuleState({ key: moduleKey, error: caught instanceof Error && caught.message.length < 240
       ? caught.message : "The installed module actions could not be verified. Refresh the pool or enter its original launch transaction." }); });
     return () => controller.abort();
-  }, [details, binding, catalog, session.client, session.account, token, selectedHash, moduleKey]);
+  }, [details, binding, catalog, session.client, session.account, token, selectedHash, moduleKey, chainId, FOUNDATION_INFRASTRUCTURE]);
 
   async function prepareTrade(draft: FoundationTradeDraft): Promise<FoundationTradeReview> {
     if (!session.account || !details) throw new Error("Connect your wallet and load the verified pool first.");
@@ -115,7 +116,7 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
     let externalRoute;
     if (getAddress(details.quote.address) !== FOUNDATION_WETH) {
       const response = await fetch("/api/module-foundation/eth-route", { method: "POST", credentials: "same-origin", redirect: "error",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteAsset: details.quote.address,
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quoteAsset: details.quote.address, ...(chainId === 1 ? { chainId } : {}),
           ...(draft.side === "buy" ? { probeEthAmount: amountIn.toString() } : {}) }) });
       const readiness = await response.json() as AnyQuoteReadinessV1;
       if (!response.ok || readiness.status !== "compatible") throw new Error("An executable ETH route is currently unavailable for this pool. Try again when liquidity is available.");
@@ -130,12 +131,12 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
       steps: sequence.steps, checkpoint: sequence.checkpoint });
     session.assertCurrent(account, context);
     const outputDecimals = 18;
-    const review: FoundationTradeReview = { id: crypto.randomUUID(), contextKey: context, account, chainId: 4663, side: draft.side,
+    const review: FoundationTradeReview = { id: crypto.randomUUID(), contextKey: context, account, chainId, side: draft.side,
       expiresAt: Number(sequence.expiresAt), simulationBlock: sequence.checkpoint.blockNumber.toString(), inputAmount: draft.amount,
       outputAmount: formatUnits(sequence.amountOut, outputDecimals), minimumOutput: formatUnits(sequence.minimumOutput, outputDecimals),
       platformFeeAmount: formatUnits(fees.platformQuote, details.quote.decimals), creatorFeeAmount: formatUnits(fees.creatorQuote, details.quote.decimals),
       ...(externalRoute ? {} : { lpFeeAmount: "0" }), platformFeeBps: FOUNDATION_PLATFORM_FEE_BPS, platformFeeRecipient: FOUNDATION_PLATFORM_FEE_RECIPIENT,
-      universalRouter: FOUNDATION_INFRASTRUCTURE.universalRouter.address, transactions: sequence.steps.map(foundationStepSummary) };
+      universalRouter: FOUNDATION_INFRASTRUCTURE.universalRouter.address, transactions: sequence.steps.map(step => foundationStepSummary(step, chainId)) };
     trades.current.set(review, sequence); return review;
   }
   async function verifiedResult(outcome: FoundationExecutionResult): Promise<FoundationTransactionResult> {
@@ -159,17 +160,17 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
   }
 
   if (!details) return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} />
-    <RobinhoodMarketView address={token} name={initialName || "Loading coin…"} symbol={initialLaunch?.symbol} creator={initialLaunch?.creator}
+    <RobinhoodMarketView chainId={chainId} address={token} name={initialName || "Loading coin…"} symbol={initialLaunch?.symbol} creator={initialLaunch?.creator}
       launch={initialLaunch} presentation={coinPresentation} loading={presentation.loading || !error && session.availability.status !== "unavailable"} delayed={presentation.delayed}
       fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE}
       trade={<div className={`${styles.marketScope} ${tradeStyles.embedded}`}><section className={tradeStyles.card} aria-label="Trade loading">
-        <p className={tradeStyles.note} role="status">{error || session.availability.status === "unavailable" ? "Trading is temporarily unavailable." : "Loading trade…"}</p>
+        <p className={tradeStyles.note} role="status">{session.envelope?.indexPending ? session.envelope.reason : error || session.availability.status === "unavailable" ? "Trading is temporarily unavailable." : "Loading trade…"}</p>
         {error || session.availability.status === "unavailable" ? <button type="button" className={styles.secondaryButton} onClick={() => {
           setError(""); session.retryAvailability(); setRefreshKey(value => value + 1);
         }}>Retry</button> : null}
       </section></div>} />
   </>;
-  const quote = { address: details.quote.address, chainId: 4663, name: details.quote.name, symbol: details.quote.symbol, decimals: details.quote.decimals,
+  const quote = { address: details.quote.address, chainId, name: details.quote.name, symbol: details.quote.symbol, decimals: details.quote.decimals,
     supported: true, ...(details.quote.balance === null ? {} : { balance: formatUnits(details.quote.balance, details.quote.decimals) }) };
   const coin = { address: token, name: details.token.name, symbol: details.token.symbol, description: details.token.description, decimals: 18,
     imageURI: details.token.imageURI, creator: details.creator, socialLinks: foundationMetadataLinks(details),
@@ -184,7 +185,7 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
         creditedAmount: formatUnits(budget.credited, quote.decimals), paidAmount: formatUnits(budget.claimed, quote.decimals), asOfBlock: details.checkpoint.blockNumber.toString() } };
   });
   return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} /><ModuleFoundationMarket key={`${session.contextKey}:${session.resultGeneration}`} availability={session.availability} contextKey={session.contextKey}
-    coin={coin} quote={quote} market={market} marketLoading={presentation.loading} marketDelayed={presentation.delayed} tradeAsset={{ address: zeroAddress, chainId: 4663, name: "Ether", symbol: "ETH", decimals: 18, supported: true, balance: funds?.balance }} maximumBuyAmount={funds?.maximum}
+    coin={coin} quote={quote} market={market} marketLoading={presentation.loading} marketDelayed={presentation.delayed} tradeAsset={{ address: zeroAddress, chainId, name: "Ether", symbol: "ETH", decimals: 18, supported: true, balance: funds?.balance }} maximumBuyAmount={funds?.maximum}
     pool={foundationPoolPresentation(details)} positions={foundationPositionPresentation(details)} {...foundationCreatorFeeFields(details)}
     walletAction={session.walletAction} submissionBlocked={session.preparationBlocked} onPrepareTrade={prepareTrade}
     onConfirmTrade={async review => { const sequence = trades.current.get(review); if (!sequence) throw new Error("Review this trade again.");
@@ -219,23 +220,23 @@ export function ModuleFoundationMarketHost({ token, transactionHash, initialName
               account, pool: details.pool, selections: modules.selections, context: modules.context, moduleIndex: action.moduleIndex,
               selection: { id: action.moduleId, version: action.version, digest: action.digest, actionId: action.actionId, configuration } });
             session.assertCurrent(account, context);
-            const review: FoundationActionReview = { id: crypto.randomUUID(), actionId, configuration, contextKey: context, account, chainId: 4663,
+            const review: FoundationActionReview = { id: crypto.randomUUID(), actionId, configuration, contextKey: context, account, chainId,
               simulationBlock: sequence.checkpoint.blockNumber.toString(), expiresAt: Number(sequence.expiresAt),
               transfers: sequence.balanceChecks.filter(check => (check.minimumDelta ?? 0n) > 0n).map(check => {
                 const observed = sequence.assets.find(asset => getAddress(asset.address) === getAddress(check.token));
                 if (!observed) throw new Error("The action's output asset metadata could not be verified.");
                 const asset = { ...observed, supported: true };
                 return { asset, recipient: account, amount: formatUnits(check.minimumDelta!, asset.decimals) };
-              }), transactions: sequence.steps.map(foundationStepSummary),
+              }), transactions: sequence.steps.map(step => foundationStepSummary(step, chainId)),
               notes: ["The preview checks your coin, quote and configured ERC20 balances. Execution limits are set by this action's inputs."] };
             claims.current.set(review, sequence); return review;
           }
           const sequence = await prepareFoundationClaim({ client: session.client, binding: await session.resolveAuthority(), account,
             pool: details.pool, beneficiary: actionId === "fee:creator" ? "creator" : "platform" });
           session.assertCurrent(account, context);
-          const review: FoundationActionReview = { id: crypto.randomUUID(), actionId, configuration, contextKey: context, account, chainId: 4663,
+          const review: FoundationActionReview = { id: crypto.randomUUID(), actionId, configuration, contextKey: context, account, chainId,
             simulationBlock: sequence.checkpoint.blockNumber.toString(), expiresAt: Number(sequence.expiresAt),
-            transfers: [{ asset: quote, recipient: sequence.recipient, amount: formatUnits(sequence.minimumOutput, quote.decimals) }], transactions: sequence.steps.map(foundationStepSummary) };
+            transfers: [{ asset: quote, recipient: sequence.recipient, amount: formatUnits(sequence.minimumOutput, quote.decimals) }], transactions: sequence.steps.map(step => foundationStepSummary(step, chainId)) };
           claims.current.set(review, sequence); return review;
         }} onConfirm={async review => { const sequence = claims.current.get(review); if (!sequence) throw new Error("Review this payout again.");
           session.assertCurrent(sequence.account, review.contextKey); return verifiedResult(await session.execute(sequence)); }}

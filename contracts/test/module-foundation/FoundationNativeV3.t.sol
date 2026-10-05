@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import { FoundationForkBaseV3 } from "./FoundationDirectionalFeesV3.t.sol";
 import { FoundationFactoryV3 } from "../../src/module-foundation/FoundationFactoryV3.sol";
 import { IFoundationUniversalRouterV2 } from "../../src/module-foundation/FoundationFactoryV2.sol";
+import { FoundationFactoryV3NativeBase } from "../../src/module-foundation/FoundationFactoryV3NativeBase.sol";
 import { FoundationFactoryV3Native } from "../../src/module-foundation/FoundationFactoryV3Native.sol";
 import { IFoundationWrappedEth } from "../../src/module-foundation/FoundationFactoryV2Native.sol";
 import { FoundationLaunchTypesV3 as P } from "../../src/module-foundation/FoundationLaunchTypesV3.sol";
@@ -21,16 +22,20 @@ import { FoundationQuoteFixture } from "./FoundationFixturesV1.sol";
 import { ModifyLiquidityParams } from "@uniswap/v4-core/src/types/PoolOperation.sol";
 
 contract FoundationNativeV3Test is FoundationForkBaseV3 {
-    address constant WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
-    FoundationFactoryV3Native nativeFactory;
+    address internal WETH = 0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73;
+    FoundationFactoryV3NativeBase nativeFactory;
+
+    function _nativeFactoryArtifact() internal pure virtual returns (string memory) {
+        return "FoundationFactoryV3Native.sol:FoundationFactoryV3Native";
+    }
 
     function setUp() public override {
         super.setUp();
         bytes32[5] memory hashes =
             [MANAGER.codehash, POSM.codehash, ROUTER.codehash, PERMIT2.codehash, address(deployer).codehash];
-        nativeFactory = FoundationFactoryV3Native(
+        nativeFactory = FoundationFactoryV3NativeBase(
             payable(deployCode(
-                    "FoundationFactoryV3Native.sol:FoundationFactoryV3Native",
+                    _nativeFactoryArtifact(),
                     abi.encode(manager, positions, IFoundationUniversalRouterV2(ROUTER), permits, deployer, hashes)
                 ))
         );

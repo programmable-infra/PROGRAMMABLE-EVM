@@ -46,9 +46,9 @@ export async function readPassingTests(output: string, digest: string, artifacts
 export interface DeploymentIntent { transactionHash: Hex; serialized: Hex; nonce: number; maximumCostWei: string; }
 /** An uncertain broadcast can only resend the identical signed transaction; it never takes a new nonce. */
 export async function reconcileDeployment(intent: DeploymentIntent, address: Address, creationCodeHash: Hex,
-  client: PublicClient, broadcast: (serialized: Hex) => Promise<Hex>) {
+  client: PublicClient, broadcast: (serialized: Hex) => Promise<Hex>, chainId: 1 | 4663 = 4663) {
   const transaction = parseTransaction(intent.serialized);
-  if (keccak256(intent.serialized) !== intent.transactionHash || transaction.chainId !== 4663
+  if (keccak256(intent.serialized) !== intent.transactionHash || transaction.chainId !== chainId
     || transaction.to != null || (transaction.value ?? 0n) !== 0n || !transaction.data
     || keccak256(transaction.data) !== creationCodeHash || transaction.nonce !== intent.nonce
     || (await recoverTransactionAddress({ serializedTransaction: intent.serialized as TransactionSerialized })).toLowerCase() !== address.toLowerCase()) throw Error("Saved deployment differs from the wallet or compiled factory.");

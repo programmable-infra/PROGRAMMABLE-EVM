@@ -3,7 +3,8 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { BlobPreconditionFailedError, get, put } from "@vercel/blob";
-import { createPublicClient, createWalletClient, defineChain, http, keccak256, type Hex } from "viem";
+import { createPublicClient, createWalletClient, http, keccak256, type Hex } from "viem";
+import { foundationChainProfile } from "@/lib/module-foundation/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import publishers from "@/config/module-foundation/owner-publishers.json";
 import { validateModuleSubmissionRequest } from "@/packages/classic-modules/src/open-transport.mjs";
@@ -32,16 +33,23 @@ export async function run(args: string[], repositoryRoot: string): Promise<void>
   const save = (name: string, value: unknown) => writeFile(path.join(output, name), JSON.stringify(value, null, 2) + "\n", { flag: "wx", mode: 0o600 });
   const job = await json(flags.get("--job")!), credential = await privateJson(flags.get("--wallet-file")!), storage = await privateJson(flags.get("--storage-file")!);
   const account = privateKeyToAccount(credential.privateKey);
-  if (!publishers.wallets.includes(account.address.toLowerCase()) || credential.address !== account.address || credential.chainId !== 4663) throw Error("Publication wallet differs.");
+  const chainId = job.chainId ?? 4663;
+  const profile = foundationChainProfile(chainId);
+  const rpcUrl = job.rpcEnvironment ? process.env[job.rpcEnvironment] : profile.publicRpcUrls[0];
+  if (!rpcUrl) throw Error("The target RPC is not configured.");
+  const chain = profile.chain;
+  if (job.publish !== false && chainId === 1) throw Error("Publish Ethereum modules through the shared two-chain publication job.");
+  if (!publishers.wallets.includes(account.address.toLowerCase()) || credential.address !== account.address) throw Error("Publication wallet differs.");
   const source = validateModuleSubmissionRequest(await json(path.resolve(job.sourceFile)));
   if (!source.ok) throw Error("Source package differs.");
   const prior = await readOptionalJson<FoundationOwnerPublicationV1>(path.join(output, "publication.json"));
   if (prior) {
     await verifyFoundationOwnerPublicationV1(prior, publishers.wallets);
     if (prior.publisher !== account.address || prior.manifest.requestDigest !== source.requestDigest) throw Error("Resume source or wallet differs.");
-    const client = createPublicClient({ transport: http("https://rpc.mainnet.chain.robinhood.com", { timeout: 15_000, retryCount: 0 }) });
+    const client = createPublicClient({ transport: http(rpcUrl, { timeout: 15_000, retryCount: 0 }) });
     await verifyFoundationOwnerRuntimeV1(prior, client);
-    await publishCatalog(prior, storage.token, save); return;
+    if (prior.release.chainId !== chainId) throw Error("Resume network differs.");
+    if (job.publish !== false) await publishCatalog(prior, storage.token, save); return;
   }
 
   for (const file of source.request.files.filter(f => f.path.endsWith(".sol"))) {
@@ -82,8 +90,6 @@ export async function run(args: string[], repositoryRoot: string): Promise<void>
       if (!file || keccak256(Buffer.from(file.bytes, "base64")) !== pin.keccak256) throw Error("Compiled sources differ from the package.");
     }
   }
-  const rpcUrl = "https://rpc.mainnet.chain.robinhood.com";
-  const chain = defineChain({ id: 4663, name: "Robinhood Chain", nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [rpcUrl] } } });
   const client = createPublicClient({ chain, transport: http(rpcUrl, { timeout: 15_000, retryCount: 0 }) });
   if (await client.getChainId() !== chain.id) throw Error("Deployment network differs.");
   let transactionHash: Hex = job.deploymentTransactionHash;
@@ -98,25 +104,25 @@ export async function run(args: string[], repositoryRoot: string): Promise<void>
       const cost = gas * gasPrice, budget = BigInt(job.maximumGasCostWei ?? "1000000000000000");
       if (cost > budget || await client.getBalance({ address: account.address }) < cost) throw Error("Deployment gas exceeds available funding or job budget.");
       const nonce = await client.getTransactionCount({ address: account.address, blockTag: "pending" });
-      const serialized = await account.signTransaction({ chainId: 4663, type: "legacy", data, value: 0n, gas, gasPrice, nonce });
+      const serialized = await account.signTransaction({ chainId, type: "legacy", data, value: 0n, gas, gasPrice, nonce });
       transactionHash = keccak256(serialized);
       deploymentIntent = { transactionHash, serialized, nonce, maximumCostWei: cost.toString() };
       await save("deployment-intent.private.json", deploymentIntent);
     }
     transactionHash = deploymentIntent.transactionHash;
     receipt = await reconcileDeployment(deploymentIntent, account.address, keccak256(data), client,
-      serializedTransaction => wallet.sendRawTransaction({ serializedTransaction }));
+      serializedTransaction => wallet.sendRawTransaction({ serializedTransaction }), chainId);
   } else {
     receipt = await client.getTransactionReceipt({ hash: transactionHash });
   }
   if (receipt.status !== "success" || !receipt.contractAddress) throw Error("Factory deployment failed.");
-  const response = await fetch("https://programmable.market/api/module-foundation", { cache: "no-store", signal: AbortSignal.timeout(60_000) });
-  const availability = await response.json();
-  if (!response.ok || !availability.available || !availability.binding?.releaseDigest) throw Error("Module host is unavailable.");
+  const response = job.hostReleaseDigest ? null : await fetch(`https://programmable.market/api/module-foundation?chainId=${chainId}`, { cache: "no-store", signal: AbortSignal.timeout(60_000) });
+  const availability = response ? await response.json() : { available: true, binding: { releaseDigest: job.hostReleaseDigest } };
+  if ((response && !response.ok) || !availability.available || !availability.binding?.releaseDigest) throw Error("Module host is unavailable.");
   const manifest = createFoundationModuleManifestV1(source.request.descriptor, source.requestDigest as Hex), extension = readFoundationPackageExtensionV1(manifest);
   const deployment = { transactionHash, blockNumber: receipt.blockNumber.toString(), creationCodeHash: keccak256(factory.bytecode.object as Hex) };
   const runtimePins = { factory: receipt.contractAddress, factoryCodeHash: keccak256(factory.deployedBytecode.object as Hex), moduleCodeHash: keccak256(moduleArtifact.deployedBytecode.object as Hex), descriptorHash: extension.descriptorHash };
-  const release = { chainId: 4663, hostAdapterId: extension.hostAdapterId, manifestHash: hashFoundationModuleManifestV1(manifest), ...runtimePins,
+  const release = { chainId, hostAdapterId: extension.hostAdapterId, manifestHash: hashFoundationModuleManifestV1(manifest), ...runtimePins,
     releaseDigest: foundationDataDigest("programmable.module-foundation.owner-release.v1", { protocolReleaseDigest: availability.binding.releaseDigest, deployment, runtimePins, packageId: manifest.packageId }),
     deploymentEvidenceDigest: foundationDataDigest("programmable.module-foundation.owner-deployment.v1", deployment),
     runtimeVerificationDigest: foundationDataDigest("programmable.module-foundation.owner-runtime.v1", runtimePins) };
@@ -135,10 +141,19 @@ export async function run(args: string[], repositoryRoot: string): Promise<void>
   await verifyFoundationOwnerPublicationV1(publication, publishers.wallets);
   await verifyFoundationOwnerRuntimeV1(publication, client);
   await save("publication.json", publication);
-  await publishCatalog(publication, storage.token, save);
+  if (job.publish !== false) await publishCatalog(publication, storage.token, save);
 }
 
 export async function publishCatalog(publication: FoundationOwnerPublicationV1, storageToken: string, save: (name: string, value: unknown) => Promise<void>) {
+  return publishCatalogBatch([publication], storageToken, save);
+}
+
+export async function publishCatalogBatch(batch: FoundationOwnerPublicationV1[], storageToken: string, save: (name: string, value: unknown) => Promise<void>) {
+  const publication = batch[0];
+  if (!publication || batch.length > 2) throw Error("Invalid publication target set.");
+  if (batch.length === 2 && (batch.map(p => p.release.chainId).sort((a, b) => a - b).join() !== "1,4663"
+    || batch.some(p => p.manifest.packageId !== publication.manifest.packageId || p.manifest.requestDigest !== publication.manifest.requestDigest))) throw Error("Both networks must publish the identical source package.");
+  for (const p of batch) await verifyFoundationOwnerPublicationV1(p, publishers.wallets);
   const publicationDigest = publication.publicationDigest;
   for (let attempt = 0; attempt < 3; attempt++) {
     const existing = await get(FOUNDATION_OWNER_CATALOG_PATH, { token: storageToken, access: "private", useCache: false });
@@ -152,8 +167,9 @@ export async function publishCatalog(publication: FoundationOwnerPublicationV1, 
       }
       publications = old.publications; etag = existing.blob.etag;
     }
-    const alreadyStored = publications.some(p => p.publicationDigest === publication.publicationDigest);
-    if (!alreadyStored) publications = [...publications.filter(p => p.manifest.packageId !== publication.manifest.packageId), publication];
+    const alreadyStored = batch.every(p => publications.some(old => old.publicationDigest === p.publicationDigest));
+    if (batch.length === 1 && publications.some(p => p.release.chainId === 1 || (p.manifest.familyId === publication.manifest.familyId && p.release.chainId !== publication.release.chainId))) throw Error("This module requires a shared two-chain publication.");
+    if (!alreadyStored) publications = [...publications.filter(old => !batch.some(p => old.manifest.packageId === p.manifest.packageId && old.release.chainId === p.release.chainId && old.release.hostAdapterId === p.release.hostAdapterId)), ...batch];
     await save("publication-intent.json", { publicationDigest, priorEtag: etag ?? null }).catch(async error => {
       if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
     });
@@ -172,7 +188,11 @@ export async function publishCatalog(publication: FoundationOwnerPublicationV1, 
     const match = stored.schemaVersion === FOUNDATION_OWNER_CATALOG_V1 && Array.isArray(stored.publications)
       ? stored.publications.find((p: FoundationOwnerPublicationV1) => p.publicationDigest === publicationDigest) : null;
     if (!match) throw Error("Publication readback differs.");
-    await verifyFoundationOwnerPublicationV1(match, publishers.wallets);
+    for (const p of batch) {
+      const storedTarget = stored.publications.find((item: FoundationOwnerPublicationV1) => item.publicationDigest === p.publicationDigest);
+      if (!storedTarget) throw Error("A publication target is missing from readback.");
+      await verifyFoundationOwnerPublicationV1(storedTarget, publishers.wallets);
+    }
     break;
   }
   await save("complete.json", { packageId: publication.manifest.packageId, publicationDigest, factory: publication.release.factory, publisher: publication.publisher, completedAt: new Date().toISOString() }).catch(error => {

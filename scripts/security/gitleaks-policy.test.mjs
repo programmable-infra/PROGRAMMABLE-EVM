@@ -100,6 +100,16 @@ function assertFiles(findings, paths, count = paths.length) {
   assert.deepEqual([...new Set(findings.map(({ File }) => File))].sort(), [...paths].sort());
 }
 
+test("Ethereum compiler exports allow only the exact public source hash lines", (t) => {
+  const paths = ["contracts/spec/module-foundation/ethereum-graph-bytecode.v1.json", "packages/module-foundation-ethereum/dist/index.mjs"];
+  const digest = "0x28ad9a130f32c14d931da364f529c63a207b9476bfc19c67751d9df0d568397d";
+  const line = `  "src/module-foundation/FoundationTokenV1.sol": "${digest}",`;
+  assert.deepEqual(scan(t, Object.fromEntries(paths.map(path => [path, line])), { raw: true }), []);
+  assertFiles(scan(t, Object.fromEntries(paths.map(path => [path, line.replace(digest, `0x${material}`)])), { raw: true }), paths);
+  assertFiles(scan(t, Object.fromEntries(paths.map(path => [path, `"apiKey": "${digest}",`])), { raw: true }), paths);
+  assertFiles(scan(t, { [`${paths[0]}.backup`]: line }, { raw: true }), [`${paths[0]}.backup`]);
+});
+
 test("accepts only the exact public coin field in the completed launch regression", (t) => {
   assert.deepEqual(scan(t, { [completedLaunchTest]: `metadata: { token: "${completedLaunchCoin}" }` }, { raw: true }), []);
   assertFiles(scan(t, { [completedLaunchTest]: `metadata: { token: "${completedLaunchCoin}", apiKey: "${completedLaunchCoin}" }` }, { raw: true }), [completedLaunchTest]);

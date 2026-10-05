@@ -1,7 +1,10 @@
+import { readFinalizedRouterCustomIdentitySnapshotCoreV1 } from "@/lib/alchemy/router-custom-public.server";
+import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
 import "server-only";
 import { getAddress, type Address, type Hex } from "viem";
 import { parseFoundationAvailability } from "@/lib/module-foundation/availability";
-import { createFoundationClient } from "@/lib/module-foundation/client";
+import { createFoundationServerClient } from "./client";
+import { foundationBindingChainId, type FoundationChainId } from "@/lib/module-foundation/chains";
 import {
   FOUNDATION_DISCOVERY_MAX_BLOCKS, locateFoundationCreationTransaction, readFoundationLaunchIndex,
 } from "@/lib/module-foundation/discovery";
@@ -15,7 +18,7 @@ export interface FoundationLocateResponse {
   reason?: string;
   search?: { fromBlock: string; toBlock: string };
 }
-interface LocateQuery { token: Address; range: { fromBlock: bigint; toBlock: bigint } | null }
+interface LocateQuery { chainId?: FoundationChainId; token: Address; range: { fromBlock: bigint; toBlock: bigint } | null }
 export class FoundationLocateInputError extends Error {}
 const releaseUnavailable = "Launch history is temporarily unavailable while the current release is being verified.";
 const historyUnavailable = "Launch history is temporarily unavailable. Please try again.";
@@ -23,10 +26,13 @@ const historyUnavailable = "Launch history is temporarily unavailable. Please tr
 /** Only token and an optional bounded window are accepted. Release and source authority never come from a request. */
 export function parseFoundationLocateQuery(params: URLSearchParams): LocateQuery {
   for (const key of params.keys()) {
-    if (!["token", "fromBlock", "toBlock"].includes(key) || params.getAll(key).length !== 1) {
+    if (!["token", "fromBlock", "toBlock", "chainId"].includes(key) || params.getAll(key).length !== 1) {
       throw new FoundationLocateInputError("Use one token address and, optionally, one fromBlock and toBlock.");
     }
   }
+  const network = params.get("chainId");
+  if (network !== null && network !== "1" && network !== "4663") throw new FoundationLocateInputError("Choose Ethereum or Robinhood Chain.");
+  const chain = network === "1" ? { chainId: 1 as const } : {};
   const raw = params.get("token");
   let token: Address;
   try {
@@ -35,7 +41,7 @@ export function parseFoundationLocateQuery(params: URLSearchParams): LocateQuery
     if (raw !== token || BigInt(token) === 0n) throw new Error();
   } catch { throw new FoundationLocateInputError("Enter a valid checksummed token address."); }
   const from = params.get("fromBlock"), to = params.get("toBlock");
-  if (from === null && to === null) return { token, range: null };
+  if (from === null && to === null) return { ...chain, token, range: null };
   if (from === null || to === null || !/^(0|[1-9][0-9]{0,19})$/.test(from) || !/^(0|[1-9][0-9]{0,19})$/.test(to)) {
     throw new FoundationLocateInputError("Provide both block numbers as nonnegative decimal integers.");
   }
@@ -43,21 +49,21 @@ export function parseFoundationLocateQuery(params: URLSearchParams): LocateQuery
   if (toBlock < fromBlock || toBlock - fromBlock + 1n > FOUNDATION_DISCOVERY_MAX_BLOCKS) {
     throw new FoundationLocateInputError("Choose a range of at most 5,000 blocks.");
   }
-  return { token, range: { fromBlock, toBlock } };
+  return { ...chain, token, range: { fromBlock, toBlock } };
 }
 
 async function locate(query: LocateQuery, signal: AbortSignal): Promise<FoundationLocateResponse> {
   signal.throwIfAborted();
   let availability;
-  try { availability = parseFoundationAvailability(await readFoundationAvailabilityResponse(fetch, 12_000, query.token)); }
+  try { availability = parseFoundationAvailability(await readFoundationAvailabilityResponse(fetch, 12_000, query.token, query.chainId ?? 4663)); }
   catch { return { transactionHash: null, reason: releaseUnavailable }; }
   const binding = availability.binding;
-  if (!availability.available || !binding) return { transactionHash: null, reason: releaseUnavailable };
+  if (!availability.available || !binding || foundationBindingChainId(binding) !== (query.chainId ?? 4663)) return { transactionHash: null, reason: releaseUnavailable };
   signal.throwIfAborted();
   if (query.range && query.range.fromBlock < binding.startBlock) {
     throw new FoundationLocateInputError("The requested window starts before this release.");
   }
-  if (!query.range) {
+  if (!query.range && query.chainId !== 1) {
     try {
       const { token: indexed } = await readRobinhoodToken(query.token);
       signal.throwIfAborted();
@@ -73,7 +79,19 @@ async function locate(query: LocateQuery, signal: AbortSignal): Promise<Foundati
       }
     } catch { signal.throwIfAborted(); }
   }
-  const client = createFoundationClient();
+  if (query.chainId === 1) {
+    try {
+      const snapshot = await readFinalizedRouterCustomIdentitySnapshotCoreV1({ signal });
+      const candidate = snapshot.entries.find(entry => entry.tokenAddress.toLowerCase() === query.token.toLowerCase());
+      const stamp = candidate?.launchStampProvenance;
+      if (isEthereumModuleLaunchCandidate(candidate) && stamp && (!query.range
+        || (BigInt(stamp.blockNumber) >= query.range.fromBlock && BigInt(stamp.blockNumber) <= query.range.toBlock))) {
+        return { transactionHash: stamp.transactionHash };
+      }
+      return { transactionHash: null, reason: "This launch is still being indexed. You can use its transaction hash." };
+    } catch { return { transactionHash: null, reason: historyUnavailable }; }
+  }
+  const client = createFoundationServerClient(query.chainId);
   let latest: bigint;
   try { latest = await client.getBlockNumber({ cacheTime: 0 }); }
   catch { return { transactionHash: null, reason: historyUnavailable }; }

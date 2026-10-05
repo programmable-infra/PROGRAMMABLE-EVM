@@ -9,11 +9,13 @@ import {
   type AnyQuoteModulePoolV1, type AnyQuotePoolKeyV1,
 } from "./types";
 
+import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
+
 const UINT128_MAX = (1n << 128n) - 1n;
 const INT128_MAX = (1n << 127n) - 1n;
 const executeAbi = parseAbi(["function execute(bytes commands,bytes[] inputs,uint256 deadline) payable"]);
-const canonicalAsset = (value: Address) => anyQuoteSameAddressV1(value, ANY_QUOTE_NATIVE) ? ANY_QUOTE_WETH : value;
-const equivalentAsset = (a: Address, b: Address) => anyQuoteSameAddressV1(canonicalAsset(a), canonicalAsset(b));
+const canonicalAsset = (value: Address, chainId: FoundationChainId = 4663) => anyQuoteSameAddressV1(value, ANY_QUOTE_NATIVE) ? foundationChainProfile(chainId).wrappedEth.address : value;
+const equivalentAsset = (a: Address, b: Address, chainId: FoundationChainId = 4663) => anyQuoteSameAddressV1(canonicalAsset(a, chainId), canonicalAsset(b, chainId));
 const object = (v: unknown): Record<string, unknown> => {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new AnyQuoteErrorV1("ROUTE_RESPONSE_INVALID");
   return v as Record<string, unknown>;
@@ -41,8 +43,8 @@ export function anyQuotePoolIdV1(key: AnyQuotePoolKeyV1): Hex {
  * Native/WETH equivalence is useful for discovery, but it must not hide a wrap/unwrap during
  * execution: Universal Router's balance-based unwrap and mixed-protocol commands are not isolated.
  * This is a route-compiler coverage limit, not evidence that the ERC20 is incompatible. */
-export function requireAnyQuoteNativeUnlockRouteV1(route: AnyQuoteExternalRouteV1, side: "buy" | "sell") {
-  validateAnyQuoteExternalRouteV1(route);
+export function requireAnyQuoteNativeUnlockRouteV1(route: AnyQuoteExternalRouteV1, side: "buy" | "sell", chainId: FoundationChainId = 4663) {
+  validateAnyQuoteExternalRouteV1(route, chainId);
   const hops = route.hops;
   if (hops.length === 0 || !hops.every((hop): hop is Extract<AnyQuoteAmmHopV1, { protocol: "V4" }> => hop.protocol === "V4")
     || !anyQuoteSameAddressV1(side === "buy" ? hops[0].tokenIn : hops[hops.length - 1].tokenOut, ANY_QUOTE_NATIVE)) {
@@ -73,8 +75,9 @@ export function anyQuoteModulePoolKeyV1(pool: AnyQuoteModulePoolV1): AnyQuotePoo
  * https://developers.uniswap.org/docs/api-reference/aggregator_quote
  */
 export function parseAnyQuoteExternalRouteV1(response: unknown, expected: {
-  tokenIn: Address; tokenOut: Address; amountIn: bigint; checkpoint: AnyQuoteCheckpointV1; validUntil: bigint;
+  tokenIn: Address; tokenOut: Address; amountIn: bigint; checkpoint: AnyQuoteCheckpointV1; validUntil: bigint; chainId?: FoundationChainId;
 }): AnyQuoteExternalRouteV1 {
+  const chainId = foundationChainProfile(expected.chainId).chainId;
   const root = object(response), quote = object(root.quote);
   if (root.routing !== "CLASSIC" || !Array.isArray(quote.route) || quote.route.length !== 1
     || !Array.isArray(quote.route[0]) || quote.route[0].length < 1 || quote.route[0].length > 4) throw new AnyQuoteErrorV1("ROUTE_SHAPE_UNSUPPORTED");
@@ -83,13 +86,13 @@ export function parseAnyQuoteExternalRouteV1(response: unknown, expected: {
     if (quote[key] !== undefined && quote[key] !== null && String(quote[key]) !== "0") throw new AnyQuoteErrorV1("EXTERNAL_API_FEE_UNSUPPORTED");
   }
   const input = object(quote.input), output = object(quote.output);
-  if (!equivalentAsset(anyQuoteAddressV1(input.token, true), expected.tokenIn)
-    || !equivalentAsset(anyQuoteAddressV1(output.token, true), expected.tokenOut)
+  if (!equivalentAsset(anyQuoteAddressV1(input.token, true), expected.tokenIn, chainId)
+    || !equivalentAsset(anyQuoteAddressV1(output.token, true), expected.tokenOut, chainId)
     || anyQuoteUintV1(input.amount) !== expected.amountIn) throw new AnyQuoteErrorV1("ROUTE_RESPONSE_INVALID");
   const amountOut = anyQuoteUintV1(output.amount, UINT128_MAX);
   const hops: AnyQuoteAmmHopV1[] = quote.route[0].map((raw: unknown) => {
     const p = object(raw), a = object(p.tokenIn), b = object(p.tokenOut);
-    if (smallInteger(a.chainId, 1, 100_000_000) !== 4663 || smallInteger(b.chainId, 1, 100_000_000) !== 4663) throw new AnyQuoteErrorV1("ROUTE_CHAIN_MISMATCH");
+    if (smallInteger(a.chainId, 1, 100_000_000) !== chainId || smallInteger(b.chainId, 1, 100_000_000) !== chainId) throw new AnyQuoteErrorV1("ROUTE_CHAIN_MISMATCH");
     const tokenIn = anyQuoteAddressV1(a.address, true), tokenOut = anyQuoteAddressV1(b.address, true);
     if (p.type === "v2-pool") return { protocol: "V2", tokenIn, tokenOut, pool: anyQuoteAddressV1(p.address) };
     if (p.type === "v3-pool") return { protocol: "V3", tokenIn, tokenOut, pool: anyQuoteAddressV1(p.address), fee: smallInteger(p.fee, 1, 999_999) };
@@ -103,16 +106,17 @@ export function parseAnyQuoteExternalRouteV1(response: unknown, expected: {
     return { protocol: "V4", tokenIn, tokenOut, poolId, key, hookData: hookData as Hex };
   });
   const route: AnyQuoteExternalRouteV1 = {
-    provider: "uniswap-trading-api", chainId: 4663, tokenIn: expected.tokenIn, tokenOut: expected.tokenOut,
+    provider: "uniswap-trading-api", chainId, tokenIn: expected.tokenIn, tokenOut: expected.tokenOut,
     amountIn: expected.amountIn.toString(), amountOut: amountOut.toString(), hops,
     checkpoint: expected.checkpoint, validUntil: expected.validUntil.toString(), evidenceHash: "0x" as Hex,
   };
-  validateAnyQuoteExternalRouteV1(route);
+  validateAnyQuoteExternalRouteV1(route, chainId);
   return { ...route, evidenceHash: anyQuoteEvidenceHashV1({ ...route, evidenceHash: undefined }) };
 }
 
-export function validateAnyQuoteExternalRouteV1(route: AnyQuoteExternalRouteV1) {
-  if (route.chainId !== 4663 || route.hops.length > 4) throw new AnyQuoteErrorV1("ROUTE_SHAPE_UNSUPPORTED");
+export function validateAnyQuoteExternalRouteV1(route: AnyQuoteExternalRouteV1, chainId: FoundationChainId = 4663) {
+  const ANY_QUOTE_WETH = foundationChainProfile(chainId).wrappedEth.address;
+  if (route.chainId !== chainId || route.hops.length > 4) throw new AnyQuoteErrorV1("ROUTE_SHAPE_UNSUPPORTED");
   anyQuoteUintV1(route.amountIn, UINT128_MAX); anyQuoteUintV1(route.amountOut, UINT128_MAX);
   anyQuoteUintV1(route.validUntil, (1n << 64n) - 1n);
   let current = anyQuoteAddressV1(route.tokenIn);
@@ -122,11 +126,11 @@ export function validateAnyQuoteExternalRouteV1(route: AnyQuoteExternalRouteV1) 
       || route.amountIn !== route.amountOut) throw new AnyQuoteErrorV1("INVALID_IDENTITY_ROUTE");
     return;
   }
-  const seen = new Set([canonicalAsset(current).toLowerCase()]);
+  const seen = new Set([canonicalAsset(current, chainId).toLowerCase()]);
   for (const hop of route.hops) {
     const tokenIn = anyQuoteAddressV1(hop.tokenIn, hop.protocol === "V4"), tokenOut = anyQuoteAddressV1(hop.tokenOut, hop.protocol === "V4");
-    if (!equivalentAsset(current, tokenIn) || equivalentAsset(tokenIn, tokenOut)) throw new AnyQuoteErrorV1("DISCONNECTED_ROUTE");
-    const normalizedOut = canonicalAsset(tokenOut).toLowerCase();
+    if (!equivalentAsset(current, tokenIn, chainId) || equivalentAsset(tokenIn, tokenOut, chainId)) throw new AnyQuoteErrorV1("DISCONNECTED_ROUTE");
+    const normalizedOut = canonicalAsset(tokenOut, chainId).toLowerCase();
     if (seen.has(normalizedOut)) throw new AnyQuoteErrorV1("CYCLIC_ROUTE_UNSUPPORTED");
     seen.add(normalizedOut);
     if (hop.protocol === "V4") {
@@ -142,7 +146,7 @@ export function validateAnyQuoteExternalRouteV1(route: AnyQuoteExternalRouteV1) 
     }
     current = tokenOut;
   }
-  if (!equivalentAsset(current, final)) throw new AnyQuoteErrorV1("DISCONNECTED_ROUTE");
+  if (!equivalentAsset(current, final, chainId)) throw new AnyQuoteErrorV1("DISCONNECTED_ROUTE");
 }
 
 type AnyQuoteSwapInput = {

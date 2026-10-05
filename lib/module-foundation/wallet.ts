@@ -1,3 +1,5 @@
+import { decodeFoundationEthereumTransaction } from "./ethereum-graph";
+import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
 import { getAddress, keccak256, toHex, type Address, type Hex, type PublicClient } from "viem";
 import type { ModuleNativeWalletTransaction } from "@/lib/module-mode/native-client";
 import { readFoundationResolution, writeFoundationResolution, type FoundationResolutionMetadata } from "./result-store";
@@ -6,9 +8,10 @@ import { assertFoundationInfrastructure, assertFoundationPool, assertFoundationP
   type prepareFoundationLaunch, type prepareFoundationTrade, type prepareFoundationClaim, type prepareFoundationModuleAction } from "./client";
 import { decodeFoundationLaunchSelectionsV1, readFoundationActionRuntimeV1, revalidateFoundationModuleActionV1, type FoundationActionRoleResolverV1 } from "./action-runtime";
 import type { FoundationCatalogV1 } from "./catalog";
-import { FOUNDATION_INFRASTRUCTURE } from "./constants";
+import { foundationBindingChainId, foundationChainProfile, foundationClientProfile, type FoundationChainId } from "./chains";
 import { refreshFoundationAssetsV1 } from "./assets";
 import { assertFoundationNativeBalance } from "./native-funding";
+import { foundationTransactionGasLimit } from "./gas";
 import { foundationHookAbi } from "./abi";
 import { foundationFactoryVersion } from "./protocol";
 
@@ -29,19 +32,19 @@ interface PrivatePreparation {
   activeOperation?: string;
 }
 const prepared = new WeakMap<FoundationWalletPreparation, PrivatePreparation>();
-const PREFIX = "programmable:foundation-pending:v1:4663:";
+const PREFIX = "programmable:foundation-pending:v1:";
 export const FOUNDATION_PENDING_EVENT = "programmable:foundation-pending-change";
 
 async function estimateCurrentWalletStep(value: FoundationWalletPreparation, binding: PrivatePreparation): Promise<ModuleNativeWalletTransaction> {
   assertFoundationWalletSubmissionContext(value);
-  const nonce = readFoundationPending(value.account)!.nonce;
+  const nonce = readFoundationPending(value.account, value.transaction.chainId)!.nonce;
   const estimate = await binding.client.estimateGas({ account: value.account, to: value.transaction.to,
     data: value.transaction.data, value: BigInt(value.transaction.value), nonce });
   if (estimate <= 0n) throw new Error("The transaction gas limit could not be estimated.");
   assertFoundationWalletSubmissionContext(value);
   // Callback reserve checks can require much more available gas than the call ultimately consumes.
   // Estimate the exact step after prior approvals are actually confirmed, rather than using gasUsed.
-  return Object.freeze({ ...value.transaction, gas: toHex(estimate * 120n / 100n + 15_000n) });
+  return Object.freeze({ ...value.transaction, gas: toHex(foundationTransactionGasLimit(estimate, value.transaction.chainId)) });
 }
 
 function immutableSnapshot<T>(value: T): T {
@@ -61,8 +64,8 @@ export function bindFoundationWalletStep(input: Omit<PrivatePreparation, "state"
   const step = sequence.steps[input.index];
   if (!step || input.index < 0 || !Number.isInteger(input.index)) throw new Error("The transaction step is invalid.");
   const transaction: ModuleNativeWalletTransaction = {
-    chainId: 4663, ...step.transaction, value: toHex(step.transaction.value),
-    gas: toHex(step.gasUsed * 120n / 100n + 15_000n),
+    chainId: foundationBindingChainId(sequence.binding), ...step.transaction, value: toHex(step.transaction.value),
+    gas: toHex(foundationTransactionGasLimit(step.gasUsed, foundationBindingChainId(sequence.binding))),
     action: step.kind === "wrap" || step.kind === "claim" || step.kind === "module-action" ? "manage" : step.kind,
     description: step.effect,
   };
@@ -87,7 +90,7 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
     // The session shares only this in-flight authority/catalog read, never a settled approval.
     const [current, catalog] = await Promise.all([binding.resolveAuthority(), needsCatalog ? binding.resolveCatalog?.() : undefined]);
     const original = sequence.binding;
-    if (current.releaseDigest !== original.releaseDigest || current.sourceCommit !== original.sourceCommit || current.startBlock !== original.startBlock
+    if (foundationBindingChainId(current) !== foundationBindingChainId(original) || current.releaseDigest !== original.releaseDigest || current.sourceCommit !== original.sourceCommit || current.startBlock !== original.startBlock
       || foundationFactoryVersion(current) !== foundationFactoryVersion(original) || current.lpCustodyId !== original.lpCustodyId
       || getAddress(current.factory.address) !== getAddress(original.factory.address)
       || current.factory.runtimeCodeHash !== original.factory.runtimeCodeHash
@@ -101,6 +104,7 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
       binding.state = "ready";
       return transaction;
     }
+    if (sequence.kind === "launch" && current.ethereumGraph) await assertFoundationEthereumTransaction({ source: current.ethereumGraph, transaction: sequence.steps.at(-1)!.transaction });
     let checkpoint = await assertFoundationInfrastructure(binding.client, current);
     if (sequence.kind === "launch" && sequence.parameters.modules.length > 0) {
       if (!binding.resolveCatalog) throw new Error("The current module admissions cannot be checked. Review again.");
@@ -108,10 +112,10 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
       if (sequence.modulePackageIds.length !== sequence.parameters.modules.length) throw new Error("Restore the exact source identities from the launch metadata.");
       const assets = await refreshFoundationAssetsV1({ client: binding.client, pins: sequence.moduleAssetPins, checkpoint,
         context: { roles: { creator: sequence.account }, assets: {
-          token: { chainId: 4663, address: sequence.result.token, decimals: 18 },
-          quote: { chainId: 4663, address: sequence.parameters.quote, decimals: sequence.parameters.quoteDecimals } },
-        components: { factory: current.factory.address, ...Object.fromEntries(Object.entries(FOUNDATION_INFRASTRUCTURE).map(([role, pin]) => [role, pin.address])) } } });
-      decodeFoundationLaunchSelectionsV1({ catalog: catalog!, calldata: sequence.steps.at(-1)!.transaction.data,
+          token: { chainId: foundationBindingChainId(current), address: sequence.result.token, decimals: 18 },
+          quote: { chainId: foundationBindingChainId(current), address: sequence.parameters.quote, decimals: sequence.parameters.quoteDecimals } },
+        components: { factory: current.ethereumGraph ? decodeFoundationEthereumTransaction(sequence.steps.at(-1)!.transaction).engine : current.factory.address, ...Object.fromEntries(Object.entries(foundationChainProfile(foundationBindingChainId(current)).infrastructure).map(([role, pin]) => [role, pin.address])) } } });
+      decodeFoundationLaunchSelectionsV1({ chainId: foundationBindingChainId(current), catalog: catalog!, calldata: sequence.steps.at(-1)!.transaction.data,
         packageIds: sequence.modulePackageIds, context: assets.context });
     }
     if (sequence.kind !== "launch") await assertFoundationPool(binding.client, current, sequence.pool, checkpoint.blockNumber);
@@ -147,21 +151,21 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
 
 export interface FoundationPendingOperation {
   schemaVersion: "programmable.foundation.pending.v1";
-  account: Address; releaseDigest: Hex; calldataHash: Hex; to: Address; value: Hex;
+  chainId?: FoundationChainId; account: Address; releaseDigest: Hex; calldataHash: Hex; to: Address; value: Hex;
   transactionHash: Hex | null; createdAt: number;
   /** The pending account nonce and canonical height immediately before this wallet request. */
   nonce: number; startBlock: string;
   operationId: string;
   metadata?: FoundationResolutionMetadata;
 }
-function storeKey(account: Address) { return `${PREFIX}${account.toLowerCase()}`; }
+function storeKey(account: Address, chainId: FoundationChainId = 4663) { return `${PREFIX}${foundationChainProfile(chainId).chainId}:${account.toLowerCase()}`; }
 function signalChange() { window.dispatchEvent(new Event(FOUNDATION_PENDING_EVENT)); }
-export function readFoundationPending(account: Address): FoundationPendingOperation | null {
-  const raw = localStorage.getItem(storeKey(account));
+export function readFoundationPending(account: Address, chainId: FoundationChainId = 4663): FoundationPendingOperation | null {
+  const raw = localStorage.getItem(storeKey(account, chainId));
   if (!raw) return null;
   if (raw.length > 4_096) throw new Error("The saved wallet operation cannot be read. Check wallet activity before continuing.");
   const value = JSON.parse(raw) as FoundationPendingOperation;
-  if (value.schemaVersion !== "programmable.foundation.pending.v1" || getAddress(value.account) !== getAddress(account)
+  if (foundationBindingChainId(value) !== chainId || value.schemaVersion !== "programmable.foundation.pending.v1" || getAddress(value.account) !== getAddress(account)
     || !/^0x[0-9a-fA-F]{64}$/.test(value.calldataHash) || !/^0x[0-9a-fA-F]{64}$/.test(value.releaseDigest)
     || !/^0x[0-9a-fA-F]+$/.test(value.value) || !Number.isSafeInteger(value.nonce) || value.nonce < 0
     || !/^\d+$/.test(value.startBlock) || !Number.isSafeInteger(value.createdAt) || typeof value.operationId !== "string" || !/^[a-f0-9-]{36}$/.test(value.operationId)
@@ -174,7 +178,7 @@ export function readFoundationPending(account: Address): FoundationPendingOperat
 
 /** Provider calls are permitted only inside this exact durable, cross-tab-locked submission. */
 export function assertFoundationWalletSubmissionContext(value: FoundationWalletPreparation): void {
-  const binding = prepared.get(value), pending = readFoundationPending(value.account);
+  const binding = prepared.get(value), pending = readFoundationPending(value.account, value.transaction.chainId);
   if (!binding?.activeOperation || pending?.operationId !== binding.activeOperation
     || pending.transactionHash !== null || pending.releaseDigest !== value.releaseDigest
     || getAddress(pending.to) !== getAddress(value.transaction.to) || pending.calldataHash !== keccak256(value.transaction.data)
@@ -188,7 +192,7 @@ export async function foundationWalletRequestNonce(value: FoundationWalletPrepar
   const binding = prepared.get(value)!;
   const current = await binding.client.getTransactionCount({ address: value.account, blockTag: "pending" });
   assertFoundationWalletSubmissionContext(value);
-  const pending = readFoundationPending(value.account)!;
+  const pending = readFoundationPending(value.account, value.transaction.chainId)!;
   if (pending.nonce !== current) throw new Error("Wallet activity changed the next transaction. Review again.");
   return pending.nonce;
 }
@@ -199,21 +203,21 @@ export async function submitFoundationWalletStep(value: FoundationWalletPreparat
   const binding = prepared.get(value);
   if (!binding || binding.state !== "ready") throw new Error("This transaction is not ready for signing.");
   if (!navigator.locks) throw new Error("This browser cannot safely coordinate wallet requests.");
-  return navigator.locks.request(storeKey(value.account), { mode: "exclusive", ifAvailable: true }, async lock => {
-    if (!lock || readFoundationPending(value.account) || readFoundationResolution(value.account)) throw new Error("A previous wallet operation needs reconciliation first.");
-    if (await binding.client.getChainId() !== 4663) throw new Error("The wallet operation is connected to the wrong network.");
+  return navigator.locks.request(storeKey(value.account, value.transaction.chainId), { mode: "exclusive", ifAvailable: true }, async lock => {
+    if (!lock || readFoundationPending(value.account, value.transaction.chainId) || readFoundationResolution(value.account, value.transaction.chainId)) throw new Error("A previous wallet operation needs reconciliation first.");
+    if (await binding.client.getChainId() !== value.transaction.chainId) throw new Error("The wallet operation is connected to the wrong network.");
     const [nonce, block] = await Promise.all([
       binding.client.getTransactionCount({ address: value.account, blockTag: "pending" }),
       binding.client.getBlock({ blockTag: "latest" }),
     ]);
     if (block.number === null || !block.hash) throw new Error("The current wallet nonce could not be bound to chain state.");
-    const pending: FoundationPendingOperation = { schemaVersion: "programmable.foundation.pending.v1", account: value.account,
+    const pending: FoundationPendingOperation = { schemaVersion: "programmable.foundation.pending.v1", chainId: value.transaction.chainId, account: value.account,
       releaseDigest: value.releaseDigest, calldataHash: keccak256(value.transaction.data), to: value.transaction.to,
       value: value.transaction.value, transactionHash: null, createdAt: Date.now(), nonce, startBlock: block.number.toString(), operationId: crypto.randomUUID(),
       metadata: { stepKind: binding.sequence.steps[binding.index].kind, operationKind: binding.sequence.kind,
         token: binding.sequence.kind === "launch" ? binding.sequence.result.token : binding.sequence.pool.token } };
-    localStorage.setItem(storeKey(value.account), JSON.stringify(pending));
-    if (!readFoundationPending(value.account)) throw new Error("The wallet operation could not be saved.");
+    localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify(pending));
+    if (!readFoundationPending(value.account, value.transaction.chainId)) throw new Error("The wallet operation could not be saved.");
     signalChange();
     binding.activeOperation = pending.operationId;
     try {
@@ -221,12 +225,12 @@ export async function submitFoundationWalletStep(value: FoundationWalletPreparat
       if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error("The wallet returned no valid transaction hash. Check wallet activity.");
       binding.state = "submitted";
       // Failure to persist the known hash leaves the earlier unknown operation in place.
-      try { localStorage.setItem(storeKey(value.account), JSON.stringify({ ...pending, transactionHash: hash })); signalChange(); } catch { /* Return known hash for manual recovery. */ }
+      try { localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify({ ...pending, transactionHash: hash })); signalChange(); } catch { /* Return known hash for manual recovery. */ }
       return hash;
     } catch (error) {
       const failure = error as { code?: number; walletRequestAttempted?: boolean; walletRequestRejected?: boolean };
       if (failure.walletRequestAttempted === false || failure.walletRequestRejected === true || failure.code === 4001) {
-        localStorage.removeItem(storeKey(value.account)); signalChange();
+        localStorage.removeItem(storeKey(value.account, value.transaction.chainId)); signalChange();
       }
       throw error;
     } finally { binding.activeOperation = undefined; }
@@ -236,31 +240,39 @@ export async function submitFoundationWalletStep(value: FoundationWalletPreparat
 /** Only an exact mined transaction (success or revert) resolves an uncertain send. */
 export async function reconcileFoundationPending(client: PublicClient, account: Address, knownHash?: Hex) {
   if (!navigator.locks) throw new Error("This browser cannot safely coordinate wallet recovery.");
-  return navigator.locks.request(storeKey(account), { mode: "exclusive", ifAvailable: true }, async lock => {
+  const chainId = foundationClientProfile(client).chainId;
+  return navigator.locks.request(storeKey(account, chainId), { mode: "exclusive", ifAvailable: true }, async lock => {
   if (!lock) throw new Error("A wallet request is still active. Wait for it to complete.");
-  const pending = readFoundationPending(account);
+  const pending = readFoundationPending(account, chainId);
   const hash = pending?.transactionHash ?? knownHash;
   if (!pending || !hash) throw new Error("Find the transaction hash in your wallet activity before continuing.");
-  if (await client.getChainId() !== 4663) throw new Error("Recovery is connected to the wrong chain.");
+  if (await client.getChainId() !== chainId) throw new Error("Recovery is connected to the wrong chain.");
   const [transaction, receipt] = await Promise.all([client.getTransaction({ hash }), client.getTransactionReceipt({ hash })]);
   if (!transaction.to || getAddress(transaction.from) !== getAddress(account) || getAddress(transaction.to) !== getAddress(pending.to)
     || transaction.hash !== hash || receipt.transactionHash !== hash || transaction.nonce !== pending.nonce
-    || (transaction.chainId !== undefined && transaction.chainId !== 4663)
+    || (transaction.chainId !== undefined && transaction.chainId !== chainId)
     || receipt.blockNumber < BigInt(pending.startBlock) || transaction.blockNumber !== receipt.blockNumber
     || transaction.blockHash !== receipt.blockHash
     || keccak256(transaction.input) !== pending.calldataHash || transaction.value !== BigInt(pending.value)) throw new Error("This transaction does not match the saved wallet operation.");
   const canonical = await client.getBlock({ blockNumber: receipt.blockNumber });
   if (canonical.hash !== receipt.blockHash) throw new Error("The wallet transaction is not in the canonical chain. Check again.");
   // Preserve a newer operation written in another tab.
-  const current = readFoundationPending(account);
+  const current = readFoundationPending(account, chainId);
   if (current?.operationId === pending.operationId) {
     writeFoundationResolution(pending, receipt, pending.metadata);
-    localStorage.removeItem(storeKey(account)); signalChange();
+    localStorage.removeItem(storeKey(account, chainId)); signalChange();
   }
   return receipt;
   });
 }
 
-export function foundationStepSummary(step: FoundationPreparedStep) {
-  return { label: step.label, to: step.transaction.to, chainId: 4663, value: step.transaction.value.toString(), effect: step.effect, spender: step.spender };
+export function foundationStepSummary(step: FoundationPreparedStep, chainId: FoundationChainId = 4663) {
+  return { label: step.label, to: step.transaction.to, chainId, value: step.transaction.value.toString(), effect: step.effect, spender: step.spender };
+}
+
+/** Read the chain only from this SDK's privately bound wallet preparation. */
+export function foundationPreparedWalletChainId(value: FoundationWalletPreparation): FoundationChainId {
+  const binding = prepared.get(value);
+  if (!binding || foundationBindingChainId(binding.sequence.binding) !== value.transaction.chainId) throw new Error("Prepare this Module Mode transaction again.");
+  return foundationBindingChainId(binding.sequence.binding);
 }

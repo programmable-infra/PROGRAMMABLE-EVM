@@ -1,4 +1,7 @@
 "use client";
+import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
+
+import { foundationBindingChainId, foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 
 import { foundationCreatorFeeFields, foundationCreatorFeeRates } from "@/lib/module-foundation/creator-fees";
 import { foundationParseAmount } from "@/lib/module-foundation/price";
@@ -19,9 +22,9 @@ import { readFoundationQuoteForDisplay } from "@/lib/module-foundation/launch-di
 import { isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
 import { readFoundationSuggestedBuy } from "@/lib/module-foundation/first-buy";
 import { retryFoundationReadOnlyPreparation } from "@/lib/module-foundation/preparation-retry";
-import { FOUNDATION_WETH, foundationSupportsEth } from "@/lib/module-foundation/native-funding";
+import { foundationSupportsEth } from "@/lib/module-foundation/native-funding";
 import { nativeCanonicalJson, nativeJson } from "@/lib/module-mode/native-catalog";
-import { FOUNDATION_INFRASTRUCTURE, FOUNDATION_SUPPLY } from "@/lib/module-foundation/constants";
+import { FOUNDATION_SUPPLY } from "@/lib/module-foundation/constants";
 import type { FoundationContractModule } from "@/lib/module-foundation/abi";
 import { verifyFoundationLaunchReceipt } from "@/lib/module-foundation/readback";
 import { fetchFoundationAvailability, FoundationProviderDisagreementError } from "@/lib/module-foundation/availability";
@@ -42,9 +45,10 @@ export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, sav
     throw new Error("This result is not a completed coin launch.");
   }
   const token = getAddress(saved.metadata.token);
-  const authority = await fetchFoundationAvailability(signal, token);
+  const chainId = foundationBindingChainId(saved);
+  const authority = await (chainId === 4663 ? fetchFoundationAvailability(signal, token) : fetchFoundationAvailability(signal, token, chainId));
   if (!authority.available || !authority.binding || authority.binding.releaseDigest.toLowerCase() !== saved.releaseDigest.toLowerCase()
-    || getAddress(authority.binding.factory.address) !== getAddress(saved.to)) throw new Error("The saved launch release could not be verified.");
+    || getAddress(authority.binding.ethereumGraph ? ethereum.canonicalStamp.router.address : authority.binding.factory.address) !== getAddress(saved.to)) throw new Error("The saved launch release could not be verified.");
   const found = await discoverFoundationLaunch({ client, binding: authority.binding, token, transactionHash: saved.transactionHash, signal });
   if (signal?.aborted || getAddress(found.token) !== token || found.transactionHash.toLowerCase() !== saved.transactionHash.toLowerCase()
     || getAddress(found.transaction.from) !== getAddress(saved.account) || getAddress(found.transaction.to) !== getAddress(saved.to)
@@ -52,13 +56,14 @@ export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, sav
     || found.checkpoint.blockNumber !== BigInt(saved.blockNumber) || found.checkpoint.blockHash.toLowerCase() !== saved.blockHash.toLowerCase()) {
     throw new Error("The saved result does not match this coin's launch.");
   }
-  return `/modules/${token}?transaction=${found.transactionHash}`;
+  return `/modules/${token}?${chainId === 1 ? "chainId=1&" : ""}transaction=${found.transactionHash}`;
 }
 
-export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form" | "studio" } = {}) {
-  const router = useRouter(), session = useFoundationSession();
+export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: { layout?: "form" | "studio"; chainId?: FoundationChainId } = {}) {
+  const profile = foundationChainProfile(chainId), FOUNDATION_INFRASTRUCTURE = profile.infrastructure, FOUNDATION_WETH = profile.wrappedEth.address;
+  const router = useRouter(), session = useFoundationSession(undefined, chainId);
   // Presentation metadata can share one HTTP batch; preparation uses the session's fresh client.
-  const displayClient = useMemo(() => createFoundationClient({ batchRpc: true }), []);
+  const displayClient = useMemo(() => createFoundationClient({ batchRpc: true, chainId }), [chainId]);
   const [completedDraft, setCompletedDraft] = useState<string | null>(null);
   const [suggestedInitialBuy, setSuggestedInitialBuy] = useState<string>();
   const suggestedBuyRequest = useRef<Promise<string> | null>(null);
@@ -69,14 +74,15 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
   const prepared = useRef(new WeakMap<FoundationLaunchReview, Awaited<ReturnType<typeof prepareFoundationLaunch>>>());
   const acknowledged = useRef(new WeakSet<FoundationLaunchReview>());
   const launching = useRef(false);
+  const [launchBusy, setLaunchBusy] = useState(false);
   const [savedLaunchError, setSavedLaunchError] = useState<string | null>(null);
   const [openingSavedLaunch, setOpeningSavedLaunch] = useState(false);
   const recoveryRequest = useRef<AbortController | null>(null);
   const displayEnvelope = session.envelope ?? session.displayEnvelope;
   const catalog = useMemo(() => displayEnvelope ? presentFoundationCatalogV1({
     catalog: bindFoundationCatalogV1(displayEnvelope.catalog.document, displayEnvelope.catalog.authority),
-    chainId: 4663, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1,
-  }) : [], [displayEnvelope]);
+    chainId, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1,
+  }) : [], [displayEnvelope, chainId]);
 
   useEffect(() => () => {
     recoveryRequest.current?.abort();
@@ -117,19 +123,19 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     // Metadata is display-only and shared across wallet changes. Preparation rereads the exact quote and balance.
     void readFoundationQuoteForDisplay(displayClient, FOUNDATION_WETH).then(quote => {
       if (!active) return;
-      const asset: FoundationQuoteAsset = { address: quote.address, chainId: 4663, name: quote.name, symbol: quote.symbol,
-        decimals: quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(quote), ...(quote.balance === null ? {} : { balance: formatUnits(quote.balance, quote.decimals) }) };
+      const asset: FoundationQuoteAsset = { address: quote.address, chainId, name: quote.name, symbol: quote.symbol,
+        decimals: quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(quote, chainId), ...(quote.balance === null ? {} : { balance: formatUnits(quote.balance, quote.decimals) }) };
       setQuoteState(current => ({ context: session.contextKey, assets: [asset, ...(current.context === session.contextKey ? current.assets.filter(item => item.address !== asset.address) : [])] }));
     }).catch(() => undefined);
     return () => { active = false; };
-  }, [displayClient, session.contextKey]);
+  }, [displayClient, session.contextKey, FOUNDATION_WETH, chainId]);
 
   async function resolveQuote(address: Address): Promise<FoundationQuoteAsset> {
     const expectedContext = session.contextKey;
     const quote = await readFoundationQuoteForDisplay(displayClient, getAddress(address));
     if (session.account) session.assertCurrent(session.account, expectedContext);
-    const asset: FoundationQuoteAsset = { address: quote.address, chainId: 4663, name: quote.name, symbol: quote.symbol,
-      decimals: quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(quote), ...(quote.balance === null ? {} : { balance: formatUnits(quote.balance, quote.decimals) }) };
+    const asset: FoundationQuoteAsset = { address: quote.address, chainId, name: quote.name, symbol: quote.symbol,
+      decimals: quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(quote, chainId), ...(quote.balance === null ? {} : { balance: formatUnits(quote.balance, quote.decimals) }) };
     // The builder owns custom lookups and discards results from an older wallet context.
     return asset;
   }
@@ -158,7 +164,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
       if (binding.factoryVersion !== "v3" && feeRates.creatorBuyFeeBps !== feeRates.creatorSellFeeBps) throw new Error("Independent buy and sell fees are not live yet.");
       const tokenSalt = toHex(crypto.getRandomValues(new Uint8Array(32)));
       const response = await fetch("/api/module-foundation/compose", { method: "POST", credentials: "same-origin", redirect: "error",
-        signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account, releaseDigest: binding.releaseDigest, tokenSalt, draft, launchFlow: "single-eth-v1" }) });
+        signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account, releaseDigest: binding.releaseDigest, tokenSalt, draft, launchFlow: "single-eth-v1", chainId }) });
       const composition = await response.json() as { error?: string; code?: string; releaseDigest: Hex; token: Address; modules: FoundationContractModule[];
         moduleAssetPins: unknown; metadata: unknown; startPrice: FoundationStartPrice; ethFunding: { maximumEth: string; quoteAmount: string; path: FoundationFundingHop[] } | null };
       if (response.status === 503 && composition.code === "MODULE_INDEX_PROVIDER_DISAGREEMENT") throw new FoundationProviderDisagreementError();
@@ -172,14 +178,14 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
       const ethFunding = composition.ethFunding ? { ...composition.ethFunding, maximumEth: BigInt(composition.ethFunding.maximumEth), quoteAmount: BigInt(composition.ethFunding.quoteAmount) } : undefined;
       if ((maximumEth > 0n) !== Boolean(ethFunding) || (ethFunding && ethFunding.maximumEth !== maximumEth)) throw new Error("The ETH spending amount changed. Create the launch again.");
       const sequence = await prepareFoundationLaunch({ client: session.client, binding, account, tokenSalt,
-        metadata, quote: draft.quoteAsset,
+        metadata, quote: draft.quoteAsset, accessToken: session.walletContext.getAccessToken,
         startPrice: composition.startPrice, initialBuy: ethFunding ? formatUnits(ethFunding.quoteAmount, composition.startPrice.decimals) : "0", additionalLiquidity: "0", ethFunding,
         ...creatorFees, modules: composition.modules, slippageBps: 100, signal });
       assertCurrent();
       if (sequence.steps.length !== 1 || sequence.steps[0].kind !== "launch") throw new Error("This launch could not be prepared as one transaction.");
       if (getAddress(composition.token) !== getAddress(sequence.result.token)) throw new Error("The source-bound coin address changed. Review again.");
-      const quote: FoundationQuoteAsset = { address: sequence.quote.address, chainId: 4663, name: sequence.quote.name,
-        symbol: sequence.quote.symbol, decimals: sequence.quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(sequence.quote), balance: formatUnits(sequence.quote.balance ?? 0n, sequence.quote.decimals) };
+      const quote: FoundationQuoteAsset = { address: sequence.quote.address, chainId, name: sequence.quote.name,
+        symbol: sequence.quote.symbol, decimals: sequence.quote.decimals, supported: true, supportsNativeEth: foundationSupportsEth(sequence.quote, chainId), balance: formatUnits(sequence.quote.balance ?? 0n, sequence.quote.decimals) };
       const positions = foundationLaunchPositionPresentation(sequence, account);
       const custody = (() => {
         if (sequence.result.factoryVersion === "v1") return { factoryVersion: "v1" as const };
@@ -191,7 +197,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
             principal: formatUnits(sequence.result.creatorQuotePrincipal, quote.decimals),
             refund: formatUnits(sequence.result.actualQuoteRefund, quote.decimals) } };
       })();
-      const review: FoundationLaunchReview = { id: crypto.randomUUID(), contextKey: context, account, chainId: 4663,
+      const review: FoundationLaunchReview = { id: crypto.randomUUID(), contextKey: context, account, chainId,
         simulationBlock: sequence.checkpoint.blockNumber.toString(), expiresAt: Number(sequence.expiresAt), quote,
         tokenAddress: sequence.result.token, metadataHash: sequence.metadataHash,
         pool: { ...sequence.poolKey, poolId: sequence.result.poolId, poolManager: FOUNDATION_INFRASTRUCTURE.poolManager.address },
@@ -201,7 +207,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
         minimumInitialTokens: formatUnits(sequence.parameters.initialBuyMinimumTokenAmount, 18),
         additionalLiquidity: formatUnits(sequence.result.factoryVersion !== "v1" ? sequence.result.creatorQuotePrincipal : sequence.price.creator?.principal ?? 0n, quote.decimals), supply: formatUnits(FOUNDATION_SUPPLY, 18),
         actualStartMarketCapUsd: sequence.price.actualMarketCapUsd,
-        transactions: sequence.steps.map(foundationStepSummary), notes: ["The coin launch and first buy use one transaction.",
+        transactions: sequence.steps.map(step => foundationStepSummary(step, chainId)), notes: ["The coin launch and first buy use one transaction.",
           "The starting market cap is set automatically to approximately $5,000. This is a valuation, not a deposit."] };
       prepared.current.set(review, sequence);
       if (acknowledgedResult) acknowledged.current.add(review);
@@ -215,7 +221,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     try {
       const verified = await verifyFoundationLaunchReceipt({ client: session.client, binding: sequence.binding, transactionHash: outcome.result.transactionHash,
         expected: { transaction: sequence.steps[outcome.stepIndex].transaction, parameters: sequence.parameters, result: sequence.result, metadataHash: sequence.metadataHash } });
-      const tokenUrl = `/modules/${verified.details.token.address}?transaction=${outcome.result.transactionHash}`;
+      const tokenUrl = `/modules/${verified.details.token.address}?${chainId === 1 ? "chainId=1&" : ""}transaction=${outcome.result.transactionHash}`;
       router.push(tokenUrl);
       return { ...outcome.result, tokenUrl, metadataStatus: "stored", verificationStatus: "verified", operationComplete: true,
         pool: foundationPoolPresentation(verified.details), positions: foundationPositionPresentation(verified.details),
@@ -243,13 +249,13 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     </> : null;
   return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
     {layout !== "studio" && previousLaunchAction ? <div className={`${styles.page} ${styles.sessionStatus}`}>{previousLaunchAction}</div> : null}
-    <ModuleFoundationBuilder key={session.resultGeneration} layout={layout} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
+    <ModuleFoundationBuilder key={`${chainId}:${session.resultGeneration}`} layout={layout} networkControl={<label className={styles.networkChoice}><span className="sr-only">Launch network</span><select aria-label="Launch network" value={chainId} disabled={Boolean(session.progress) || launchBusy} onChange={event => router.push(`/launch/modules/foundation?chainId=${event.target.value}`)}><option value="4663">Robinhood</option><option value="1">Ethereum</option></select></label>} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
     onWarmLaunch={session.account && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}
     onPrepareLaunch={prepare} onConfirmLaunch={async review => { const sequence = prepared.current.get(review);
       if (!sequence) throw new Error("Prepare this launch again with your current wallet."); session.assertCurrent(sequence.account, review.contextKey);
-      launching.current = true;
+      launching.current = true; setLaunchBusy(true);
       try {
         // Background preparation preserves the previous result. Only this explicit launch click acknowledges it.
         if (session.resolution && !acknowledged.current.has(review)) {
@@ -258,6 +264,6 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
         }
         const outcome = await session.execute(sequence); setCompletedDraft(draftKey); return await resultFrom(outcome);
       }
-      finally { launching.current = false; } }} onRefreshResult={async result => resultFrom(await session.refreshResult(result))}
+      finally { launching.current = false; setLaunchBusy(false); } }} onRefreshResult={async result => resultFrom(await session.refreshResult(result))}
     walletAction={session.walletAction} submissionBlocked={session.preparationBlocked} onBack={() => router.push(layout === "studio" ? "/launch" : "/")} onRetryAvailability={session.retryAvailability} /></div>;
 }

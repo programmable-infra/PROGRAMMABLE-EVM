@@ -1,3 +1,4 @@
+import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
 import { readEthereumTokenPresentation } from "@/lib/server/ethereum-explore";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -76,6 +77,10 @@ export default async function TokenPage({
   }
   if (resolved.chainId === 1) {
     const initialPresentation = readEthereumTokenPresentation(address).then(result => result.presentation).catch(() => null);
+    if (isEthereumModuleLaunchCandidate(resolved.token)) return <TokenRouteChainSync key={1} chainId={1}>
+      <ModuleFoundationMarketHost chainId={1} token={getAddress(address)} transactionHash={resolved.token?.launchTransactionHash as Hex}
+        initialName={resolved.token?.name || undefined} initialPresentation={initialPresentation} />
+    </TokenRouteChainSync>;
     return <TokenRouteChainSync key={1} chainId={1}><EthereumTokenView address={address} token={resolved.token} status={resolved.status} updatedAt={resolved.updatedAt} initialPresentation={initialPresentation} /></TokenRouteChainSync>;
   }
   return <TokenIndexResetView unresolved />;

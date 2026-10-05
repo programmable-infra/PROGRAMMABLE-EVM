@@ -5,17 +5,17 @@ import {
 import { nativeJson } from "@/lib/module-mode/native-catalog";
 import { moduleAddress, moduleHash, moduleInteger } from "@/lib/module-mode/release";
 import type { FoundationCheckpoint } from "./client";
-import { FOUNDATION_CHAIN_ID } from "./constants";
+import { foundationChainProfile, foundationClientProfile, type FoundationChainId } from "./chains";
 import { foundationDataDigest, foundationRequire } from "./manifest";
 import { decodeFoundationFieldsV1, foundationAssetForAddressV1, presentFoundationFieldsV1 } from "./presentation";
 import type { FoundationConfiguration } from "./ui-types";
 
 /** Token + quote + two additional assets fit the V1 simulator's four balance checks. */
 export const FOUNDATION_ADDITIONAL_ASSET_LIMIT_V1 = 2;
-/** Chain 4663 is fixed by this adapter version. Order follows the first source-field occurrence. */
+/** Chain identity comes from the validated client. Order follows the first source-field occurrence. */
 export type FoundationAssetPinV1 = readonly [address: Address, decimals: number, runtimeCodeHash: Hex];
 export interface FoundationResolvedAssetV1 {
-  chainId: typeof FOUNDATION_CHAIN_ID; address: Address; decimals: number; runtimeCodeHash: Hex; name: string; symbol: string;
+  chainId: FoundationChainId; address: Address; decimals: number; runtimeCodeHash: Hex; name: string; symbol: string;
 }
 export interface FoundationAssetResolutionV1 {
   checkpoint: FoundationCheckpoint; assets: readonly FoundationResolvedAssetV1[];
@@ -55,8 +55,8 @@ export function parseFoundationAssetPinsV1(raw: unknown): readonly FoundationAss
   return freeze(pins);
 }
 
-export function hashFoundationAssetPinsV1(pins: readonly FoundationAssetPinV1[]): Hex {
-  return foundationDataDigest("programmable.module-foundation.assets.v1", { chainId: FOUNDATION_CHAIN_ID, pins: parseFoundationAssetPinsV1(pins) });
+export function hashFoundationAssetPinsV1(pins: readonly FoundationAssetPinV1[], chainId: FoundationChainId = 4663): Hex {
+  return foundationDataDigest("programmable.module-foundation.assets.v1", { chainId: foundationChainProfile(chainId).chainId, pins: parseFoundationAssetPinsV1(pins) });
 }
 
 /** Deduplicates repeated source references while retaining the original order and exact metadata. */
@@ -79,15 +79,17 @@ function checkedContext(raw: OpenConfigContext = {}): OpenConfigContext {
 }
 
 async function resolve(input: FoundationResolveAssetsInputV1, expected?: readonly FoundationAssetPinV1[]): Promise<FoundationAssetResolutionV1> {
+  const chainId = foundationClientProfile(input.client).chainId;
   const context = checkedContext(input.context), pins = expected === undefined ? undefined : parseFoundationAssetPinsV1(expected);
   foundationRequire(Array.isArray(input.addresses) && input.addresses.length <= 256, "FOUNDATION_ASSET_REQUEST_LIMIT", "The asset request exceeds this schema adapter's input limit.");
   const addresses = [...new Set(input.addresses.map(address => moduleAddress(address, "foundation.asset.address").toLowerCase() as Address))];
+  for (const asset of Object.values(context.assets ?? {})) foundationRequire(Number(asset.chainId) === chainId, "FOUNDATION_ASSET_CHAIN_MISMATCH", "All module assets must use the selected launch network.");
   const additional = addresses.filter(address => pins?.some(pin => sameAddress(pin[0], address))
     || !Object.values(context.assets ?? {}).some(asset => sameAddress(asset.address, address)));
   bounded(additional.length);
   if (pins) foundationRequire(pins.length === additional.length && pins.every((pin, index) => sameAddress(pin[0], additional[index])),
     "FOUNDATION_ASSET_PIN_MISMATCH", "Restore the original ordered asset identities before refreshing metadata.");
-  foundationRequire(await input.client.getChainId() === FOUNDATION_CHAIN_ID, "FOUNDATION_ASSET_CHAIN_MISMATCH", "Resolve module assets on Robinhood Chain (4663).");
+  foundationRequire(await input.client.getChainId() === chainId, "FOUNDATION_ASSET_CHAIN_MISMATCH", "Resolve module assets on the selected launch network.");
   const block = await input.client.getBlock(input.checkpoint ? { blockNumber: input.checkpoint.blockNumber } : { blockTag: "latest" });
   foundationRequire(block.number !== null && block.hash && Math.abs(Date.now() / 1000 - Number(block.timestamp)) <= 120
     && (!input.checkpoint || (block.number === input.checkpoint.blockNumber && block.hash === input.checkpoint.blockHash && block.timestamp === input.checkpoint.timestamp)),
@@ -101,10 +103,10 @@ async function resolve(input: FoundationResolveAssetsInputV1, expected?: readonl
     foundationRequire(!previous || (previous[1] === observed.decimals && previous[2] === observed.codeHash.toLowerCase()),
       "FOUNDATION_ASSET_PIN_MISMATCH", "This asset's decimals or runtime code changed from the immutable launch metadata.");
     for (const existing of Object.values(context.assets ?? {}).filter(asset => sameAddress(asset.address, address))) {
-      foundationRequire(String(existing.chainId) === String(FOUNDATION_CHAIN_ID) && existing.decimals === observed.decimals,
+      foundationRequire(String(existing.chainId) === String(chainId) && existing.decimals === observed.decimals,
         "FOUNDATION_ASSET_METADATA_MISMATCH", "The asset context differs from the current ERC20 metadata.");
     }
-    return { chainId: FOUNDATION_CHAIN_ID, address: address.toLowerCase() as Address, decimals: observed.decimals,
+    return { chainId, address: address.toLowerCase() as Address, decimals: observed.decimals,
       runtimeCodeHash: observed.codeHash.toLowerCase() as Hex, name: observed.name, symbol: observed.symbol };
   }));
   const endBlock = await input.client.getBlock({ blockNumber: checkpoint.blockNumber });
@@ -114,11 +116,11 @@ async function resolve(input: FoundationResolveAssetsInputV1, expected?: readonl
     if (!Object.values(merged.assets).some(existing => sameAddress(existing.address, asset.address))) {
       const key = addressKey(asset.address);
       foundationRequire(!Object.hasOwn(merged.assets, key), "FOUNDATION_ASSET_CONTEXT_CONFLICT", "The canonical asset reference is already bound to another address.");
-      merged.assets[key] = { chainId: FOUNDATION_CHAIN_ID, address: asset.address, decimals: asset.decimals };
+      merged.assets[key] = { chainId, address: asset.address, decimals: asset.decimals };
     }
   }
   const resolvedPins = parseFoundationAssetPinsV1(assets.map(asset => [asset.address, asset.decimals, asset.runtimeCodeHash]));
-  return freeze({ checkpoint, assets, pins: resolvedPins, pinsDigest: hashFoundationAssetPinsV1(resolvedPins), context: checkedContext(merged) });
+  return freeze({ checkpoint, assets, pins: resolvedPins, pinsDigest: hashFoundationAssetPinsV1(resolvedPins, chainId), context: checkedContext(merged) });
 }
 
 /** Read-only standard ERC20 resolution. It creates neither transfer permission nor wallet transactions. */

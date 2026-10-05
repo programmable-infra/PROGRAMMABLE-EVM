@@ -51,7 +51,7 @@ export function foundationAssetForAddressV1(raw: unknown, context: OpenConfigCon
   const address = moduleAddress(raw, path), candidates = Object.entries(context.assets ?? {}).filter(([, asset]) => equalAddress(asset.address, address));
   foundationRequire(candidates.length > 0, "FOUNDATION_ASSET_CONTEXT_REQUIRED", "Resolve this ERC20 address and its current metadata before preparation.", path);
   const [, asset] = candidates[0];
-  foundationRequire(String(asset.chainId) === "4663" && Number.isInteger(asset.decimals) && asset.decimals >= 0 && asset.decimals <= 36
+  foundationRequire(["4663", "1"].includes(String(asset.chainId)) && Number.isInteger(asset.decimals) && asset.decimals >= 0 && asset.decimals <= 36
     && candidates.every(([, item]) => String(item.chainId) === String(asset.chainId) && item.decimals === asset.decimals),
   "FOUNDATION_ASSET_CONTEXT_CONFLICT", "The asset metadata bindings disagree. Restore and verify the original asset metadata.", path);
   const [key] = candidates.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)[0];
@@ -117,7 +117,7 @@ export function presentFoundationFieldsV1(schema: OpenConfigSchema, defaults: un
     } else if (node.type === "asset") {
       field.kind = "address";
       field.required = required && value === undefined;
-      field.description = [node.help, "Enter an ERC20 contract address on Robinhood Chain. Its metadata is verified before preparation.",
+      field.description = [node.help, "Enter an ERC20 contract address on the selected network. Its metadata is verified before preparation.",
         value !== undefined ? "Leave empty to use the default asset." : undefined].filter(Boolean).join(" ");
       field.defaultValue = hasOwn(value, "asset") && typeof value.asset === "string" ? context.assets?.[value.asset]?.address
         : addressDefault(node, value, context);

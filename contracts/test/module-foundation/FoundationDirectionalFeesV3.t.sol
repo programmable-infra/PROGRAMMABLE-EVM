@@ -38,14 +38,26 @@ abstract contract FoundationForkBaseV3 is Test {
     using StateLibrary for IPoolManager;
     using TransientStateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
-    address internal constant MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
-    address internal constant POSM = 0x58daec3116aae6D93017bAAea7749052E8a04fA7;
-    address internal constant ROUTER = 0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99;
+    address internal MANAGER = 0x8366a39CC670B4001A1121B8F6A443A643e40951;
+    address internal POSM = 0x58daec3116aae6D93017bAAea7749052E8a04fA7;
+    address internal ROUTER = 0x06AfBA43Fd06227fA663b0DAecF536f6EaA6bf99;
     address internal constant PERMIT2 = 0x000000000022D473030F116dDEE9F6B43aC78BA3;
     address internal constant DEAD = 0x000000000000000000000000000000000000dEaD;
     address internal constant ALICE = address(0xA11CE);
     address internal constant BOB = address(0xB0B);
     uint256 public constant SNAPSHOT_BLOCK = 63_704_585;
+    uint256 internal expectedChainId = 4663;
+    uint256 internal snapshotBlock = SNAPSHOT_BLOCK;
+    string internal forkRpcEnvironment = "FOUNDATION_RPC_URL";
+    string internal forkBlockEnvironment = "FOUNDATION_FORK_BLOCK";
+    bytes32[4] internal expectedInfrastructureHashes = [
+        bytes32(0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626),
+        bytes32(0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2),
+        bytes32(0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5),
+        bytes32(0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca)
+    ];
+
+    function _configureNetwork() internal virtual { }
     IPoolManager internal manager = IPoolManager(MANAGER);
     IPositionManager internal positions = IPositionManager(POSM);
     IAllowanceTransfer internal permits = IAllowanceTransfer(PERMIT2);
@@ -55,17 +67,20 @@ abstract contract FoundationForkBaseV3 is Test {
     uint256 internal serial;
 
     function setUp() public virtual {
-        string memory rpc = vm.envOr("FOUNDATION_RPC_URL", string(""));
+        _configureNetwork();
+        string memory rpc = vm.envOr(forkRpcEnvironment, string(""));
         if (bytes(rpc).length == 0) {
             vm.skip(true);
             return;
         }
-        vm.createSelectFork(rpc, vm.envOr("FOUNDATION_FORK_BLOCK", SNAPSHOT_BLOCK));
-        assertEq(block.chainid, 4663);
-        assertEq(MANAGER.codehash, bytes32(0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626));
-        assertEq(POSM.codehash, bytes32(0xc873e135dc9aaec88489cfbad146b4cb49d6a32e0d80326377784b7ba17670b2));
-        assertEq(ROUTER.codehash, bytes32(0xbe8e8191bb42d843c2e948a5a55772eaab864ce01e54dcd47c9d089170b302d5));
-        assertEq(PERMIT2.codehash, bytes32(0x5208783f52488f7d3493e5e38311ab707c1d75457fe472a19b0b4d57d66a7fca));
+        vm.createSelectFork(rpc, vm.envOr(forkBlockEnvironment, snapshotBlock));
+        manager = IPoolManager(MANAGER);
+        positions = IPositionManager(POSM);
+        assertEq(block.chainid, expectedChainId);
+        assertEq(MANAGER.codehash, expectedInfrastructureHashes[0]);
+        assertEq(POSM.codehash, expectedInfrastructureHashes[1]);
+        assertEq(ROUTER.codehash, expectedInfrastructureHashes[2]);
+        assertEq(PERMIT2.codehash, expectedInfrastructureHashes[3]);
         deployer = FoundationHookDeployerV2(deployCode("FoundationHookDeployerV2.sol:FoundationHookDeployerV2"));
         bytes32[5] memory hashes =
             [MANAGER.codehash, POSM.codehash, ROUTER.codehash, PERMIT2.codehash, address(deployer).codehash];

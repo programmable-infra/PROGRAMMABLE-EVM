@@ -135,20 +135,9 @@ contract FoundationFactoryV3 is ReentrancyGuardTransient {
             _collectFunding(p, funding, fundingData);
             if (quoteAsset.balanceOf(address(this)) != quoteBefore + funding) revert InvalidSettlement();
         }
-        FoundationTokenV1 primary =
-            new FoundationTokenV1{ salt: _tokenSalt(msg.sender, p.tokenSalt) }(p.metadata, address(this));
+        FoundationTokenV1 primary = _createLaunchToken(p);
         result.token = address(primary);
-        FoundationHookV2 hook = hookDeployer.deploy(
-            poolManager,
-            result.token,
-            p.quote,
-            msg.sender,
-            p.initialTick,
-            p.creatorBuyFeeBps,
-            p.creatorSellFeeBps,
-            p.modules,
-            p.hookSalt
-        );
+        FoundationHookV2 hook = _createLaunchHook(p, result.token);
         result.hook = address(hook);
         result.ledger = address(hook.ledger());
         result.poolId = hook.poolId();
@@ -185,14 +174,14 @@ contract FoundationFactoryV3 is ReentrancyGuardTransient {
         uint256 remaining = quoteAsset.balanceOf(address(this));
         if (remaining < quoteBefore) revert InvalidSettlement();
         result.actualQuoteRefund = remaining - quoteBefore;
-        if (result.actualQuoteRefund != 0) _transferExact(quoteAsset, msg.sender, result.actualQuoteRefund);
+        if (result.actualQuoteRefund != 0) _transferExact(quoteAsset, _launchCreator(), result.actualQuoteRefund);
         if (IERC20(result.token).balanceOf(address(this)) != 0 || quoteAsset.balanceOf(address(this)) != quoteBefore) {
             revert InvalidSettlement();
         }
         _launches[result.token] = result;
         emit FoundationLaunchedV3(
             result.token,
-            msg.sender,
+            _launchCreator(),
             result.poolId,
             result.hook,
             result.ledger,
@@ -205,10 +194,32 @@ contract FoundationFactoryV3 is ReentrancyGuardTransient {
         );
     }
 
+    function _launchCreator() internal view virtual returns (address) {
+        return msg.sender;
+    }
+
+    function _createLaunchToken(P.LaunchParamsV3 calldata p) internal virtual returns (FoundationTokenV1) {
+        return new FoundationTokenV1{ salt: _tokenSalt(_launchCreator(), p.tokenSalt) }(p.metadata, address(this));
+    }
+
+    function _createLaunchHook(P.LaunchParamsV3 calldata p, address token) internal virtual returns (FoundationHookV2) {
+        return hookDeployer.deploy(
+            poolManager,
+            token,
+            p.quote,
+            _launchCreator(),
+            p.initialTick,
+            p.creatorBuyFeeBps,
+            p.creatorSellFeeBps,
+            p.modules,
+            p.hookSalt
+        );
+    }
+
     /// @dev Native extensions must supply the exact quote amount without pulling the creator's ERC20s.
     function _collectFunding(P.LaunchParamsV3 calldata p, uint256 funding, bytes memory fundingData) internal virtual {
         if (fundingData.length != 0) revert InvalidConfiguration();
-        IERC20(p.quote).safeTransferFrom(msg.sender, address(this), funding);
+        IERC20(p.quote).safeTransferFrom(_launchCreator(), address(this), funding);
     }
 
     function launchOf(address token) external view returns (L.LaunchResultV2 memory) {
@@ -218,16 +229,19 @@ contract FoundationFactoryV3 is ReentrancyGuardTransient {
     function predictTokenAddress(address creator, bytes32 tokenSalt, T.Metadata calldata metadata_)
         public
         view
+        virtual
         returns (address)
     {
-        bytes32 hash =
-            keccak256(abi.encodePacked(type(FoundationTokenV1).creationCode, abi.encode(metadata_, address(this))));
+        bytes32 hash = keccak256(
+            abi.encodePacked(type(FoundationTokenV1).creationCode, abi.encode(metadata_, address(this)))
+        );
         return _create2Address(address(this), _tokenSalt(creator, tokenSalt), hash);
     }
 
     function hookInitCodeHash(address creator, address predictedToken, P.LaunchParamsV3 calldata p)
         public
         view
+        virtual
         returns (bytes32)
     {
         return hookDeployer.initCodeHash(
@@ -246,6 +260,7 @@ contract FoundationFactoryV3 is ReentrancyGuardTransient {
     function predictHookAddress(address creator, address predictedToken, P.LaunchParamsV3 calldata p)
         external
         view
+        virtual
         returns (address)
     {
         return _create2Address(address(hookDeployer), p.hookSalt, hookInitCodeHash(creator, predictedToken, p));
@@ -330,7 +345,7 @@ contract FoundationFactoryV3 is ReentrancyGuardTransient {
         }
         output = IERC20(token).balanceOf(address(this)) - beforeToken;
         if (output == 0 || output < p.initialBuyMinimumTokenAmount) revert InvalidSettlement();
-        _transferExact(IERC20(token), msg.sender, output);
+        _transferExact(IERC20(token), _launchCreator(), output);
     }
 
     function _approve(address token, address spender, uint256 amount) internal returns (bool granted) {

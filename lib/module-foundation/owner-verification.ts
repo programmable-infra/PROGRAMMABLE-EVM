@@ -18,7 +18,7 @@ export async function verifyFoundationOwnerPublicationV1(value: unknown, publish
   if (foundationDataDigest("owner.manifest", raw.manifest) !== foundationDataDigest("owner.manifest", manifest)) throw new Error("Owner source and manifest differ.");
   const extension = readFoundationPackageExtensionV1(manifest);
   const release = moduleRecord(raw.release, ["chainId", "hostAdapterId", "releaseDigest", "manifestHash", "deploymentEvidenceDigest", "runtimeVerificationDigest", "factory", "factoryCodeHash", "moduleCodeHash", "descriptorHash"], "owner.release");
-  if (release.chainId !== 4663 || release.hostAdapterId !== extension.hostAdapterId || release.descriptorHash !== extension.descriptorHash
+  if ((release.chainId !== 4663 && release.chainId !== 1) || release.hostAdapterId !== extension.hostAdapterId || release.descriptorHash !== extension.descriptorHash
     || release.manifestHash !== hashFoundationModuleManifestV1(manifest) || typeof release.factory !== "string" || BigInt(getAddress(release.factory)) === 0n) throw new Error("Owner module runtime binding differs.");
   for (const field of ["releaseDigest", "manifestHash", "deploymentEvidenceDigest", "runtimeVerificationDigest", "factoryCodeHash", "moduleCodeHash", "descriptorHash"]) moduleHash(release[field], `owner.release.${field}`);
   const deployment = moduleRecord(raw.deployment, ["transactionHash", "blockNumber", "creationCodeHash"], "owner.deployment");

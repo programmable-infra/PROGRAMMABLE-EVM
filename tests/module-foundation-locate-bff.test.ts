@@ -1,14 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAddress, toHex } from "viem";
 import { GET } from "@/app/api/module-foundation/locate/route";
-import { FOUNDATION_AVAILABILITY_SCHEMA } from "@/lib/module-foundation/availability";
+import { ETHEREUM_MODULE_SOURCE, ETHEREUM_MODULE_BINDING } from "@/lib/module-foundation/ethereum-release";
+import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
+import { FOUNDATION_LP_CUSTODY_DEAD_ID } from "@/lib/module-foundation/constants";
+import { FOUNDATION_AVAILABILITY_SCHEMA, FOUNDATION_AVAILABILITY_SCHEMA_V4 } from "@/lib/module-foundation/availability";
 
-const mocks = vi.hoisted(() => ({ availability: vi.fn(), locator: vi.fn(), index: vi.fn(), head: vi.fn(), client: vi.fn(), token: vi.fn() }));
+const mocks = vi.hoisted(() => ({ availability: vi.fn(), locator: vi.fn(), index: vi.fn(), head: vi.fn(), client: vi.fn(), token: vi.fn(), ethereum: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/lib/server/module-foundation/availability", () => ({ readFoundationAvailabilityResponse: mocks.availability }));
-vi.mock("@/lib/module-foundation/client", () => ({ createFoundationClient: mocks.client }));
+vi.mock("@/lib/server/module-foundation/client", () => ({ createFoundationServerClient: mocks.client }));
 vi.mock("@/lib/module-foundation/discovery", () => ({ FOUNDATION_DISCOVERY_MAX_BLOCKS: 5_000n,
   locateFoundationCreationTransaction: mocks.locator, readFoundationLaunchIndex: mocks.index }));
+vi.mock("@/lib/alchemy/router-custom-public.server", () => ({ readFinalizedRouterCustomIdentitySnapshotCoreV1: mocks.ethereum }));
 vi.mock("@/lib/server/robinhood-index/read", () => ({ readRobinhoodToken: mocks.token }));
 
 const token = getAddress("0xabcdefabcdefabcdefabcdefabcdefabcdefabcd");
@@ -34,10 +38,39 @@ beforeEach(() => {
   mocks.locator.mockResolvedValue(null);
   mocks.index.mockResolvedValue({ entries: [], nextCursor: null });
   mocks.token.mockResolvedValue({ status: "ready", token: null });
+  mocks.ethereum.mockResolvedValue({ entries: [] });
 });
 afterEach(() => vi.useRealTimers());
 
 describe("foundation candidate BFF", () => {
+  it("keeps Ethereum history on Ethereum and never consults Robinhood's index or explorer", async () => {
+    const base = accepted();
+    mocks.availability.mockResolvedValue({ ...base, schemaVersion: FOUNDATION_AVAILABILITY_SCHEMA_V4, chainId: 1,
+      binding: { ...base.binding, chainId: 1, factoryVersion: "v3", lpCustodyId: FOUNDATION_LP_CUSTODY_DEAD_ID },
+      evidence: { ...base.evidence, sourcePath: `/v2/modules/foundation/chains/1/source/release/${base.binding.releaseDigest}` } });
+    mocks.ethereum.mockResolvedValue({ entries: [{ tokenAddress: token, launchStampProvenance: {
+      chainId: 1, kind: "custom-graph", routerAddress: ethereum.canonicalStamp.router.address,
+      routeLauncherAddress: ETHEREUM_MODULE_BINDING.hookDeployer.address,
+      blockNumber: String(ETHEREUM_MODULE_SOURCE.startBlock), transactionHash: candidate,
+      components: [{ kind: "other", scope: "exclusive", runtimeCodeHash: ETHEREUM_MODULE_SOURCE.proxyRuntimeCodeHash },
+        { kind: "token", runtimeCodeHash: hash(2) }, { kind: "hook", runtimeCodeHash: hash(3) }],
+    } }] });
+    expect(await (await GET(request("&chainId=1"))).json()).toMatchObject({ transactionHash: candidate });
+    expect(mocks.availability).toHaveBeenCalledWith(fetch, 12_000, token, 1);
+    expect(mocks.ethereum).toHaveBeenCalledOnce();
+    expect(mocks.client).not.toHaveBeenCalled();
+    expect(mocks.index).not.toHaveBeenCalled();
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(mocks.locator).not.toHaveBeenCalled();
+  });
+
+  it("does not reuse a Robinhood authority response for an Ethereum token", async () => {
+    expect(await (await GET(request("&chainId=1"))).json()).toMatchObject({ transactionHash: null });
+    expect(mocks.client).not.toHaveBeenCalled();
+    expect(mocks.token).not.toHaveBeenCalled();
+    expect(mocks.index).not.toHaveBeenCalled();
+  });
+
   function indexedLaunch() {
     return { sourceKind: "module-foundation-v1", factoryVersion: "v1", routerAddress: null, stampHash: null,
       sourceAddress: factory, sourceReleaseDigest: hash(1), tokenAddress: token, hookAddress: hookDeployer,
@@ -87,7 +120,7 @@ describe("foundation candidate BFF", () => {
     expect(await response.json()).toEqual({ transactionHash: candidate });
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
-    expect(mocks.availability).toHaveBeenCalledWith(fetch, 12_000, token);
+    expect(mocks.availability).toHaveBeenCalledWith(fetch, 12_000, token, 4663);
     expect(mocks.locator).toHaveBeenCalledWith(token, { signal: expect.any(AbortSignal) });
     expect(mocks.index).not.toHaveBeenCalled();
     expect(mocks.head).toHaveBeenCalledWith({ cacheTime: 0 });

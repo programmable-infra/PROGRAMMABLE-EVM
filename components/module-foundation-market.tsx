@@ -185,7 +185,7 @@ export function ModuleFoundationMarket(props: ModuleFoundationMarketProps) {
     finally { lock.current = false; if (active.current) setBusy(null); }
   }
 
-  return <RobinhoodMarketView address={coin.address} name={coin.name} symbol={coin.symbol} creator={coin.creator}
+  return <RobinhoodMarketView chainId={availability.chainId === 1 ? 1 : 4663} address={coin.address} name={coin.name} symbol={coin.symbol} creator={coin.creator}
     launch={{ tokenAddress: coin.address, sourceKind: "module-foundation-v1", poolId: pool.poolId, quoteAsset: quote.address }}
     presentation={{ tokenAddress: coin.address, imageUrl: imageURI, description: coin.description, links: socialLinks, market: props.market ?? null }}
     loading={props.marketLoading} delayed={props.marketDelayed} fallbackImageUrl={FOUNDATION_DEFAULT_IMAGE.url}
