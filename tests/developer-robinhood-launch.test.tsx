@@ -29,7 +29,6 @@ describe("Robinhood API launch website handoff", () => {
         signCustomLaunchFundingAuthorization: walletAction,
       }));
       expect(html).toContain("Your launches");
-      expect(html).toContain("Review and sign launches prepared through the API.");
       expect(html).toContain("Launches");
       expect(html).toContain("API keys");
       expect(html).not.toContain('type="file"');

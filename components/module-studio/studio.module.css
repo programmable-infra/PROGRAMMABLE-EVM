@@ -179,7 +179,8 @@
 .cashtagInput { display: flex; align-items: center; border: 0; border-radius: 9px; background: var(--panel-fill-control); }
 .cashtagInput > span { padding-left: 12px; color: #a0a0a6; }
 .studio .field .cashtagInput input { flex: 1; width: 0; min-width: 0; border: 0; box-shadow: none; background: transparent; padding-left: 6px; outline: none; }
-.cashtagInput:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cashtagInput:focus-within { --input-focus-fill: transparent; background: color-mix(in srgb, var(--panel-fill-control) 90%, var(--text)); }
+@media (forced-colors: active) { .cashtagInput:focus-within { outline: 2px solid Highlight; outline-offset: 3px; } }
 .otherHeading { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; margin-bottom: 8px; }
 .otherHeading h3 { margin: 0; }
 .otherHeading button,.otherLink > button { display: grid; place-items: center; width: 30px; height: 30px; border: 0; border-radius: 7px; background: var(--panel-fill-control); }

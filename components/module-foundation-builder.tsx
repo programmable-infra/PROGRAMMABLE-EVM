@@ -98,7 +98,9 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const [modulePickerView, setModulePickerView] = useState<"modules" | "quote" | null>(null);
   const [phase, setPhase] = useState<Phase>("editing");
   const [errors, setErrors] = useState<Errors>({});
-  const [error, setError] = useState("");
+  const [operationError, setError] = useState("");
+  const [walletError, setWalletError] = useState<{ context: string; message: string } | null>(null);
+  const error = walletAction && walletError?.context === contextKey ? walletError.message : operationError;
   const [announcement, setAnnouncement] = useState("");
   const [result, setResult] = useState<FoundationTransactionResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -321,7 +323,12 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (lock.current || imagePreparing || locked || unavailable || submissionBlocked) return;
     if (walletAction) {
       lock.current = true;
-      try { await walletAction.onClick(); } catch (caught) { setError(cleanError(caught)); }
+      const context = currentContext.current;
+      setWalletError(null); setError("");
+      try { await walletAction.onClick(); }
+      catch (caught) {
+        if (active.current && currentContext.current === context) setWalletError({ context, message: cleanError(caught) });
+      }
       finally { lock.current = false; }
       return;
     }
@@ -488,7 +495,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
                   <Field id="foundation-quote-valuation" label={`Starting market cap · ${quoteSymbol}`} error={errors.quoteValuation}>
                     <input id="foundation-quote-valuation" name="quoteValuation" inputMode="decimal" autoComplete="off" value={draft.quoteValuation} placeholder="Enter a value" aria-invalid={Boolean(errors.quoteValuation) || undefined} aria-describedby={errors.quoteValuation ? "foundation-quote-valuation-error foundation-quote-value-help" : "foundation-quote-value-help"} onChange={event => update("quoteValuation", event.target.value)} />
                   </Field>
-                  <p id="foundation-quote-value-help" className={styles.help}>This is the value of the full coin supply in {quoteSymbol}, not a deposit. No existing market or dollar price is needed. Your coin launches without a first buy. Buyers can then pay with {quoteSymbol}.</p>
+                  <p id="foundation-quote-value-help" className={styles.help}>Total supply value in {quoteSymbol}. No deposit or first buy.</p>
                 </> : null}
               </section> : null}
               {draft.modules.length ? <div className={styles.catalog}>{catalog.filter(descriptor => draft.modules.some(item => item.id === descriptor.id)).map(descriptor => {

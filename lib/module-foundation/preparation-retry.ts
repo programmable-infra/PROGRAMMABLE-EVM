@@ -41,7 +41,7 @@ export async function retryFoundationReadOnlyPreparation<T>(prepare: () => Promi
       if (!isTemporaryFoundationPreparationError(error)) throw error;
       const delays = error instanceof FoundationProviderDisagreementError ? PROVIDER_DISAGREEMENT_DELAYS_MS : RETRY_DELAYS_MS;
       if (attempt >= delays.length) {
-        throw new Error("The Robinhood launch checks are temporarily unavailable. Your coin details are kept. Please try again in a moment.", { cause: error });
+        throw new Error("Launch checks are temporarily unavailable. Your coin details are kept. Try again in a moment.", { cause: error });
       }
       await new Promise(resolve => setTimeout(resolve, delays[attempt]));
       assertCurrent();

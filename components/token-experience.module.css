@@ -2314,3 +2314,13 @@
     width: 100%;
   }
 }
+
+@media (forced-colors: none) {
+  .slippageControl:focus-within, .tradeSettings > div:focus-within, .tradeSettings .slippageControl:focus-within {
+    --input-focus-fill: transparent;
+    outline: none;
+    border-color: transparent;
+    box-shadow: none;
+    background-color: color-mix(in srgb, var(--panel-fill-control, var(--surface-soft)) 90%, var(--text));
+  }
+}

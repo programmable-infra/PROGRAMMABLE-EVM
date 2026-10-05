@@ -38,6 +38,8 @@ export async function createModuleStudioServer() {
         <button data-testid="rerender" onClick={()=>setRenders(value=>value+1)}>Fixture render {renders}</button>
         <ModuleFoundationBuilder layout="studio" availability={{status:'ready',chainId:4663,chainName:'Robinhood Chain'}}
           contextKey={context} catalog={catalog} quoteAssets={[quote]} suggestedInitialBuy="0.001"
+          walletAction={new URLSearchParams(location.search).get('mode')==='wallet-recovery' && context==='wallet:4663:release'
+            ? {label:'Switch to Ethereum',onClick:async()=>{throw new Error('Network change cancelled.');}} : undefined}
           onResolveQuote={new URLSearchParams(location.search).get('mode')==='open-quote' ? async address=>({address,chainId:4663,name:'Pair token',symbol:'PAIR',decimals:6,supported:true}) : undefined}
           onUploadImage={async ({image})=>({url:'https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/token-images/'+'aa'.repeat(32)+'.webp',sha256:image.sha256})}
           onWarmLaunch={warm} onPrepareLaunch={async draft=>{launchEvents.coldPreparations++;return warm(draft,new AbortController().signal);}}
@@ -52,7 +54,7 @@ export async function createModuleStudioServer() {
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
-      if(mode==='launch-speed'||mode==='open-quote') return <LaunchSpeedFixture/>;
+      if(mode==='launch-speed'||mode==='open-quote'||mode==='wallet-recovery') return <LaunchSpeedFixture/>;
       if(mode==='restored-launch') return <ModuleFoundationLaunchHost layout="studio"/>;
       return <div className="app-frame"><SiteHeader/><main><div className={styles.launchPage}>
         <FoundationStudio draft={draft} catalog={catalog} quoteSymbol={customQuote?'TOKEN':'ETH'} initialBuy={draft.initialBuy}
