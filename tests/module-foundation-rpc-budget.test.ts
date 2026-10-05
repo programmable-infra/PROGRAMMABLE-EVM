@@ -43,7 +43,7 @@ describe("Ethereum quote RPC request budget", () => {
     const fetcher = vi.fn<typeof fetch>(async () => Response.json({ code: -32007, message: "private account details" }));
     const result = foundationMainnetRpcs({}, fetcher)[0]("eth_chainId", []).catch(error => error);
     await vi.runAllTimersAsync();
-    expect((await result).message).toBe("An Ethereum provider is temporarily unavailable.");
+    expect(await result).toMatchObject({ message: "An Ethereum provider is temporarily unavailable." });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
 
@@ -55,8 +55,8 @@ describe("Ethereum quote RPC request budget", () => {
       const result = foundationMainnetRpcs({}, fetcher)[0]("eth_call", []).catch(error => error);
       await vi.runAllTimersAsync();
       const error = await result;
-      if (index === 2) { expect(error).toBeInstanceOf(TradeRpcExecutionRevertedV1); expect(error.data).toBe("0xabcd"); }
-      else expect(error.message).toBe("An Ethereum provider is temporarily unavailable.");
+      if (index === 2) { expect(error).toBeInstanceOf(TradeRpcExecutionRevertedV1); expect(error).toMatchObject({ data: "0xabcd" }); }
+      else expect(error).toMatchObject({ message: "An Ethereum provider is temporarily unavailable." });
       expect(fetcher).toHaveBeenCalledTimes(1);
     }
   });
