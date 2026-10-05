@@ -58,15 +58,15 @@ describe("public Explore visibility", () => {
     expect(isPublicExploreIdentityV1({})).toBe(true);
   });
 
-  it("hides owner-selected Ethereum launches only from discovery on that chain", () => {
+  it("hides owner-selected launches only from discovery on their chain", () => {
     expect(sorted(OWNER_HIDDEN_EXPLORE_IDENTITIES_V1.map(({ identity }) => identity))).toEqual(expect.arrayContaining(sorted([
       ethereumModuleRelease.lifecycleEvidence.canaryToken,
       ethereumModuleRelease.sdkLifecycleEvidence.canaryToken,
     ])));
     for (const hidden of OWNER_HIDDEN_EXPLORE_IDENTITIES_V1) {
-      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity })).toBe(false);
-      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity.toUpperCase() }, 1)).toBe(false);
-      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity }, 4663)).toBe(true);
+      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity })).toBe(hidden.chainId !== 1);
+      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity.toUpperCase() }, hidden.chainId)).toBe(false);
+      expect(isPublicExploreIdentityV1({ tokenAddress: hidden.identity }, hidden.chainId === 1 ? 4663 : 1)).toBe(true);
     }
     expect(isPublicExploreIdentityV1({ tokenAddress: "0x1111111111111111111111111111111111111111" }, 1)).toBe(true);
   });
