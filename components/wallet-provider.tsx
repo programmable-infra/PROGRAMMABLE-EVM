@@ -1707,14 +1707,15 @@ function PrivyWalletBridge({
       const revision = accountRevision;
       const networkRevision = chainRevision;
       const generation = walletSessionGenerationRef.current;
-      void Promise.all([provider.request({ method: "eth_accounts" }), provider.request({ method: "eth_chainId" })])
-        .then(([accounts, chainId]) => {
-          if (!isCurrent() || revision !== accountRevision || generation !== walletSessionGenerationRef.current) return;
-          accountsChanged(accounts);
-          // An account event or newer network event wins over this older read.
-          if (!networkSwitchPendingRef.current && generation === walletSessionGenerationRef.current
-            && networkRevision === chainRevision) chainChanged(chainId);
-        }).catch(() => { /* Never prompt from a background read. */ });
+      void provider.request({ method: "eth_accounts" }).then(accounts => {
+        if (isCurrent() && revision === accountRevision) accountsChanged(accounts);
+      }).catch(() => { /* Never prompt from a background read. */ });
+      void provider.request({ method: "eth_chainId" }).then(chainId => {
+        // Network reads must not hold up account updates. Newer events and
+        // explicit switches win over a read started before either one.
+        if (isCurrent() && !networkSwitchPendingRef.current && generation === walletSessionGenerationRef.current
+          && networkRevision === chainRevision) chainChanged(chainId);
+      }).catch(() => { /* Retain the last observed network until the next event. */ });
     };
     readSelectedAccount();
     document.addEventListener("visibilitychange", readSelectedAccount);
