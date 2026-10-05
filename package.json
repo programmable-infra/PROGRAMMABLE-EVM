@@ -279,6 +279,7 @@
     "esbuild": "0.28.1",
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.4",
+    "parse5": "^8.0.1",
     "typescript": "5.9.3",
     "vitest": "4.1.10"
   },

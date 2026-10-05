@@ -509,6 +509,74 @@ test("production observation uses the canonical domain without authentication or
   }
 });
 
+test("streamed token pages resolve completed React segments inside main without executing scripts", async () => {
+  const f = fixture(({ url, spec }) => {
+    if (!url.pathname.startsWith("/token/")) return;
+    const item = url.searchParams.get("chain") === "1" ? ethereumItem(1) : robinhoodItem();
+    const content = spec.text.match(/<main>([\s\S]*?)<\/main>/u)[1];
+    spec.text = '<html><body><main><!--$?--><template id="B:1"></template>' +
+      '<h1>Loading</h1><!--/$--></main><h1>Unrelated navigation</h1>' +
+      '<div hidden id="S:1"><template id="P:2"></template>' +
+      '<!--$?--><template id="B:3"></template><span>Loading</span><!--/$--></div>' +
+      `<div hidden id="S:2">${content}</div>` +
+      '<script>globalThis.releaseSmokeExecuted = true;$RS("S:2","P:2")</script>' +
+      '<script>$RC("B:1","S:1")</script><div hidden id="S:3"></div>' +
+      '<script>$RC("B:3","S:3")</script></body></html>';
+    assert.ok(spec.text.includes(`<h1>${item.name}</h1>`));
+  });
+  const result = await runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl }));
+  assert.deepEqual(result.chains.map(item => item.totalItems), [51, 1]);
+  assert.equal(globalThis.releaseSmokeExecuted, undefined);
+});
+
+test("the unified Explore backlink retains the requested token's chain-specific explorer identity", async () => {
+  const f = fixture(({ url, spec }) => {
+    if (url.pathname.startsWith("/token/")) spec.text = spec.text.replace(/href="\/explore\/(?:ethereum|robinhood)"/u, 'href="/explore"');
+  });
+  const result = await runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl }));
+  assert.equal(result.chains.length, 2);
+  const crossed = fixture(({ url, spec }) => {
+    if (url.pathname.startsWith("/token/") && url.searchParams.get("chain") === "1") {
+      spec.text = spec.text.replace('href="/explore/ethereum"', 'href="/explore"')
+        .replace("https://etherscan.io/token/", "https://robinhoodchain.blockscout.com/token/");
+    }
+  });
+  await assert.rejects(runIndexedWebsiteReadSmoke(input({ fetchImpl: crossed.fetchImpl })), /chain links/u);
+});
+
+test("current copy controls must match both the indexed address and chain when the Explorer button is absent", async () => {
+  function currentPage({ url, spec }, mismatch) {
+    if (!url.pathname.startsWith("/token/")) return;
+    const ethereum = url.searchParams.get("chain") === "1";
+    const item = ethereum ? ethereumItem(1) : robinhoodItem();
+    const address = mismatch === "address" ? ADDRESS(999) : item.tokenAddress;
+    const mark = ethereum !== (mismatch === "chain") ? '<svg role="img" aria-label="Ethereum"></svg>'
+      : '<img src="/brand/networks/robinhood-feather-white.svg" alt="Robinhood Chain">';
+    spec.text = `<main><h1>${item.name}</h1>${mark}<button title="${address}">Copy address</button>` +
+      '<a href="/explore">Explore</a></main>';
+  }
+  const f = fixture(observation => currentPage(observation));
+  assert.equal((await runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl }))).chains.length, 2);
+  for (const mismatch of ["address", "chain"]) {
+    const bad = fixture(observation => currentPage(observation, mismatch));
+    await assert.rejects(runIndexedWebsiteReadSmoke(input({ fetchImpl: bad.fetchImpl })), /chain links/u);
+  }
+});
+
+test("unresolved segments, script-only headings and invalid stream identities cannot satisfy token checks", async () => {
+  for (const markup of [
+    '<main></main><div hidden id="S:1"><h1>Ethereum 1</h1></div>',
+    '<main><script>const text = "<h1>Ethereum 1</h1>";</script></main>',
+    '<main><!--$?--><template id="B:1"></template><!--/$--></main><script>$RC("B:1","S:9")</script>',
+    '<main></main><div id="S:1"></div><div id="S:1"></div>',
+  ]) {
+    const f = fixture(({ url, spec }) => {
+      if (url.pathname.startsWith("/token/") && url.searchParams.get("chain") === "1") spec.text = markup;
+    });
+    await assert.rejects(runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl })), /indexed website/u);
+  }
+});
+
 test("staged smoke accepts historical and new projected identities without requiring an asset or market", async () => {
   for (const options of [{}, { primary: true, market: true }, { sourceVersion: "multi_role_v2", primary: true }]) {
     const row = projectedLaunch(options);
@@ -757,8 +825,8 @@ test("heading diagnostics bound and escape untrusted text while comparing full n
     assert.doesNotMatch(error.message, /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u);
     assert.ok(error.message.length < 4_000);
     const diagnostic = JSON.parse(error.message.split("; headingDiagnostic=")[1]);
-    assert.deepEqual(diagnostic.expectedName, { text: expectedName.slice(0, 256), truncated: true });
-    assert.deepEqual(diagnostic.actualHeading, { text: actualHeading.slice(0, 256), truncated: true });
+    assert.deepEqual(diagnostic.expectedName, { text: expectedName.replace(/\r\n?/gu, "\n").slice(0, 256), truncated: true });
+    assert.deepEqual(diagnostic.actualHeading, { text: actualHeading.replace(/\r\n?/gu, "\n").slice(0, 256), truncated: true });
     assert.deepEqual(diagnostic.expectedName, diagnostic.actualHeading);
     return true;
   });

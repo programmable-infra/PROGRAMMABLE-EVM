@@ -10,6 +10,7 @@ import addFormats from "ajv-formats";
 import { encodeAbiParameters, keccak256 } from "viem";
 
 import { readBoundedResponseText } from "./read-bounded-response.mjs";
+import { readRenderedMain } from "./read-rendered-main.mjs";
 import { verifyLiveVercelBinding } from "./perf/read-model-live-verifier.mjs";
 import { verifyProductionDeploymentBinding } from "./perf/read-model-post-promotion.mjs";
 import { canonicalJson } from "./perf/read-model-deploy-policy.mjs";
@@ -327,10 +328,11 @@ async function observeReads(input, target, headers, observedAt) {
     check(token.response.status === 200, "token page response");
     // Global navigation can intentionally link to the official token on another
     // chain. Chain isolation applies to the requested token's main content.
-    const main = /<main\b[^>]*>([\s\S]*?)<\/main>/iu.exec(token.text)?.[1];
+    const main = readRenderedMain(token.text);
     check(typeof main === "string", "token page main content");
     const heading = /<h1\b[^>]*>([\s\S]*?)<\/h1>/iu.exec(main)?.[1];
-    const expectedName = item.name?.trim() || (projectedItem(item) ? "Unnamed contract" : "Unnamed token");
+    const expectedName = (item.name?.trim() || (projectedItem(item) ? "Unnamed contract" : "Unnamed token"))
+      .replace(/\r\n?/gu, "\n");
     const actualHeading = heading === undefined ? null : htmlText(heading.replace(/<[^>]*>/gu, ""));
     if (!(heading && actualHeading === expectedName)) {
       // Public display text is untrusted. Keep failures bounded and on one log
@@ -343,8 +345,17 @@ async function observeReads(input, target, headers, observedAt) {
     }
     const anchors = [...main.matchAll(/<a\b[^>]*\bhref="([^"]+)"/giu)].map(match => htmlText(match[1]));
     const explorer = route.chainId === 1 ? "https://etherscan.io" : "https://robinhoodchain.blockscout.com";
-    check(anchors.some(href => same(href, `${explorer}/${projectedItem(item) ? "address" : "token"}/${item.tokenAddress}`)) &&
-      anchors.includes(`/explore/${route.slug}`), "token page chain links");
+    const explorerIdentity = anchors.some(href => same(href, `${explorer}/${projectedItem(item) ? "address" : "token"}/${item.tokenAddress}`));
+    // Current token pages expose the exact CA through Copy address and a chain
+    // logo instead of a permanent Explorer button. Both must agree with the
+    // independently verified catalog row; navigation alone is not identity.
+    const copiedIdentity = [...main.matchAll(/<button\b[^>]*\btitle="([^"]+)"[^>]*>([\s\S]*?)<\/button>/giu)]
+      .some(match => same(htmlText(match[1]), item.tokenAddress) &&
+        ["Copy address", "Copied"].includes(htmlText(match[2].replace(/<[^>]*>/gu, "")).trim()));
+    const chainMark = route.chainId === 1 ? /<svg\b[^>]*\baria-label="Ethereum"[^>]*>/iu.test(main)
+      : /<img\b[^>]*\balt="Robinhood Chain"[^>]*>/iu.test(main);
+    check((explorerIdentity || copiedIdentity && chainMark) &&
+      (anchors.includes(`/explore/${route.slug}`) || anchors.includes("/explore")), "token page chain links");
     for (const href of anchors) {
       // Only chain-specific destinations are in scope; project/social links may
       // use mailto or other schemes and are never fetched by this smoke.
