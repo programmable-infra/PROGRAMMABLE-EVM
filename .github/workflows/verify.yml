@@ -596,8 +596,10 @@ jobs:
       - name: Verify contract release bindings, forks, and late migration
         env:
           LATE_MIGRATION_FORK_RPC_URL: https://eth-mainnet.public.blastapi.io
-          FOUNDATION_RPC_URL: https://rpc.mainnet.chain.robinhood.com
-        run: node scripts/ci/contracts-ci.mjs release
+          FOUNDATION_RPC_URL: ${{ secrets.ROBINHOOD_FOUNDATION_FORK_RPC_URL }}
+        run: |
+          : "${FOUNDATION_RPC_URL:?Configure the funded Robinhood fork RPC secret}"
+          node scripts/ci/contracts-ci.mjs release
 
   contracts-analysis:
     name: Contracts static analysis
