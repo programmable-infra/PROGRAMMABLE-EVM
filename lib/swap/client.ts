@@ -100,20 +100,61 @@ export function parseSwapTokenDescriptor(value: unknown, expected: { address: st
   return row;
 }
 
+class SwapHttpError extends SwapUnavailableError {
+  constructor(message: string, code: string | undefined, readonly status: number) { super(message, code); }
+}
+
 async function jsonResponse(response: Response): Promise<unknown> {
-  if (response.redirected || response.headers.get("content-type")?.split(";", 1)[0] !== "application/json") throw new SwapUnavailableError("The swap service is temporarily unavailable. Try again.");
+  if (response.redirected) throw new SwapUnavailableError("The swap service is temporarily unavailable. Try again.");
+  if (response.headers.get("content-type")?.split(";", 1)[0] !== "application/json") {
+    if (!response.ok) throw new SwapHttpError("The swap service is temporarily unavailable. Try again.", undefined, response.status);
+    throw new SwapUnavailableError("The swap service is temporarily unavailable. Try again.");
+  }
   if (Number(response.headers.get("content-length") ?? 0) > 2_097_152) throw new SwapUnavailableError("The swap response is invalid.");
   const text = await response.text();
   if (new TextEncoder().encode(text).length > 2_097_152) throw new SwapUnavailableError("The swap response is invalid.");
   const body: unknown = JSON.parse(text);
-  if (!response.ok) throw new SwapUnavailableError(object(body) && typeof body.error === "string" && body.error.length <= 512 ? body.error : "The swap service is temporarily unavailable. Try again.", object(body) && typeof body.code === "string" ? body.code : undefined);
+  if (!response.ok) throw new SwapHttpError(object(body) && typeof body.error === "string" && body.error.length <= 512 ? body.error : "The swap service is temporarily unavailable. Try again.", object(body) && typeof body.code === "string" ? body.code : undefined, response.status);
   return body;
 }
+
+function waitForTokenRetry(milliseconds: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); signal?.removeEventListener("abort", abort); reject(signal?.reason); };
+    const timer = setTimeout(() => { signal?.removeEventListener("abort", abort); resolve(); }, milliseconds);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+// Retry only discovery reads, never wallet actions or transaction submission.
+// A short provider interruption must not leave a coin permanently untradeable
+// in an already-open tab. No polling continues after these two retries.
 export async function fetchSwapToken(input: { address: string; chainId?: SwapChainId; signal?: AbortSignal }): Promise<SwapTokenDescriptor> {
   requireValue(isAddress(input.address), "Enter a token contract address.");
   const query = new URLSearchParams({ address: input.address, chain: String(input.chainId ?? 4663) });
-  const response = await fetch(`/api/swap/token?${query}`, { cache: "no-store", credentials: "same-origin", redirect: "error", signal: input.signal });
-  return parseSwapTokenDescriptor(await jsonResponse(response), { ...input, chainId: input.chainId ?? 4663 });
+  for (let attempt = 0; ; attempt++) {
+    input.signal?.throwIfAborted();
+    let response: Response;
+    try {
+      response = await fetch(`/api/swap/token?${query}`, { cache: "no-store", credentials: "same-origin", redirect: "error", signal: input.signal });
+    } catch (error) {
+      if (input.signal?.aborted || !(error instanceof TypeError) || attempt >= 2) throw error;
+      await waitForTokenRetry(attempt === 0 ? 800 : 2_000, input.signal);
+      continue;
+    }
+    let body: unknown;
+    try { body = await jsonResponse(response); }
+    catch (error) {
+      const transient = error instanceof SwapHttpError && [408, 429, 500, 502, 503, 504].includes(error.status)
+        && ["SWAP_UNAVAILABLE", "ROUTE_UNAVAILABLE", "INDEX_UNAVAILABLE", "TOKEN_METADATA_UNAVAILABLE", "TRADE_ANALYSIS_PENDING"].includes(error.code);
+      if (!transient || input.signal?.aborted || attempt >= 2) throw error;
+      await waitForTokenRetry(attempt === 0 ? 800 : 2_000, input.signal);
+      continue;
+    }
+    input.signal?.throwIfAborted();
+    return parseSwapTokenDescriptor(body, { ...input, chainId: input.chainId ?? 4663 });
+  }
 }
 function seal(review: SwapReview, binding: Omit<SwapBinding, "state">): SwapReview {
   const value = Object.freeze(review);

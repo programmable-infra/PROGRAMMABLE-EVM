@@ -1,5 +1,6 @@
 import { resolveSwapToken } from "@/lib/server/swap/token";
 import { SwapUnavailableError, type SwapChainId } from "@/lib/swap/types";
+import { LaunchPlanTradeErrorV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,7 +12,12 @@ export async function GET(request: Request) {
   if (!["1", "4663"].includes(chain) || [...query.keys()].some(key => !["address", "token", "chain"].includes(key))) return json({ error: "Select Ethereum or Robinhood Chain.", code: "INVALID_REQUEST" }, 400);
   try { return json(await resolveSwapToken({ address, chainId: Number(chain) as SwapChainId })); }
   catch (error) {
+    // Log only public identity and our own error code. Provider errors can
+    // contain credential-bearing URLs and must never be printed or returned.
+    const code = error instanceof SwapUnavailableError || error instanceof LaunchPlanTradeErrorV1 ? error.code : "ROUTE_UNAVAILABLE";
+    console.warn("swap-token-lookup-failed", { chainId: Number(chain), token: /^0x[0-9a-f]{40}$/i.test(address) ? address.toLowerCase() : null, code });
     if (error instanceof SwapUnavailableError) return json({ error: error.message, code: error.code }, ["INVALID_ADDRESS", "INVALID_CHAIN", "NOT_PRIMARY_TOKEN"].includes(error.code) ? 400 : error.code === "TOKEN_NOT_FOUND" ? 404 : 503);
+    if (error instanceof LaunchPlanTradeErrorV1) return json({ error: error.message, code: error.code }, error.status);
     return json({ error: "The token’s trading route is temporarily unavailable. Try again.", code: "ROUTE_UNAVAILABLE" }, 503);
   }
 }
