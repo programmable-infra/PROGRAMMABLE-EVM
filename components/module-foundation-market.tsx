@@ -9,7 +9,8 @@ import { FoundationPoolDetails } from "./module-foundation-review";
 import { RobinhoodMarketView } from "./robinhood-market-view";
 import { TradeAssetBadge } from "./trade-asset-badge";
 import { TradeWalletButton } from "./responsive-trade-panel";
-import { displaySwapAmount } from "./swap-amount";
+import { displaySwapAmount, normalizeSwapAmountInput } from "./swap-amount";
+import { scheduleVisibleQuoteRefresh } from "./quote-refresh";
 import type { FoundationCreatorFees } from "@/lib/module-foundation/creator-fees";
 import { FOUNDATION_DEFAULT_IMAGE } from "@/lib/module-foundation/default-image";
 import type { RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
@@ -125,10 +126,7 @@ export function ModuleFoundationMarket(props: ModuleFoundationMarketProps) {
     // The transaction deadline can outlive a useful displayed price. Refresh the
     // observation every 30 seconds, and always before its executable expiry.
     const until = foundationTradeQuoteExpiresAt(review, currentQuote.receivedAt);
-    const timer = setTimeout(() => setQuoteRevision(value => value + 1), Math.max(0, until - Date.now()));
-    const visible = () => { if (document.visibilityState !== "hidden" && Date.now() >= until) setQuoteRevision(value => value + 1); };
-    document.addEventListener("visibilitychange", visible);
-    return () => { clearTimeout(timer); document.removeEventListener("visibilitychange", visible); };
+    return scheduleVisibleQuoteRefresh(until, () => setQuoteRevision(value => value + 1));
   }, [review, currentQuote, busy]);
 
   async function prepare(event: FormEvent) {
@@ -206,7 +204,7 @@ export function ModuleFoundationMarket(props: ModuleFoundationMarketProps) {
                 </div>
               </div>
               <div className={tradeStyles.amountRow}>
-                <input ref={input} className={tradeStyles.amountInput} id={`${fieldId}-amount`} name="amount" aria-label={`Amount of ${inputAsset.symbol} to ${draft.side}`} inputMode="decimal" autoComplete="off" placeholder="0" value={draft.amount} disabled={Boolean(busy) || waitingForConfirmation} aria-invalid={Boolean(amountError) || undefined} aria-describedby={amountError ? `${fieldId}-error` : displayBalance !== null ? `${fieldId}-balance` : undefined} onChange={event => { setDraft(value => ({ ...value, amount: event.target.value })); setAmountError(""); setError(""); setResult(null); }} />
+                <input ref={input} className={tradeStyles.amountInput} id={`${fieldId}-amount`} name="amount" aria-label={`Amount of ${inputAsset.symbol} to ${draft.side}`} inputMode="decimal" autoComplete="off" placeholder="0" value={draft.amount} maxLength={100} disabled={Boolean(busy) || waitingForConfirmation} aria-invalid={Boolean(amountError) || undefined} aria-describedby={amountError ? `${fieldId}-error` : displayBalance !== null ? `${fieldId}-balance` : undefined} onChange={event => { setDraft(value => ({ ...value, amount: normalizeSwapAmountInput(event.target.value) })); setAmountError(""); setError(""); setResult(null); }} />
                 <TradeAssetBadge symbol={inputAsset.symbol} native={inputAsset.address === "0x0000000000000000000000000000000000000000"} />
               </div>
             </div>

@@ -8,7 +8,8 @@ import { useWallet, type WalletTradeBalances } from "@/components/wallet-provide
 import type { SwapChainId, SwapReceipt, SwapReview, SwapSide, SwapTokenDescriptor } from "@/lib/swap/types";
 import type { PendingSwap, SwapWalletActions } from "@/lib/swap/client";
 import { walletChainIdsEqual } from "@/lib/wallet-chain-id";
-import { displaySwapAmount, maximumSwapInput, parseSwapAmount } from "./swap-amount";
+import { displaySwapAmount, maximumSwapInput, normalizeSwapAmountInput, parseSwapAmount } from "./swap-amount";
+import { scheduleVisibleQuoteRefresh } from "./quote-refresh";
 import { runSwapFlow } from "./swap-flow";
 import { TradeWalletButton } from "./responsive-trade-panel";
 import { TradeAssetBadge } from "./trade-asset-badge";
@@ -141,9 +142,8 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
 
   useEffect(() => {
     if (!review || busy || pending) return;
-    const duration = Math.max(0, Math.min(Number(review.expiresAt) * 1_000 - 5_000, (quotation?.receivedAt ?? 0) + 30_000) - Date.now());
-    const timer = setTimeout(() => setRevision(value => value + 1), duration);
-    return () => clearTimeout(timer);
+    const until = Math.min(Number(review.expiresAt) * 1_000 - 5_000, (quotation?.receivedAt ?? 0) + 30_000);
+    return scheduleVisibleQuoteRefresh(until, () => setRevision(value => value + 1));
   }, [review, quotation?.receivedAt, busy, pending]);
 
   function edit(change: () => void) {
@@ -288,7 +288,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
           </div>
           <div className={styles.amountRow}>
             <input ref={inputRef} className={styles.amountInput} id={`${id}-amount`} aria-label={`Amount of ${inputSymbol} to ${side}`} inputMode="decimal"
-              value={amount} onChange={event => edit(() => setAmount(event.target.value.replace(/,/g, ".")))} autoComplete="off" placeholder="0" disabled={locked}
+              value={amount} onChange={event => edit(() => setAmount(normalizeSwapAmountInput(event.target.value)))} autoComplete="off" placeholder="0" disabled={locked}
               maxLength={160} aria-invalid={Boolean(amount && (parsed === null || insufficient))} aria-describedby={displayError ? `${id}-error` : undefined} />
             <TradeAssetBadge symbol={inputSymbol} native={side === "buy"} />
           </div>
