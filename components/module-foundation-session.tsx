@@ -50,7 +50,8 @@ export async function loadFoundationSessionAvailability(signal: AbortSignal, tok
 export function useFoundationSession(token?: Address) {
   const walletContext = useWallet();
   const { wallet, authenticated, sessionReady, authReady, connecting, openingWallet, switchingNetwork, disconnecting, openWallet, switchNetwork, sendModuleModeTransaction } = walletContext;
-  const client = useMemo(() => createFoundationClient(), []);
+  // Batch independent reads without caching their answers. Wallet checks still use fresh chain state.
+  const client = useMemo(() => createFoundationClient({ batchRpc: true }), []);
   const targetKey = token?.toLowerCase() ?? "launch";
   const [envelopeState, setEnvelopeState] = useState<{ targetKey: string; refresh: number; value: FoundationAvailabilityEnvelope | null } | null>(null);
   const [refresh, setRefresh] = useState(0);
@@ -107,20 +108,30 @@ export function useFoundationSession(token?: Address) {
     chainId: 4663, chainName: "Robinhood Chain", reason: availabilityError ? "Launch availability could not be checked. Retry to keep working with this release." : envelope?.reason ?? undefined };
   const contextKey = `${account ?? "disconnected"}:${wallet?.chainId ?? "none"}:${authenticated}:${sessionReady}:${targetKey}:${envelope?.binding?.releaseDigest ?? "unavailable"}`;
   const currentContext = useRef(contextKey);
+  const authorityRequest = useRef<{ context: string; promise: Promise<FoundationAvailabilityEnvelope> } | null>(null);
   useLayoutEffect(() => { walletRef.current = walletSnapshot; sourceRef.current = envelope; currentContext.current = contextKey; }, [walletSnapshot, envelope, contextKey]);
   function assertCurrent(expectedAccount: Address, expectedContext = currentContext.current) {
     if (!mounted.current || expectedContext !== currentContext.current) throw new Error("Your wallet or launch version changed. Review again.");
     assertModuleModeWalletUnchanged(walletRef.current, expectedAccount);
   }
+  function readCurrentAuthority() {
+    const context = currentContext.current;
+    if (authorityRequest.current?.context === context) return authorityRequest.current.promise;
+    const promise = fetchFoundationAvailability(undefined, token).finally(() => {
+      if (authorityRequest.current?.promise === promise) authorityRequest.current = null;
+    });
+    authorityRequest.current = { context, promise };
+    return promise;
+  }
   async function resolveAuthority() {
-    const current = await fetchFoundationAvailability(undefined, token);
+    const current = await readCurrentAuthority();
     if (current.providerDisagreement) throw new FoundationProviderDisagreementError();
     if (!current.available || !current.binding) throw new Error(current.reason ?? "This release is unavailable.");
     if (current.binding.releaseDigest !== sourceRef.current?.binding?.releaseDigest) throw new Error("The authorized launch version changed. Reload the release and review again.");
     return current.binding;
   }
   async function resolveCatalog() {
-    const current = await fetchFoundationAvailability(undefined, token);
+    const current = await readCurrentAuthority();
     if (current.providerDisagreement) throw new FoundationProviderDisagreementError();
     if (!current.available || !current.binding || current.binding.releaseDigest !== sourceRef.current?.binding?.releaseDigest) throw new Error("The admitted module catalog changed. Reload and review again.");
     return bindFoundationCatalogV1(current.catalog.document, current.catalog.authority);

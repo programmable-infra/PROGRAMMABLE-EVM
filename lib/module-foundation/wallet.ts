@@ -81,17 +81,21 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
   binding.state = "validating";
   try {
     // This resolver reads the actual accepted server release; a public JSON approval field is insufficient.
-    const current = await binding.resolveAuthority(), original = binding.sequence.binding;
+    const sequence = binding.sequence;
+    const needsCatalog = sequence.kind === "module-action" || (sequence.kind === "launch" && sequence.parameters.modules.length > 0)
+      || (sequence.kind === "trade" && Boolean(sequence.moduleReview?.selections.length));
+    // The session shares only this in-flight authority/catalog read, never a settled approval.
+    const [current, catalog] = await Promise.all([binding.resolveAuthority(), needsCatalog ? binding.resolveCatalog?.() : undefined]);
+    const original = sequence.binding;
     if (current.releaseDigest !== original.releaseDigest || current.sourceCommit !== original.sourceCommit || current.startBlock !== original.startBlock
       || foundationFactoryVersion(current) !== foundationFactoryVersion(original) || current.lpCustodyId !== original.lpCustodyId
       || getAddress(current.factory.address) !== getAddress(original.factory.address)
       || current.factory.runtimeCodeHash !== original.factory.runtimeCodeHash
       || getAddress(current.hookDeployer.address) !== getAddress(original.hookDeployer.address)
       || current.hookDeployer.runtimeCodeHash !== original.hookDeployer.runtimeCodeHash) throw new Error("The authorized source release changed. Review again.");
-    const sequence = binding.sequence;
     if (sequence.kind === "module-action") {
       if (!binding.resolveCatalog) throw new Error("The current module admission cannot be checked. Review again.");
-      await revalidateFoundationModuleActionV1(sequence, { client: binding.client, catalog: await binding.resolveCatalog(),
+      await revalidateFoundationModuleActionV1(sequence, { client: binding.client, catalog: catalog!,
         binding: current, account, resolveRole: binding.resolveRole });
       const transaction = await estimateCurrentWalletStep(value, binding);
       binding.state = "ready";
@@ -107,7 +111,7 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
           token: { chainId: 4663, address: sequence.result.token, decimals: 18 },
           quote: { chainId: 4663, address: sequence.parameters.quote, decimals: sequence.parameters.quoteDecimals } },
         components: { factory: current.factory.address, ...Object.fromEntries(Object.entries(FOUNDATION_INFRASTRUCTURE).map(([role, pin]) => [role, pin.address])) } } });
-      decodeFoundationLaunchSelectionsV1({ catalog: await binding.resolveCatalog(), calldata: sequence.steps.at(-1)!.transaction.data,
+      decodeFoundationLaunchSelectionsV1({ catalog: catalog!, calldata: sequence.steps.at(-1)!.transaction.data,
         packageIds: sequence.modulePackageIds, context: assets.context });
     }
     if (sequence.kind !== "launch") await assertFoundationPool(binding.client, current, sequence.pool, checkpoint.blockNumber);
@@ -117,7 +121,7 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
         || BigInt(sequence.moduleReview.selections.length) !== count))) throw new Error("Verify this pool's current module admissions before trading.");
       if (count > 0n) {
         const runtime = await readFoundationActionRuntimeV1({ client: binding.client, binding: current, pool: sequence.pool,
-          catalog: await binding.resolveCatalog!(), selections: sequence.moduleReview!.selections, context: sequence.moduleReview!.context });
+          catalog: catalog ?? await binding.resolveCatalog!(), selections: sequence.moduleReview!.selections, context: sequence.moduleReview!.context });
         checkpoint = runtime.checkpoint;
       }
     }

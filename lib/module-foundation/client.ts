@@ -316,14 +316,18 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
   modules: readonly FoundationContractModule[]; tokenSalt: Hex; slippageBps: number; signal?: AbortSignal; ethFunding?: FoundationEthFunding;
 }) {
   const { client, binding } = input, account = getAddress(input.account), factoryAbi = foundationFactoryAbiFor(binding);
+  input.signal?.throwIfAborted();
   const modulePackageIds = readFoundationModulePackages(input.metadata.socialData, input.modules.length);
   if (input.modules.length > 0 && !modulePackageIds) throw new Error("Bind the original module source identities into the coin metadata before preparing.");
   const checkpoint = await assertFoundationInfrastructure(client, binding);
+  input.signal?.throwIfAborted();
   const quote = await readFoundationQuote(client, input.quote, account, checkpoint.blockNumber);
+  input.signal?.throwIfAborted();
   const additionalQuoteAmount = foundationParseAmount(input.additionalLiquidity, quote.decimals);
   const initialBuyQuoteAmount = foundationParseAmount(input.initialBuy, quote.decimals);
   const startPrice = parseFoundationStartPrice(input.startPrice, quote);
   const priceBlock = await client.getBlock({ blockNumber: BigInt(startPrice.checkpoint.number) });
+  input.signal?.throwIfAborted();
   if (priceBlock.hash !== startPrice.checkpoint.hash || priceBlock.timestamp !== BigInt(startPrice.checkpoint.timestamp)
     || BigInt(startPrice.checkpoint.number) > checkpoint.blockNumber) throw new Error("The starting price changed with chain state. Review again.");
   const funding = additionalQuoteAmount + initialBuyQuoteAmount;
@@ -334,9 +338,11 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
     if (ethFunding.quoteAmount !== funding || ethFunding.maximumEth <= 0n || ethFunding.maximumEth > FOUNDATION_INT128_MAX) throw new Error("The ETH funding amount does not match the launch.");
   }
   const nativeFunding = ethFunding ? [] : await prepareFoundationNativeFunding({ client, account, quote, amount: funding, blockNumber: checkpoint.blockNumber });
+  input.signal?.throwIfAborted();
   if (!Number.isInteger(input.slippageBps) || input.slippageBps < 1 || input.slippageBps > 1_000) throw new Error("Choose slippage between 0.01% and 10%.");
   const token = await client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "predictTokenAddress",
     args: [account, input.tokenSalt, input.metadata], blockNumber: checkpoint.blockNumber });
+  input.signal?.throwIfAborted();
   const moduleAssetPins = readFoundationAssetPins(input.metadata.socialData);
   if (moduleAssetPins.some(pin => [token, quote.address].some(base => getAddress(pin[0]) === getAddress(base)))
     || (moduleAssetPins.length > 0 && input.modules.length === 0)) throw new Error("Only additional module assets can be bound to this launch.");
@@ -350,6 +356,7 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
     additionalQuoteAmount, initialBuyQuoteAmount, initialBuyMinimumTokenAmount: initialBuyQuoteAmount > 0n ? 1n : 0n,
     deadline: checkpoint.timestamp + 300n, tokenSalt: input.tokenSalt, hookSalt: FOUNDATION_ZERO_HASH, modules: input.modules };
   const initCodeHash = await readFoundationHookPrediction(client, binding, account, token, p, "hookInitCodeHash", checkpoint.blockNumber);
+  input.signal?.throwIfAborted();
   const hook = await mineFoundationHook(binding.hookDeployer.address, initCodeHash, input.signal);
   p.hookSalt = hook.salt;
   const key = foundationPoolKey({ token, quote: quote.address, hook: hook.address }), poolId = foundationPoolId(key);
@@ -368,6 +375,7 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
     ...moduleAssetPins.map(([asset]) => ({ token: asset, account, minimumDelta: 0n })),
   ];
   let simulation = await simulateFoundationSequence(client, [...nativeFunding, ...approvals, launchStep()], checkpoint, checks());
+  input.signal?.throwIfAborted();
   let result: FoundationLaunchRecord = decodeFoundationLaunchResult(binding, simulation.results.at(-1)!.data);
   if (initialBuyQuoteAmount > 0n) {
     p.initialBuyMinimumTokenAmount = result.initialBuyTokenAmount * BigInt(10_000 - input.slippageBps) / 10_000n;
@@ -378,15 +386,18 @@ export async function prepareFoundationLaunch(input: FoundationCreatorFees & {
     }
   }
   if (foundationFactoryVersion(binding) !== "v1") {
+    input.signal?.throwIfAborted();
     const checked = await simulateFoundationV2Launch({ client, binding, parameters: p, steps: [...nativeFunding, ...approvals, launchStep()], checkpoint,
       checks: checks(), expected: { token, hook: hook.address, poolId }, price });
     result = checked.result; simulation = checked.simulation;
   }
+  input.signal?.throwIfAborted();
   if (getAddress(result.token) !== getAddress(token) || getAddress(result.hook) !== getAddress(hook.address)
     || result.poolId !== poolId || result.basePositionId === 0n || result.initialBuyTokenAmount < p.initialBuyMinimumTokenAmount
     || result.initialBuyTokenAmount !== simulation.balances[1].delta
     || (additionalQuoteAmount > 0n) !== (result.creatorPositionId > 0n)) throw new Error("The simulated launch does not match its plan.");
   if (ethFunding || nativeFunding.length) await assertFoundationNativeBalance(client, account, simulation.steps, checkpoint.blockNumber);
+  input.signal?.throwIfAborted();
   // Mining and simulation can consume the reference lifetime. Never present an expired review.
   parseFoundationStartPrice(startPrice, quote);
   const priceExpiry = BigInt(startPrice.price.validUntil);

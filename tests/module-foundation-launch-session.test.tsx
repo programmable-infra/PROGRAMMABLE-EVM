@@ -40,8 +40,22 @@ async function prepareNewDraft() {
 describe("starting a new coin after a saved result", () => {
   it("allows a new draft and does not acknowledge or submit anything on render", () => {
     expect(fixture.builder!.submissionBlocked).toBeUndefined();
+    expect(fixture.builder!.onWarmLaunch).toBeUndefined();
     expect(acknowledgeResult).not.toHaveBeenCalled();
     expect(resolveAuthority).not.toHaveBeenCalled();
+  });
+
+  it("prepares in the background only without a saved result and honours cancellation before reads", async () => {
+    fixture.session.resolution = null;
+    renderToStaticMarkup(<ModuleFoundationLaunchHost />);
+    const controller = new AbortController(); controller.abort();
+    await expect(fixture.builder!.onWarmLaunch!({ ...draft, image: FOUNDATION_DEFAULT_IMAGE }, controller.signal)).rejects.toThrow();
+    expect(acknowledgeResult).not.toHaveBeenCalled();
+    expect(resolveAuthority).not.toHaveBeenCalled();
+    const active = new AbortController();
+    await expect(fixture.builder!.onWarmLaunch!({ ...draft, image: FOUNDATION_DEFAULT_IMAGE }, active.signal)).rejects.toThrow("Fixture stops before network preparation");
+    expect(acknowledgeResult).not.toHaveBeenCalled();
+    expect(resolveAuthority).toHaveBeenCalledOnce();
   });
 
   it("acknowledges the exact displayed result only when reviewing and preserves the current draft", async () => {

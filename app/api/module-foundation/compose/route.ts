@@ -88,7 +88,9 @@ export async function POST(request: Request): Promise<NextResponse> {
     });
     foundationRequire(new Set(selected.map(({ entry }) => entry.runtime.descriptor.moduleId)).size === selected.length,
       "FOUNDATION_MODULE_DUPLICATE", "Choose each module identity once.");
-    const client = createFoundationClient(), checkpoint = await assertFoundationInfrastructure(client, binding);
+    request.signal.throwIfAborted();
+    const client = createFoundationClient({ batchRpc: true }), checkpoint = await assertFoundationInfrastructure(client, binding);
+    request.signal.throwIfAborted();
     const maximumEth = foundationParseAmount(draft.initialBuy, 18);
     if (maximumEth > 0n) await assertFoundationAtomicEth(client, binding, checkpoint.blockNumber);
     const ethFunding = maximumEth > 0n ? await readFoundationEthFunding(getAddress(draft.quoteAsset), maximumEth) : undefined;

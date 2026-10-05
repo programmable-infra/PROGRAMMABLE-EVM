@@ -132,26 +132,31 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     // The builder owns custom lookups and discards results from an older wallet context.
     return asset;
   }
-  async function prepare(draft: FoundationLaunchDraft): Promise<FoundationLaunchReview> {
+  async function prepare(draft: FoundationLaunchDraft, signal?: AbortSignal): Promise<FoundationLaunchReview> {
     const account = session.account;
     if (!account) throw new Error("Connect your wallet to prepare the launch.");
-    const context = session.contextKey; session.assertCurrent(account, context);
+    const context = session.contextKey;
+    const assertCurrent = () => { signal?.throwIfAborted(); session.assertCurrent(account, context); };
+    assertCurrent();
     if (session.preparationBlocked) throw new Error(session.preparationBlocked);
     // Reviewing a new draft acknowledges only the completed result currently shown.
     // Keep the draft mounted; the result store still enforces its exact ID and wallet lock.
     if (session.resolution) {
+      if (signal) throw new Error("Review the previous launch before preparing another coin.");
       await session.acknowledgeResult(session.resolution.operationId, false);
       session.assertCurrent(account, context);
     }
     if (!isFoundationDefaultImage(draft.image) && uploads.current.get(`${account.toLowerCase()}:${draft.image.url}`) !== draft.image.sha256) throw new Error("Choose and upload the exact coin image for this wallet before preparing.");
     return retryFoundationReadOnlyPreparation(async () => {
+      assertCurrent();
       const binding = await session.resolveAuthority();
+      assertCurrent();
       const creatorFees = foundationCreatorFeeFields(draft);
       const feeRates = foundationCreatorFeeRates(creatorFees);
       if (binding.factoryVersion !== "v3" && feeRates.creatorBuyFeeBps !== feeRates.creatorSellFeeBps) throw new Error("Independent buy and sell fees are not live yet.");
       const tokenSalt = toHex(crypto.getRandomValues(new Uint8Array(32)));
       const response = await fetch("/api/module-foundation/compose", { method: "POST", credentials: "same-origin", redirect: "error",
-        headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account, releaseDigest: binding.releaseDigest, tokenSalt, draft, launchFlow: "single-eth-v1" }) });
+        signal, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ account, releaseDigest: binding.releaseDigest, tokenSalt, draft, launchFlow: "single-eth-v1" }) });
       const composition = await response.json() as { error?: string; code?: string; releaseDigest: Hex; token: Address; modules: FoundationContractModule[];
         moduleAssetPins: unknown; metadata: unknown; startPrice: FoundationStartPrice; ethFunding: { maximumEth: string; quoteAmount: string; path: FoundationFundingHop[] } | null };
       if (response.status === 503 && composition.code === "MODULE_INDEX_PROVIDER_DISAGREEMENT") throw new FoundationProviderDisagreementError();
@@ -160,15 +165,15 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
       const metadata = foundationMetadata({ ...draft, imageURI: draft.image.url,
         modulePackageIds: draft.modules.map(item => item.id as Hex), moduleAssetPins });
       if (nativeCanonicalJson(nativeJson(composition.metadata)) !== nativeCanonicalJson(metadata)) throw new Error("The coin metadata changed. Review again.");
-      session.assertCurrent(account, context);
+      assertCurrent();
       const maximumEth = foundationParseAmount(draft.initialBuy, 18);
       const ethFunding = composition.ethFunding ? { ...composition.ethFunding, maximumEth: BigInt(composition.ethFunding.maximumEth), quoteAmount: BigInt(composition.ethFunding.quoteAmount) } : undefined;
       if ((maximumEth > 0n) !== Boolean(ethFunding) || (ethFunding && ethFunding.maximumEth !== maximumEth)) throw new Error("The ETH spending amount changed. Create the launch again.");
       const sequence = await prepareFoundationLaunch({ client: session.client, binding, account, tokenSalt,
         metadata, quote: draft.quoteAsset,
         startPrice: composition.startPrice, initialBuy: ethFunding ? formatUnits(ethFunding.quoteAmount, composition.startPrice.decimals) : "0", additionalLiquidity: "0", ethFunding,
-        ...creatorFees, modules: composition.modules, slippageBps: 100 });
-      session.assertCurrent(account, context);
+        ...creatorFees, modules: composition.modules, slippageBps: 100, signal });
+      assertCurrent();
       if (sequence.steps.length !== 1 || sequence.steps[0].kind !== "launch") throw new Error("This launch could not be prepared as one transaction.");
       if (getAddress(composition.token) !== getAddress(sequence.result.token)) throw new Error("The source-bound coin address changed. Review again.");
       const quote: FoundationQuoteAsset = { address: sequence.quote.address, chainId: 4663, name: sequence.quote.name,
@@ -197,7 +202,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
         transactions: sequence.steps.map(foundationStepSummary), notes: ["The coin launch and first buy use one transaction.",
           "The starting market cap is set automatically to approximately $5,000. This is a valuation, not a deposit."] };
       prepared.current.set(review, sequence); return review;
-    }, () => session.assertCurrent(account, context));
+    }, assertCurrent);
   }
   async function resultFrom(outcome: FoundationExecutionResult): Promise<FoundationTransactionResult> {
     if (!outcome.receipt || outcome.receipt.status !== "success" || outcome.sequence.kind !== "launch"
@@ -237,6 +242,7 @@ export function ModuleFoundationLaunchHost({ layout = "form" }: { layout?: "form
     <ModuleFoundationBuilder key={session.resultGeneration} layout={layout} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
+    onWarmLaunch={session.account && !session.resolution && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}
     onPrepareLaunch={prepare} onConfirmLaunch={async review => { const sequence = prepared.current.get(review);
       if (!sequence) throw new Error("Prepare this launch again with your current wallet."); session.assertCurrent(sequence.account, review.contextKey);
       launching.current = true;
