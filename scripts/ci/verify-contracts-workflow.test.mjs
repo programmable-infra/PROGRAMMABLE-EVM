@@ -64,7 +64,7 @@ test("contract test partitions and integrations consume only the complete build 
   }
   const upload = step(jobs["contracts-build"], "Preserve this run's complete compiler outputs");
   assert.equal(step(jobs["contracts-release"], "Verify contract release bindings, forks, and late migration").env.FOUNDATION_RPC_URL,
-    "https://rpc.mainnet.chain.robinhood.com");
+    "https://rpc-robinhood.blockmachine.io");
   assert.equal(upload.with.name, "contracts-build-${{ github.run_id }}-${{ github.run_attempt }}");
   assert.equal(upload.with.path.trim(), "contracts/out\ncontracts/cache");
   assert.equal(upload.with["if-no-files-found"], "error");
