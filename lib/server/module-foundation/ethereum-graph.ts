@@ -1,4 +1,6 @@
 import { assertFoundationEthereumTransaction } from "@/lib/module-foundation/ethereum-graph-builder";
+import { readFoundationMinedCall } from "@/lib/module-foundation/mined-call";
+import { decodeFoundationEthereumTransaction } from "@/lib/module-foundation/ethereum-graph";
 import "server-only";
 import { getAddress, keccak256, type PublicClient } from "viem";
 import { hydrateLaunchStampAnchor, type LaunchStampAnchor } from "@/lib/alchemy/launch-stamp.server";
@@ -30,9 +32,13 @@ export async function readFoundationEthereumGraphLaunch(input: {
   const tx = await client.getTransaction({ hash: anchor.transactionHash });
   if (tx.blockNumber !== anchor.blockNumber || !tx.blockHash || !same(tx.blockHash, anchor.blockHash)
     || tx.transactionIndex !== anchor.transactionIndex) throw new Error("The module transaction is not in the stamped block.");
+  const launchCall = await readFoundationMinedCall(client, tx, {
+    account: hydrated.launchStampProvenance.launchWallet, target: getAddress(ethereum.canonicalStamp.router.address),
+    accepts(call) { try { return same(decodeFoundationEthereumTransaction(call).token, anchor.token); } catch { return false; } },
+  });
   const candidate = decodeFoundationEthereumGraphLaunch({ source, provenance: hydrated.launchStampProvenance,
-    transaction: { hash: tx.hash, from: tx.from, to: tx.to, data: tx.input, value: tx.value } });
-  await assertFoundationEthereumTransaction({ source, transaction: { from: tx.from, to: tx.to!, data: tx.input, value: tx.value }, signal });
+    transaction: { hash: tx.hash, ...launchCall } });
+  await assertFoundationEthereumTransaction({ source, transaction: launchCall, signal });
   const blockNumber = anchor.blockNumber, address = candidate.engine;
   const [implementationCode, proxyCode, implementation, implementationHash, graphFactory, launchWallet, initialized, parametersHash, result] = await Promise.all([
     client.getCode({ address: source.implementation.address, blockNumber }),
@@ -50,7 +56,7 @@ export async function readFoundationEthereumGraphLaunch(input: {
     || !same(keccak256(proxyCode), source.proxyRuntimeCodeHash)
     || !same(implementation, source.implementation.address) || !same(implementationHash, source.implementation.runtimeCodeHash)
     || !same(graphFactory, ethereum.canonicalStamp.graphFactory.address)
-    || !same(launchWallet, tx.from) || !initialized || !same(parametersHash, candidate.parametersHash)
+    || !same(launchWallet, launchCall.from) || !initialized || !same(parametersHash, candidate.parametersHash)
     || !same(result.token, candidate.token) || !same(result.hook, candidate.hook) || !same(result.poolId, anchor.poolId)) {
     throw new Error("The module launch account differs from the admitted source or stamped settings.");
   }

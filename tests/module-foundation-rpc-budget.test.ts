@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { foundationMainnetRpcs } from "@/lib/server/module-foundation/rpc";
+import { foundationMainnetReadClient, foundationMainnetRpcs } from "@/lib/server/module-foundation/rpc";
 import { TradeRpcExecutionRevertedV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
+import { BaseError, ContractFunctionRevertedError, parseAbi } from "viem";
 
 const fixtures = vi.hoisted(() => ({ version: 0 }));
 vi.mock("server-only", () => ({}));
@@ -12,6 +13,18 @@ const ok = () => Response.json({ jsonrpc: "2.0", id: 1, result: "0x01" });
 describe("Ethereum quote RPC request budget", () => {
   beforeEach(() => { fixtures.version++; vi.useFakeTimers(); vi.setSystemTime(1_800_000_000_000); });
   afterEach(() => vi.useRealTimers());
+
+  it("preserves revert data in the viem adapter without additional RPC retries", async () => {
+    const rpc = vi.fn(async () => { throw new TradeRpcExecutionRevertedV1("0x12345678"); });
+    const client = foundationMainnetReadClient(rpc);
+    const error = await client.readContract({ address: "0x1111111111111111111111111111111111111111",
+      abi: parseAbi(["function ownerOf(uint256) view returns (address)"]), functionName: "ownerOf", args: [1n] }).catch(error => error);
+    expect(error).toBeInstanceOf(BaseError);
+    const reverted = error.walk((cause: Error) => cause instanceof ContractFunctionRevertedError);
+    expect(reverted).toBeInstanceOf(ContractFunctionRevertedError);
+    expect(reverted.raw).toBe("0x12345678");
+    expect(rpc).toHaveBeenCalledTimes(1);
+  });
 
   it("paces concurrent contexts together and keeps independent providers parallel", async () => {
     const sent: { url: string; at: number }[] = [];

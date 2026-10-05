@@ -1,4 +1,5 @@
 import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
+import { readFoundationMinedCall } from "./mined-call";
 import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import { foundationClientProfile } from "./chains";
 import { foundationCreatorFeeFields, foundationCreatorFeeRates, foundationCreatorFeesEqual } from "./creator-fees";
@@ -331,10 +332,14 @@ export async function verifyFoundationLaunchReceipt(input: {
   const [receipt, transaction] = await Promise.all([
     client.getTransactionReceipt({ hash: transactionHash }), client.getTransaction({ hash: transactionHash }),
   ]);
+  const launchCall = binding.ethereumGraph ? await readFoundationMinedCall(client, transaction, {
+    account: planned.from, target: planned.to,
+    accepts(call) { return sameHex(call.data, planned.data) && call.value === planned.value; },
+  }) : { from: transaction.from, to: transaction.to, data: transaction.input, value: transaction.value };
   if (receipt.status !== "success" || !sameHex(receipt.transactionHash, transactionHash) || !sameHex(transaction.hash, transactionHash)
-    || !receipt.to || !transaction.to || !sameAddress(receipt.to, transactionTarget) || !sameAddress(transaction.to, planned.to)
-    || !sameAddress(receipt.from, planned.from) || !sameAddress(transaction.from, planned.from)
-    || !sameHex(transaction.input, planned.data) || transaction.value !== planned.value
+    || !receipt.to || !transaction.to || !sameAddress(receipt.to, transaction.to) || !sameAddress(receipt.from, transaction.from)
+    || !launchCall.to || !sameAddress(launchCall.to, planned.to) || !sameAddress(launchCall.from, planned.from)
+    || !sameHex(launchCall.data, planned.data) || launchCall.value !== planned.value
     || transaction.blockNumber !== receipt.blockNumber || !transaction.blockHash || !sameHex(transaction.blockHash, receipt.blockHash)
     || transaction.transactionIndex !== receipt.transactionIndex) {
     throw new Error("The mined transaction does not match the expected factory launch.");

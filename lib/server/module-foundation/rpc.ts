@@ -1,10 +1,26 @@
 import "server-only";
-import type { Hex } from "viem";
+import { createPublicClient, custom, type Hex } from "viem";
+import { mainnet } from "viem/chains";
 import { productionMainnetRpcPair } from "@/lib/onchain/website-rpc-providers.server";
 import { TradeRpcExecutionRevertedV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 
 const nextRequest = new Map<string, number>();
 const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
+
+/** Preserve EVM reverts when adapting the paced reader to viem. */
+export function foundationMainnetReadClient(rpc: TradeRpcV1) {
+  return createPublicClient({ chain: mainnet, transport: custom({
+    async request({ method, params }) {
+      try { return await rpc(method, params ?? []); }
+      catch (error) {
+        if (error instanceof TradeRpcExecutionRevertedV1) {
+          throw Object.assign(new Error("execution reverted"), { code: 3, data: error.data });
+        }
+        throw error;
+      }
+    },
+  }, { retryCount: 0 }) });
+}
 
 /** Share the request budget across quote contexts in this server instance.
  * Leave capacity for the website's other reads on the same provider account. */

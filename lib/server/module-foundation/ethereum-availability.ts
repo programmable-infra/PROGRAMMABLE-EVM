@@ -2,8 +2,7 @@ import "server-only";
 import { getAddress, keccak256, type Address } from "viem";
 import { ETHEREUM_MODULE_BINDING, ETHEREUM_MODULE_SOURCE } from "@/lib/module-foundation/ethereum-release";
 import { FOUNDATION_AVAILABILITY_SCHEMA_V5, unavailableFoundation } from "@/lib/module-foundation/availability";
-import { createFoundationClient } from "@/lib/module-foundation/client";
-import { productionMainnetRpcPair } from "@/lib/onchain/website-rpc-providers.server";
+import { foundationMainnetReadClient, foundationMainnetRpcs } from "./rpc";
 import { getOnchainDeployment } from "@/lib/onchain/config";
 import { readFinalizedRouterCustomIdentitySnapshotCoreV1 } from "@/lib/alchemy/router-custom-public.server";
 import { readFoundationEthereumGraphLaunch } from "./ethereum-graph";
@@ -21,8 +20,9 @@ export function readEthereumFoundationAvailability(token?: Address): Promise<unk
   return value;
 }
 async function current(token?: Address) {
-  const pair = productionMainnetRpcPair();
-  const clients = [pair.primary.url, pair.secondary.url].map(url => createFoundationClient({ chainId: 1, rpcUrls: [url], batchRpc: true }));
+  // Share the existing per-provider budget with quotes instead of sending a
+  // burst of archive reads every time a token's authority is checked.
+  const clients = foundationMainnetRpcs().map(foundationMainnetReadClient);
   const heads = await Promise.all(clients.map(async client => {
     const [chainId, head] = await Promise.all([client.getChainId(), client.getBlock({ blockTag: "finalized" })]);
     if (chainId !== 1) throw new Error("The module RPC is not Ethereum.");
