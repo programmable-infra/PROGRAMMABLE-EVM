@@ -2,7 +2,7 @@ import { decodeEventLog, getAbiItem, getAddress, keccak256, parseAbi, stringToHe
 import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import { foundationFactoryV2Abi, foundationFactoryV3Abi } from "@/lib/module-foundation/abi";
 import { foundationActionRuntimeAbiV1 } from "@/lib/module-foundation/action-runtime";
-import { discoverFoundationLaunch } from "@/lib/module-foundation/discovery";
+import { discoverFoundationLaunch, FOUNDATION_DISCOVERY_MAX_BLOCKS } from "@/lib/module-foundation/discovery";
 import { hashFoundationModuleDescriptorV1 } from "@/lib/module-foundation/manifest";
 import { foundationBindingChainId } from "@/lib/module-foundation/chains";
 import type { FoundationDeploymentBinding } from "@/lib/module-foundation/protocol";
@@ -17,6 +17,7 @@ const launchedV2 = getAbiItem({ abi: foundationFactoryV2Abi, name: "FoundationLa
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const json = (value: unknown) => JSON.stringify(value, (_, item) => typeof item === "bigint" ? item.toString() : item);
 export const ECONOMIC_AUTOMATIC_FAMILIES = ["buyback-burn", "dip-buyback", "lp-rewards", "full-range-lp", "buyer-rewards", "nth-buy-pot", "king-of-the-hill"] as const;
+export const ECONOMIC_DISCOVERY_MAX_BLOCKS = FOUNDATION_DISCOVERY_MAX_BLOCKS;
 export interface AutomaticModuleAdmission {
   family: typeof ECONOMIC_AUTOMATIC_FAMILIES[number]; factory: Address; factoryCodeHash: Hex; moduleCodeHash: Hex; descriptorHash: Hex;
 }
@@ -75,12 +76,14 @@ async function targetsForCandidate(client: PublicClient, original: FoundationDep
  * agree before registration; a website list or a forged ModuleBound log is never authority. */
 export async function discoverEconomicTargets(input: {
   clients: readonly [PublicClient, PublicClient]; binding: FoundationDeploymentBinding;
-  admissions: readonly AutomaticModuleAdmission[]; position: DiscoveryPosition; toBlock: bigint;
+  admissions: readonly AutomaticModuleAdmission[]; position: DiscoveryPosition; toBlock: bigint; maxLaunches?: number;
 }) {
   const { clients, binding, admissions, position, toBlock } = input;
+  const maxLaunches = input.maxLaunches ?? 8;
   const chainId = foundationBindingChainId(binding), fromBlock = BigInt(position.block);
-  if (!["v2", "v3"].includes(binding.factoryVersion ?? "") || fromBlock < binding.startBlock || toBlock < fromBlock || toBlock - fromBlock >= 1000n
+  if (!["v2", "v3"].includes(binding.factoryVersion ?? "") || fromBlock < binding.startBlock || toBlock < fromBlock || toBlock - fromBlock >= ECONOMIC_DISCOVERY_MAX_BLOCKS
     || !Number.isSafeInteger(position.logIndex) || position.logIndex < -1 || admissions.length > 128
+    || !Number.isInteger(maxLaunches) || maxLaunches < 1 || maxLaunches > 8
     || admissions.some(item => !ECONOMIC_AUTOMATIC_FAMILIES.includes(item.family))) throw Error("Invalid discovery window or admission.");
   if (!(await Promise.all(clients.map(client => client.getChainId()))).every(id => id === chainId)) throw Error("Discovery RPC chain mismatch.");
   const address = binding.ethereumGraph ? getAddress(ethereum.canonicalStamp.router.address) : binding.factory.address;
@@ -104,7 +107,7 @@ export async function discoverEconomicTargets(input: {
       .sort((a, b) => a.blockNumber === b.blockNumber ? a.logIndex - b.logIndex : a.blockNumber < b.blockNumber ? -1 : 1);
   }));
   if (json(pages[0]) !== json(pages[1])) throw Error("Discovery providers disagree.");
-  const candidates = pages[0].slice(0, 8), targets: EconomicTarget[] = [];
+  const candidates = pages[0].slice(0, maxLaunches), targets: EconomicTarget[] = [];
   for (const candidate of candidates) {
     const results = await Promise.all(clients.map(client => targetsForCandidate(client, binding, candidate, admissions)));
     if (json(results[0]) !== json(results[1])) throw Error("Module registration providers disagree.");

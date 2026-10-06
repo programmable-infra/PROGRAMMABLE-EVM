@@ -1,9 +1,10 @@
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createPublicClient, createWalletClient, encodeAbiParameters, encodeFunctionData, getAddress, http, isHash, keccak256, parseAbi, parseAbiItem, stringToHex, toFunctionSelector } from "viem";
+import { createPublicClient, createWalletClient, encodeAbiParameters, encodeFunctionData, getAddress, isHash, keccak256, parseAbi, parseAbiItem, stringToHex, toFunctionSelector } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { runEconomicPass } from "./engine.mjs";
+import { economicHttp } from "./rpc.mjs";
 
 const families = new Map([
   ...["buyback-burn", "dip-buyback", "lp-rewards", "full-range-lp"].map(id => [id, "strategy"]),
@@ -17,6 +18,16 @@ const hostAbi = parseAbi([
 ]);
 const moduleAbi = parseAbi(["function executableBudget() view returns (uint256)", "function owed(address) view returns (uint256)"]);
 const rewardEvent = parseAbiItem("event RewardAccrued(address indexed beneficiary, uint256 amount)");
+const actionAbi = parseAbi(["function onAction(address actor, bytes data) returns (bytes4)"]);
+
+function hasRevertData(error, expected) {
+  const seen = new Set();
+  for (let current = error; current && !seen.has(current); current = current.cause) {
+    seen.add(current);
+    if (typeof current.data === "string" && current.data.toLowerCase() === expected.toLowerCase()) return true;
+  }
+  return false;
+}
 
 export function validateExecutionConfig(config) {
   if (!config || ![1, 4663].includes(config.chainId) || !Array.isArray(config.targets) || config.targets.length > 1000
@@ -106,6 +117,18 @@ export function createExecutionAdapter({ config, client, wallet, account }) {
       // Latest-state simulation also verifies price history, slippage, dip threshold and other guards.
       try { await client.call({ ...transaction, gas: 3000000n }); }
       catch (error) {
+        // The host deliberately discards callback revert data. For a verified dip module,
+        // confirm its exact NotReady response in a read-only call before classifying it as waiting.
+        const hostFailure = `${toFunctionSelector("ModuleFailure(uint256,uint8)")}${encodeAbiParameters(
+          [{ type: "uint256" }, { type: "uint8" }], [BigInt(target.index), 4]).slice(2)}`;
+        if (target.family === "dip-buyback" && hasRevertData(error, hostFailure)) {
+          try {
+            await client.call({ account: target.host, to: target.module, gas: 3000000n,
+              data: encodeFunctionData({ abi: actionAbi, functionName: "onAction", args: [typeof account === "string" ? account : account.address, action] }) });
+          } catch (condition) {
+            if (hasRevertData(condition, toFunctionSelector("NotReady()"))) return null;
+          }
+        }
         // Some quote tokens reject a particular recipient. On the next pass pay one at a
         // time, rotating after every attempt, so that recipient cannot block the other debts.
         if (target.kind === "rewards") entry.singlePayments = true;
@@ -132,7 +155,7 @@ async function main() {
   const broadcast = flag === "--broadcast";
   const account = broadcast ? privateKeyToAccount(process.env[config.keyEnv] ?? "") : getAddress(config.simulationAccount);
   const chain = { id: config.chainId, name: `Execution ${config.chainId}`, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [rpc] } } };
-  const transport = http(rpc, { retryCount: 0, timeout: 15000 });
+  const transport = economicHttp(rpc);
   const client = createPublicClient({ chain, transport });
   if (await client.getChainId() !== config.chainId) throw new Error("RPC chain mismatch");
   const wallet = createWalletClient({ chain, transport, account });
@@ -161,6 +184,7 @@ async function main() {
   } finally { await rm(lock, { recursive: true }); }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+// Bundled importers (service/worker) retain this module's side effects, but are not the CLI.
+if (process.argv[1] && basename(process.argv[1]) === "run.mjs" && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch(() => { console.error("Execution pass failed. The durable journal retains pending work; inspect the configured service before retrying."); process.exitCode = 1; });
 }
