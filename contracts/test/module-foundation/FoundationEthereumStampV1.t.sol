@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import { EconomicReleaseFixtureV1 } from "./EconomicReleaseFixtureV1.sol";
+
 import { IERC1271 } from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
@@ -538,8 +540,11 @@ contract FoundationEthereumStampV1Test is FoundationForkBaseV3 {
             "ReactivePair",
             "Entangled"
         ];
+        address released = EconomicReleaseFixtureV1.factory(vm, kind);
         IFoundationModuleFactoryV1 moduleFactory = IFoundationModuleFactoryV1(
-            deployCode(string.concat("EconomicModuleFactoriesV1.sol:", names[kind], "FactoryV1"))
+            released == address(0)
+                ? deployCode(string.concat("EconomicModuleFactoriesV1.sol:", names[kind], "FactoryV1"))
+                : released
         );
         bytes memory configuration;
         if (kind < 4) {
@@ -573,6 +578,7 @@ contract FoundationEthereumStampV1Test is FoundationForkBaseV3 {
             configuration,
             kind < 7 ? 10_000 : 0
         );
+        EconomicReleaseFixtureV1.verify(vm, kind, selections[0]);
         (R.LaunchPermitV1 memory permit, R.StampRequestV1 memory request, bytes memory payload, address engine) =
             _buildWithModules(1, kind == 10 ? 0 : 0.005 ether, selections);
         _authorizeOnlyOnFork(permit);

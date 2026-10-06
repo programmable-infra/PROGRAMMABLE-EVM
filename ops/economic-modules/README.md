@@ -16,3 +16,15 @@ The execution pass checks at most eight targets and submits at most one transact
 For systemd, install the reviewed repository and Node 24 under `/opt/programmable`, use a dedicated `programmable` OS account, and pre-create `contracts/out/economic-modules` writable only by that account. Store root-owned environment files under `/etc/programmable` with mode 0600; systemd reads these before switching users. Give the public configuration files group `programmable` and mode 0640 so the service can read them. Install the service and timer templates and enable separate instances for `1` and `4663` only after both chain lifecycles pass. Connect `node ops/economic-modules/health.mjs STATE_DIRECTORY` to the host's monitoring. It flags stale execution, deferred work and an exhausted budget. Check persistent deferrals against the configured dip/interval conditions before increasing any budget.
 
 Release requires both contract deployments, source/runtime readback, real launch and execution evidence, the installed Ethereum authority, running timers, monitored state directories and sufficient account funds. The repository tests and timer templates do not establish those production conditions.
+
+## Replaying a release without wallet signatures
+
+Set `FOUNDATION_ETHEREUM_RPC_URL`, `FOUNDATION_ETHEREUM_SECONDARY_RPC_URL`, `FOUNDATION_RPC_URL` and `FOUNDATION_SECONDARY_RPC_URL` to two independent providers per chain. Run:
+
+```sh
+node ops/economic-modules/verify-release-forks.mjs RELEASE_DIRECTORY NEW_RESULT_DIRECTORY
+```
+
+The release directory supplies the owner publications and `host-binding-1.json` / `host-binding-4663.json`. The runner pins a finalized block agreed by both providers and verifies factory runtime hashes before running the economic, zero-funding and Ethereum stamp suites. Robinhood uses the actual V2 launch factory from the binding. Local balances, trades and time advances remain inside Forge; the runner never broadcasts transactions or needs a signing key. A missing or skipped suite is not a successful result.
+
+Use `--candidate` as the last argument when verifying a local fee-strategy correction before replacement deployment. That mode builds the four fee factories locally and records their new runtime hashes; the other economic factories still come from the published release. Candidate success does not change the old deployed bytecode. The generated report explicitly distinguishes candidate code from published code and records that Ethereum authorization is stubbed on the fork.

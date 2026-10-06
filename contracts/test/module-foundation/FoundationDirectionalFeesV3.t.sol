@@ -124,7 +124,7 @@ abstract contract FoundationForkBaseV3 is Test {
         _mine(p);
     }
 
-    function _mine(P.LaunchParamsV3 memory p) internal view {
+    function _mine(P.LaunchParamsV3 memory p) internal view virtual {
         address token = factory.predictTokenAddress(ALICE, p.tokenSalt, p.metadata);
         bytes32 initHash = factory.hookInitCodeHash(ALICE, token, p);
         uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
@@ -136,7 +136,7 @@ abstract contract FoundationForkBaseV3 is Test {
         }
     }
 
-    function _launch(P.LaunchParamsV3 memory p) internal returns (L.LaunchResultV2 memory r) {
+    function _launch(P.LaunchParamsV3 memory p) internal virtual returns (L.LaunchResultV2 memory r) {
         vm.prank(ALICE);
         r = factory.launch(p);
     }
@@ -199,15 +199,19 @@ abstract contract FoundationForkBaseV3 is Test {
         uint256 creator = FoundationLedgerV1(r.ledger).creatorReceived() - beforeCreator;
         uint256 gross = buy ? spent : received + platform + creator;
         assertEq(platform, (gross * 30 + carryP) / 10_000);
-        assertEq(creator, (gross * (buy ? hook.creatorBuyFeeBps() : hook.creatorSellFeeBps()) + carryC) / 10_000);
+        assertEq(creator, (gross * _creatorFee(hook, buy) + carryC) / 10_000);
         assertEq(
             manager.balanceOf(r.ledger, uint256(uint160(address(quote)))),
             FoundationLedgerV1(r.ledger).outstandingBacking()
         );
         (uint16 nextP, uint16 nextC) = hook.feeCarry(buy);
         assertEq(nextP, (gross * 30 + carryP) % 10_000);
-        assertEq(nextC, (gross * (buy ? hook.creatorBuyFeeBps() : hook.creatorSellFeeBps()) + carryC) % 10_000);
+        assertEq(nextC, (gross * _creatorFee(hook, buy) + carryC) % 10_000);
         _assertClean(r);
+    }
+
+    function _creatorFee(FoundationHookV2 hook, bool buy) internal view virtual returns (uint16) {
+        return buy ? hook.creatorBuyFeeBps() : hook.creatorSellFeeBps();
     }
 
     function _selections(bool conflict, uint8 firstFault, uint8 secondFault)

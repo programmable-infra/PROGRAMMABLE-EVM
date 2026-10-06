@@ -4,10 +4,16 @@ pragma solidity 0.8.26;
 import { FoundationForkBaseV3 } from "./FoundationDirectionalFeesV3.t.sol";
 import { FoundationEthereumFixtureV3 } from "./FoundationEthereumV3.t.sol";
 import { FoundationQuoteFixture } from "./FoundationFixturesV1.sol";
+import { EconomicReleaseFixtureV1 } from "./EconomicReleaseFixtureV1.sol";
 import { FoundationTypesV1 as T } from "../../src/module-foundation/FoundationTypesV1.sol";
 import { FoundationLaunchTypesV3 as P } from "../../src/module-foundation/FoundationLaunchTypesV3.sol";
 import { FoundationLaunchTypesV2 as L } from "../../src/module-foundation/FoundationLaunchTypesV2.sol";
 import { FoundationHookV2 } from "../../src/module-foundation/FoundationHookV2.sol";
+import { FoundationHookV1 } from "../../src/module-foundation/FoundationHookV1.sol";
+import { FoundationFactoryV2 } from "../../src/module-foundation/FoundationFactoryV2.sol";
+import { FoundationFactoryV3 } from "../../src/module-foundation/FoundationFactoryV3.sol";
+import { FoundationHookDeployerV2 } from "../../src/module-foundation/FoundationHookDeployerV2.sol";
+import { Hooks } from "@uniswap/v4-core/src/libraries/Hooks.sol";
 import { FoundationLedgerV1 } from "../../src/module-foundation/FoundationLedgerV1.sol";
 import { IFoundationModuleV1, IFoundationModuleFactoryV1 } from "../../src/module-foundation/IFoundationModuleV1.sol";
 import { FeeStrategyV1 } from "../../src/module-foundation/modules/economics/FeeStrategyV1.sol";
@@ -15,6 +21,7 @@ import { BuyerRewardsV1 } from "../../src/module-foundation/modules/economics/Bu
 import { PoolGamesV1 } from "../../src/module-foundation/modules/economics/PoolGamesV1.sol";
 import { LinkedPoolV1 } from "../../src/module-foundation/modules/economics/LinkedPoolV1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
@@ -40,8 +47,10 @@ abstract contract EconomicModulesForkBase is FoundationForkBaseV3 {
             "ReactivePairFactoryV1",
             "EntangledFactoryV1"
         ];
-        IFoundationModuleFactoryV1 f =
-            IFoundationModuleFactoryV1(deployCode(string.concat("EconomicModuleFactoriesV1.sol:", names[kind])));
+        address released = EconomicReleaseFixtureV1.factory(vm, kind);
+        IFoundationModuleFactoryV1 f = IFoundationModuleFactoryV1(
+            released == address(0) ? deployCode(string.concat("EconomicModuleFactoriesV1.sol:", names[kind])) : released
+        );
         bytes memory config;
         if (kind < 4) {
             config = abi.encode(
@@ -66,7 +75,7 @@ abstract contract EconomicModulesForkBase is FoundationForkBaseV3 {
         T.ModuleContext memory c =
             T.ModuleContext(address(this), address(1), address(quote), ALICE, address(3), bytes32(uint256(1)));
         address sample = f.createModule(c, config);
-        return T.ModuleSelection(
+        T.ModuleSelection memory selection = T.ModuleSelection(
             address(f),
             address(f).codehash,
             sample.codehash,
@@ -74,6 +83,8 @@ abstract contract EconomicModulesForkBase is FoundationForkBaseV3 {
             config,
             share
         );
+        EconomicReleaseFixtureV1.verify(vm, kind, selection);
+        return selection;
     }
 
     function _launchModules(bytes memory kinds, bool quoteFirst, uint128 initial, address referenceHost)
@@ -100,6 +111,90 @@ abstract contract EconomicModulesForkBase is FoundationForkBaseV3 {
 
     function _execute(L.LaunchResultV2 memory r, uint256 i) internal {
         FoundationHookV2(r.hook).executeModuleAction(i, abi.encodePacked(bytes4(keccak256("execute()"))));
+    }
+
+    function _zeroFundingLaunch(uint8 kind) internal {
+        for (uint256 ordering; ordering < 2; ++ordering) {
+            uint256 snapshot = vm.snapshotState();
+            bool quoteFirst = ordering == 0;
+            L.LaunchResultV2 memory referencePool;
+            if (kind >= 9) referencePool = _launchModules(hex"", quoteFirst, 1 ether, address(0));
+            // An empty quote balance and no allowance prove this launch needs neither a
+            // first buy nor creator-funded liquidity. Gas is not modeled by prank calls.
+            vm.startPrank(ALICE);
+            quote.approve(address(factory), 0);
+            quote.transfer(BOB, quote.balanceOf(ALICE));
+            vm.stopPrank();
+            L.LaunchResultV2 memory r = _launchModules(abi.encodePacked(kind), quoteFirst, 0, referencePool.hook);
+            assertEq(quote.balanceOf(ALICE), 0);
+            assertEq(quote.allowance(ALICE, address(factory)), 0);
+            assertEq(r.initialBuyTokenAmount, 0);
+            assertEq(IERC20(r.token).balanceOf(ALICE), 0);
+            assertEq(r.creatorQuotePrincipal, 0);
+            assertEq(r.creatorPositionId, 0);
+            assertEq(r.actualQuoteRefund, 0);
+            assertGt(r.basePositionId, 0);
+            assertGt(r.baseTokenPrincipal, 0);
+            assertEq(IERC721(address(positions)).ownerOf(r.basePositionId), DEAD);
+            assertEq(FoundationHookV2(r.hook).moduleCount(), 1);
+            assertEq(FoundationLedgerV1(r.ledger).creatorReceived(), 0);
+            quote.mint(ALICE, 2000 ether);
+            if (kind == 10) {
+                vm.expectRevert();
+                this.tradeExternal(r, true, true, 1 ether);
+                _trade(referencePool, true, true, 1000 ether);
+            }
+            _trade(r, true, true, 1 ether);
+            assertGt(IERC20(r.token).balanceOf(ALICE), 0);
+            if (kind == 7) vm.warp(PoolGamesV1(_module(r, 0)).pausedUntil());
+            _trade(r, false, true, IERC20(r.token).balanceOf(ALICE));
+            assertEq(IERC20(r.token).balanceOf(ALICE), 0);
+            assertTrue(vm.revertToState(snapshot));
+        }
+    }
+
+    function testZeroFundingBuybackBurn() public {
+        _zeroFundingLaunch(0);
+    }
+
+    function testZeroFundingDipBuyback() public {
+        _zeroFundingLaunch(1);
+    }
+
+    function testZeroFundingLPRewards() public {
+        _zeroFundingLaunch(2);
+    }
+
+    function testZeroFundingFullRangeLP() public {
+        _zeroFundingLaunch(3);
+    }
+
+    function testZeroFundingBuyerRewards() public {
+        _zeroFundingLaunch(4);
+    }
+
+    function testZeroFundingNthBuyPot() public {
+        _zeroFundingLaunch(5);
+    }
+
+    function testZeroFundingKingOfTheHill() public {
+        _zeroFundingLaunch(6);
+    }
+
+    function testZeroFundingHotPotato() public {
+        _zeroFundingLaunch(7);
+    }
+
+    function testZeroFundingPlague() public {
+        _zeroFundingLaunch(8);
+    }
+
+    function testZeroFundingReactivePair() public {
+        _zeroFundingLaunch(9);
+    }
+
+    function testZeroFundingEntangled() public {
+        _zeroFundingLaunch(10);
     }
 
     function testEightModuleCompositionWithColdStorage() public {
@@ -302,7 +397,65 @@ abstract contract EconomicModulesForkBase is FoundationForkBaseV3 {
     }
 }
 
-contract EconomicModulesRobinhoodForkTest is EconomicModulesForkBase { }
+contract EconomicModulesRobinhoodForkTest is EconomicModulesForkBase {
+    bool private _legacyHost;
+
+    function setUp() public override {
+        super.setUp();
+        string memory file = vm.envOr("ECONOMIC_HOST_MANIFEST", string(""));
+        if (bytes(file).length == 0) return;
+        string memory json = vm.readFile(file);
+        address target = vm.parseJsonAddress(json, ".chains.c4663.hostFactory");
+        assertEq(target.codehash, vm.parseJsonBytes32(json, ".chains.c4663.hostFactoryCodeHash"));
+        factory = FoundationFactoryV3(target);
+        deployer = FoundationHookDeployerV2(address(FoundationFactoryV2(target).hookDeployer()));
+        _legacyHost = true;
+        vm.prank(ALICE);
+        quote.approve(target, type(uint256).max);
+    }
+
+    function _legacyParams(P.LaunchParamsV3 memory p) private pure returns (T.LaunchParams memory) {
+        require(p.creatorBuyFeeBps == p.creatorSellFeeBps, "Legacy host uses symmetric fees");
+        return T.LaunchParams({
+            metadata: p.metadata,
+            tokenSalt: p.tokenSalt,
+            hookSalt: p.hookSalt,
+            quote: p.quote,
+            quoteDecimals: p.quoteDecimals,
+            initialTick: p.initialTick,
+            creatorFeeBps: p.creatorBuyFeeBps,
+            additionalQuoteAmount: p.additionalQuoteAmount,
+            initialBuyQuoteAmount: p.initialBuyQuoteAmount,
+            initialBuyMinimumTokenAmount: p.initialBuyMinimumTokenAmount,
+            deadline: p.deadline,
+            modules: p.modules
+        });
+    }
+
+    function _mine(P.LaunchParamsV3 memory p) internal view override {
+        if (!_legacyHost) return super._mine(p);
+        FoundationFactoryV2 legacy = FoundationFactoryV2(address(factory));
+        address token = legacy.predictTokenAddress(ALICE, p.tokenSalt, p.metadata);
+        bytes32 initHash = legacy.hookInitCodeHash(ALICE, token, _legacyParams(p));
+        uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
+            | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
+        for (uint256 i;; ++i) {
+            p.hookSalt = bytes32(i);
+            address predicted = vm.computeCreate2Address(p.hookSalt, initHash, address(deployer));
+            if (uint160(predicted) & Hooks.ALL_HOOK_MASK == flags) return;
+        }
+    }
+
+    function _launch(P.LaunchParamsV3 memory p) internal override returns (L.LaunchResultV2 memory) {
+        if (!_legacyHost) return super._launch(p);
+        vm.prank(ALICE);
+        return FoundationFactoryV2(address(factory)).launch(_legacyParams(p));
+    }
+
+    function _creatorFee(FoundationHookV2 hook, bool buy) internal view override returns (uint16) {
+        return _legacyHost ? FoundationHookV1(address(hook)).creatorFeeBps() : super._creatorFee(hook, buy);
+    }
+}
 
 contract EconomicModulesEthereumForkTest is EconomicModulesForkBase {
     function _configureNetwork() internal override {
