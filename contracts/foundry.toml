@@ -79,6 +79,18 @@ via_ir = true
 optimizer_runs = 200
 auto_detect_remappings = false
 
+# Focused tests for the shared optional trading rules.
+[profile.trading-rules]
+skip = []
+src = "src/module-foundation/modules"
+test = "test/module-foundation/trading-rules"
+script = "script/module-foundation/modules"
+out = "out/trading-rules"
+cache_path = "cache/trading-rules"
+via_ir = true
+optimizer_runs = 200
+auto_detect_remappings = false
+
 # The late-migration intake uses IR compilation, while enabling IR for the
 # repository-wide profile currently exposes unrelated legacy Yul stack limits.
 # Keep this release surface isolated and reproducible without changing the
