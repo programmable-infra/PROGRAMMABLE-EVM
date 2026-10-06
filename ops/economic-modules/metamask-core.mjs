@@ -4,10 +4,25 @@ export const ACCOUNT = getAddress('0x9e1339Eaed0EfF31Eda7D714A341Eb09a7e4513e');
 export const BUY = 10_000_000_000_000n;
 export const FUNDING = 250_000_000_000_000n;
 export const MAXIMUM_GAS_DEBIT = 5_000_000_000_000_000n;
-export function boundedGasFees(gas, baseFee, priority) {
- if (gas <= 0n || baseFee < 0n || priority < 0n) throw Error('Invalid gas quote');
+export function launchGasBudget(approvals, used, history, scope) {
+ const fallback = {limitWei: MAXIMUM_GAS_DEBIT, approvalId: null};
+ if (scope.stage !== 'launch' || scope.role !== 'step') return fallback;
+ const approval = (approvals ?? []).find(a =>
+  typeof a.id === 'string' && a.id.length > 0 && !used?.[a.id] &&
+  a.chainId === scope.chainId && a.family === scope.family &&
+  a.stage === 'launch' && a.role === 'step' &&
+  /^0x[0-9a-f]{40}$/i.test(a.account) && a.account.toLowerCase() === scope.account.toLowerCase() &&
+  /^0x[0-9a-f]{64}$/i.test(a.salt) && a.salt.toLowerCase() === scope.salt?.toLowerCase() &&
+  /^[0-9]+$/.test(a.limitWei) && BigInt(a.limitWei) > MAXIMUM_GAS_DEBIT);
+ if (!approval || history.some(entry => entry.gasApprovalId === approval.id ||
+  (entry.chainId === scope.chainId && entry.family === scope.family && entry.stage === 'launch' &&
+   entry.role === 'step' && (!entry.salt || entry.salt.toLowerCase() === scope.salt.toLowerCase())))) return fallback;
+ return {limitWei: BigInt(approval.limitWei), approvalId: approval.id};
+}
+export function boundedGasFees(gas, baseFee, priority, maximumDebit = MAXIMUM_GAS_DEBIT) {
+ if (gas <= 0n || baseFee < 0n || priority < 0n || maximumDebit <= 0n) throw Error('Invalid gas quote');
  const maxPriorityFeePerGas = priority > 100_000_000n ? 100_000_000n : priority;
- const budgetPrice = MAXIMUM_GAS_DEBIT / gas;
+ const budgetPrice = maximumDebit / gas;
  const priceCap = budgetPrice < 2_000_000_000n ? budgetPrice : 2_000_000_000n;
  const suggested = baseFee * 2n + maxPriorityFeePerGas;
  const maxFeePerGas = suggested < priceCap ? suggested : priceCap;

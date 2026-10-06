@@ -12,7 +12,7 @@ import {buildFoundationEthereumGraph, assertFoundationEthereumTransaction,predic
 import {ETHEREUM_MODULE_SOURCE} from '../../lib/module-foundation/ethereum-release.ts';
 import {parseEthereumModuleAuthorization} from '../../lib/module-foundation/ethereum-authorization.ts';
 import {encodeFoundationFundingPath} from '../../lib/module-foundation/funding-path.ts';
-import {FAMILIES, ACCOUNT, BUY, FUNDING, MAXIMUM_GAS_DEBIT, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, nthPotRecovery, boundedGasFees, publicError, check, fail} from './metamask-core.mjs';
+import {FAMILIES, ACCOUNT, BUY, FUNDING, MAXIMUM_GAS_DEBIT, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, nthPotRecovery, boundedGasFees, launchGasBudget, publicError, check, fail} from './metamask-core.mjs';
 const origin='https://programmable.market';
 const cleanJson=value=>JSON.stringify(value,(_,v)=>typeof v==='bigint'?v.toString():v,2);
 const readJson=async file=>JSON.parse(await readFile(file,'utf8'));
@@ -96,15 +96,16 @@ export async function run([configFile],root){
   const p=c.clients[0],value=BigInt(tx.value??0n);
   const [nonce,pending,gasEstimate,block,tip]=await Promise.all([p.getTransactionCount({address:ACCOUNT,blockTag:'latest'}),p.getTransactionCount({address:ACCOUNT,blockTag:'pending'}),stage==='launch'&&item.launchDraft?.gasEstimate?BigInt(item.launchDraft.gasEstimate):p.estimateGas({account:ACCOUNT,to:tx.to,data:tx.data,value}),p.getBlock(),p.estimateMaxPriorityFeePerGas().catch(()=>1000000n)]);
   check(nonce===pending,'Eine andere Wallet-Transaktion ist noch offen. Bitte zuerst bestätigen lassen.');
-  const gas=foundationTransactionGasLimit(gasEstimate,c.chainId),fees=boundedGasFees(gas,block.baseFeePerGas??0n,tip);
+  const budget=launchGasBudget(cfg.gasBudgetApprovals,state.gasApprovalsUsed,state.history,{account:ACCOUNT,chainId:c.chainId,family:item.family,salt:item.salt,stage,role});
+  const gas=foundationTransactionGasLimit(gasEstimate,c.chainId),fees=boundedGasFees(gas,block.baseFeePerGas??0n,tip,budget.limitWei);
   if(stage==='launch'&&item.launchDraft)item.launchDraft.gasEstimate=String(gasEstimate);
-  state.lastGasQuote={chainId:c.chainId,family:item.family,stage,gasEstimate:String(gasEstimate),gasLimit:String(gas),baseFeePerGas:String(block.baseFeePerGas??0n),...Object.fromEntries(Object.entries(fees).map(([k,v])=>[k,typeof v==='bigint'?String(v):v])),at:new Date().toISOString()};
-  if(!fees.affordable){state.gasRetryAt=Date.now()+15000;await save();return display({status:'waiting',message:'Warte auf Netzgebühren innerhalb des Limits von 0,005 ETH',waitSeconds:15});}
+  state.lastGasQuote={chainId:c.chainId,family:item.family,stage,gasBudgetWei:String(budget.limitWei),gasApprovalId:budget.approvalId,gasEstimate:String(gasEstimate),gasLimit:String(gas),baseFeePerGas:String(block.baseFeePerGas??0n),...Object.fromEntries(Object.entries(fees).map(([k,v])=>[k,typeof v==='bigint'?String(v):v])),at:new Date().toISOString()};
+  if(!fees.affordable){state.gasRetryAt=Date.now()+15000;await save();return display({status:'waiting',message:'Warte auf Netzgebühren innerhalb des freigegebenen Limits',waitSeconds:15});}
   delete state.gasRetryAt;
   const {maxFeePerGas,maxPriorityFeePerGas}=fees;
   check(await p.getBalance({address:ACCOUNT})>fees.maximumGasWei+value,'Die Test-Wallet hat für diesen Schritt zu wenig ETH.');
   const request={from:ACCOUNT,to:tx.to,data:tx.data,value:toHex(value),chainId:toHex(c.chainId),nonce:toHex(nonce),gas:toHex(gas),maxFeePerGas:toHex(maxFeePerGas),maxPriorityFeePerGas:toHex(maxPriorityFeePerGas)};
-  state.prepared={id:randomUUID(),chainId:c.chainId,family:item.family,stage,role,label,request,digest:digestRequest(request),preparedBlock:String(block.number),expires:tx.expires??Number(block.timestamp+300n),maximumGasWei:String(gas*maxFeePerGas),...extra};await save();return display();
+  state.prepared={id:randomUUID(),chainId:c.chainId,family:item.family,salt:item.salt,stage,role,label,request,digest:digestRequest(request),preparedBlock:String(block.number),expires:tx.expires??Number(block.timestamp+300n),maximumGasWei:String(gas*maxFeePerGas),gasBudgetWei:String(budget.limitWei),gasApprovalId:budget.approvalId,...extra};await save();return display();
  }
  async function approval(c,item,stage,token,amount){
   const p=c.clients[0],permit=c.profile.infrastructure.permit2.address,router=c.profile.infrastructure.universalRouter.address;
@@ -152,7 +153,7 @@ export async function run([configFile],root){
  function display(extra={}){
   const cur=state.prepared?{c:chains.get(state.prepared.chainId),item:cstate(chains.get(state.prepared.chainId)).cases.find(x=>x.family===state.prepared.family)}:current();
   const gasWaiting=!state.prepared&&state.gasRetryAt&&state.lastGasQuote?.chainId===cur?.c.chainId&&state.lastGasQuote?.family===cur?.item.family;
-  return {account:ACCOUNT,simulationOnly:cfg.simulationOnly===true,chainId:cur?.c.chainId??1,family:cur?.item.family??null,completed:Object.values(state.chains).flatMap(c=>c.cases).filter(i=>i.completed).length,total:Object.values(state.chains).flatMap(c=>c.cases).length,transactions:state.history.length,status:state.prepared?.hash?'pending':state.prepared?'review':gasWaiting?'waiting':cur?'ready':'complete',...(gasWaiting?{message:'Warte auf günstigere Netzgebühren',gasQuote:{currentGasWei:state.lastGasQuote.currentGasWei,limitWei:String(MAXIMUM_GAS_DEBIT),observedAt:state.lastGasQuote.at},waitSeconds:Math.max(1,Math.ceil((state.gasRetryAt-Date.now())/1000))}:{}),prepared:state.prepared?{id:state.prepared.id,label:state.prepared.label,request:state.prepared.request,maximumGasWei:state.prepared.maximumGasWei,hash:state.prepared.hash}:null,cases:Object.entries(state.chains).flatMap(([chain,c])=>c.cases.map(i=>({chainId:Number(chain),family:i.family,completed:i.completed,position:i.position,steps:caseSteps(i.kind).length}))),...extra};
+  return {account:ACCOUNT,simulationOnly:cfg.simulationOnly===true,chainId:cur?.c.chainId??1,family:cur?.item.family??null,completed:Object.values(state.chains).flatMap(c=>c.cases).filter(i=>i.completed).length,total:Object.values(state.chains).flatMap(c=>c.cases).length,transactions:state.history.length,status:state.prepared?.hash?'pending':state.prepared?'review':gasWaiting?'waiting':cur?'ready':'complete',...(gasWaiting?{message:'Warte auf günstigere Netzgebühren',gasQuote:{currentGasWei:state.lastGasQuote.currentGasWei,limitWei:state.lastGasQuote.gasBudgetWei??String(MAXIMUM_GAS_DEBIT),approvalId:state.lastGasQuote.gasApprovalId??null,observedAt:state.lastGasQuote.at},waitSeconds:Math.max(1,Math.ceil((state.gasRetryAt-Date.now())/1000))}:{}),prepared:state.prepared?{id:state.prepared.id,label:state.prepared.label,request:state.prepared.request,maximumGasWei:state.prepared.maximumGasWei,gasBudgetWei:state.prepared.gasBudgetWei??String(MAXIMUM_GAS_DEBIT),gasApprovalId:state.prepared.gasApprovalId??null,hash:state.prepared.hash}:null,cases:Object.entries(state.chains).flatMap(([chain,c])=>c.cases.map(i=>({chainId:Number(chain),family:i.family,completed:i.completed,position:i.position,steps:caseSteps(i.kind).length}))),...extra};
  }
  async function reconcile(){
   const pre=state.prepared;if(!pre)return;
@@ -199,11 +200,12 @@ export async function run([configFile],root){
    if(pre.role==='pot-qualifying-buy')item.potRecoveryBuys=(item.potRecoveryBuys??0)+1;
    else item.position++;
   }
-  const entry={chainId:c.chainId,family:item.family,stage:pre.stage,role:pre.role,hash:pre.hash,blockNumber:String(receipt.blockNumber),blockHash:receipt.blockHash,gasUsed:String(receipt.gasUsed)};
+  const entry={chainId:c.chainId,family:item.family,salt:item.salt,stage:pre.stage,role:pre.role,hash:pre.hash,blockNumber:String(receipt.blockNumber),blockHash:receipt.blockHash,gasUsed:String(receipt.gasUsed),gasApprovalId:pre.gasApprovalId??null,gasBudgetWei:pre.gasBudgetWei??String(MAXIMUM_GAS_DEBIT)};
+  if(pre.gasApprovalId){state.gasApprovalsUsed??={};state.gasApprovalsUsed[pre.gasApprovalId]={hash:pre.hash,chainId:c.chainId,salt:item.salt};}
   item.transactions.push(entry);state.history.push(entry);state.prepared=null;await save();
  }
  async function next(){
-  if(!state.prepared&&state.gasRetryAt>Date.now())return display({status:'waiting',message:'Warte auf Netzgebühren innerhalb des Limits von 0,005 ETH',waitSeconds:Math.ceil((state.gasRetryAt-Date.now())/1000)});
+  if(!state.prepared&&state.gasRetryAt>Date.now())return display({status:'waiting',message:'Warte auf Netzgebühren innerhalb des freigegebenen Limits',waitSeconds:Math.ceil((state.gasRetryAt-Date.now())/1000)});
   const active=current();if(active)cstate(active.c).clock=Number((await active.c.clients[0].getBlock()).timestamp);
   const prior=await reconcile();if(prior)return prior;
   if(state.retryNotBefore>Date.now())return display({status:'waiting',message:'Warte auf das Ethereum-Anfragefenster',waitSeconds:Math.ceil((state.retryNotBefore-Date.now())/1000)});
