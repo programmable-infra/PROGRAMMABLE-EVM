@@ -27,16 +27,25 @@ import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, type Fo
 import { foundationCreatorFeeFields } from "@/lib/module-foundation/creator-fees";
 import { useRobinhoodPresentation } from "./use-robinhood-presentation";
 import { maximumSwapInput } from "./swap-amount";
+import { TradePanelStateProvider } from "./responsive-trade-panel";
 import type { RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import type { RobinhoodLaunch } from "@/lib/robinhood-launches";
 import styles from "./module-foundation-ui.module.css";
 import tradeStyles from "./swap-panel.module.css";
 
-export function ModuleFoundationMarketHost({ token, transactionHash, initialName, initialLaunch, initialPresentation, chainId = 4663 }: {
+type ModuleFoundationMarketHostProps = {
   chainId?: FoundationChainId;
   token: Address; transactionHash?: Hex; initialName?: string; initialLaunch?: RobinhoodLaunch;
   initialPresentation?: Promise<RobinhoodCoinPresentation | null>;
-}) {
+};
+
+export function ModuleFoundationMarketHost(props: ModuleFoundationMarketHostProps) {
+  return <TradePanelStateProvider key={`${props.chainId ?? 4663}:${props.token.toLowerCase()}`}>
+    <ModuleFoundationMarketContent {...props} />
+  </TradePanelStateProvider>;
+}
+
+function ModuleFoundationMarketContent({ token, transactionHash, initialName, initialLaunch, initialPresentation, chainId = 4663 }: ModuleFoundationMarketHostProps) {
   const profile = foundationChainProfile(chainId), FOUNDATION_INFRASTRUCTURE = profile.infrastructure, FOUNDATION_WETH = profile.wrappedEth.address;
   const session = useFoundationSession(token, chainId);
   const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(token)}`, true, initialPresentation, chainId);
