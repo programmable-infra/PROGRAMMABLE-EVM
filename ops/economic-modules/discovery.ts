@@ -75,12 +75,14 @@ async function targetsForCandidate(client: PublicClient, original: FoundationDep
  * agree before registration; a website list or a forged ModuleBound log is never authority. */
 export async function discoverEconomicTargets(input: {
   clients: readonly [PublicClient, PublicClient]; binding: FoundationDeploymentBinding;
-  admissions: readonly AutomaticModuleAdmission[]; position: DiscoveryPosition; toBlock: bigint;
+  admissions: readonly AutomaticModuleAdmission[]; position: DiscoveryPosition; toBlock: bigint; maxLaunches?: number;
 }) {
   const { clients, binding, admissions, position, toBlock } = input;
+  const maxLaunches = input.maxLaunches ?? 8;
   const chainId = foundationBindingChainId(binding), fromBlock = BigInt(position.block);
   if (!["v2", "v3"].includes(binding.factoryVersion ?? "") || fromBlock < binding.startBlock || toBlock < fromBlock || toBlock - fromBlock >= 1000n
     || !Number.isSafeInteger(position.logIndex) || position.logIndex < -1 || admissions.length > 128
+    || !Number.isInteger(maxLaunches) || maxLaunches < 1 || maxLaunches > 8
     || admissions.some(item => !ECONOMIC_AUTOMATIC_FAMILIES.includes(item.family))) throw Error("Invalid discovery window or admission.");
   if (!(await Promise.all(clients.map(client => client.getChainId()))).every(id => id === chainId)) throw Error("Discovery RPC chain mismatch.");
   const address = binding.ethereumGraph ? getAddress(ethereum.canonicalStamp.router.address) : binding.factory.address;
@@ -104,7 +106,7 @@ export async function discoverEconomicTargets(input: {
       .sort((a, b) => a.blockNumber === b.blockNumber ? a.logIndex - b.logIndex : a.blockNumber < b.blockNumber ? -1 : 1);
   }));
   if (json(pages[0]) !== json(pages[1])) throw Error("Discovery providers disagree.");
-  const candidates = pages[0].slice(0, 8), targets: EconomicTarget[] = [];
+  const candidates = pages[0].slice(0, maxLaunches), targets: EconomicTarget[] = [];
   for (const candidate of candidates) {
     const results = await Promise.all(clients.map(client => targetsForCandidate(client, binding, candidate, admissions)));
     if (json(results[0]) !== json(results[1])) throw Error("Module registration providers disagree.");

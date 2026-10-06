@@ -1,9 +1,17 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { createServer, type Server, type RequestListener } from "node:http";
 import { economicHttp, economicRpcFailure } from "../ops/economic-modules/rpc.mjs";
 
+const sleeps = vi.hoisted(() => ({ fast: false, delays: [] as number[] }));
+vi.mock("node:timers/promises", async importOriginal => {
+  const original = await importOriginal<typeof import("node:timers/promises")>();
+  return { ...original, setTimeout: async (ms: number, value: unknown, options: { signal?: AbortSignal }) => {
+    if (sleeps.fast && ms >= 60_000) { sleeps.delays.push(ms); vi.setSystemTime(Date.now() + ms); return value; }
+    return original.setTimeout(ms, value, options);
+  } };
+});
 let server: Server;
-afterEach(async () => { server?.closeAllConnections(); await new Promise<void>(resolve => server ? server.close(() => resolve()) : resolve()); });
+afterEach(async () => { sleeps.fast = false; sleeps.delays = []; vi.useRealTimers(); server?.closeAllConnections(); await new Promise<void>(resolve => server ? server.close(() => resolve()) : resolve()); });
 async function endpoint(handler: RequestListener) {
   server = createServer(handler);
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
@@ -31,7 +39,7 @@ it.each(["90", new Date(Date.now() + 120_000).toUTCString()])("respects Retry-Af
     calls++; response.writeHead(429, { "content-type": "application/json", "retry-after": retryAfter });
     response.end('{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"rate limit exceeded"}}');
   });
-  const transport = economicHttp(url)({});
+  const transport = economicHttp(url, { maxRateRetries: 0 })({});
   const results = await Promise.allSettled([1, 2].map(() => transport.request({ method: "eth_chainId" })));
   expect(calls).toBe(1);
   for (const result of results) {
@@ -74,4 +82,30 @@ it("aborts active discovery reads and queued work promptly during shutdown", asy
   signal.abort();
   expect((await done).map(result => result.status)).toEqual(["rejected", "rejected"]);
   expect(calls).toBe(1);
+});
+
+it("finishes an interrupted read after Retry-After without restarting the discovery candidate", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  sleeps.fast = true;
+  let calls = 0;
+  const url = await endpoint((_request, response) => {
+    if (++calls === 1) { response.writeHead(429, { "retry-after": "90" }); response.end(); }
+    else response.end('{"jsonrpc":"2.0","id":1,"result":"0x1"}');
+  });
+  expect(await economicHttp(url)({}).request({ method: "eth_chainId" })).toBe("0x1");
+  expect(calls).toBe(2);
+  expect(sleeps.delays).toEqual([90_000]);
+});
+
+it("bounds repeated rate-limited reads and never retries rate-limited writes", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  sleeps.fast = true;
+  let calls = 0;
+  const url = await endpoint((_request, response) => { calls++; response.writeHead(429); response.end(); });
+  const failure = await economicHttp(url)({}).request({ method: "eth_chainId" }).catch(error => error);
+  expect(economicRpcFailure(failure).reason).toBe("rpc-rate-limited");
+  expect(calls).toBe(3);
+  const writeFailure = await economicHttp(url)({}).request({ method: "eth_sendRawTransaction", params: ["0x1234"] }).catch(error => error);
+  expect(economicRpcFailure(writeFailure).reason).toBe("rpc-rate-limited");
+  expect(calls).toBe(4);
 });

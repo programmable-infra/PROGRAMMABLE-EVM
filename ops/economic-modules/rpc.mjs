@@ -25,8 +25,13 @@ function retryDelay(value) {
   return Number.isFinite(milliseconds) ? Math.max(60_000, milliseconds) : 60_000;
 }
 
+const reads = new Set(["eth_chainId", "eth_blockNumber", "eth_getBlockByNumber", "eth_getBlockByHash",
+  "eth_getCode", "eth_call", "eth_getTransactionReceipt", "eth_getTransactionByHash", "eth_getLogs",
+  "eth_getBalance", "eth_getStorageAt", "eth_getTransactionCount", "eth_estimateGas", "eth_gasPrice",
+  "eth_maxPriorityFeePerGas", "eth_feeHistory", "debug_traceTransaction"]);
+
 /** Serialize requests to each existing provider, without replaying writes or changing providers. */
-export function economicHttp(url, { intervalMs = 350, timeout = 60_000, signal } = {}) {
+export function economicHttp(url, { intervalMs = 350, timeout = 60_000, signal, maxRateRetries = 2 } = {}) {
   return options => {
     let tail = Promise.resolve(), lastStarted = 0, cooldownUntil = 0;
     const base = http(url, { retryCount: 0, timeout, async onFetchResponse(response) {
@@ -43,12 +48,19 @@ export function economicHttp(url, { intervalMs = 350, timeout = 60_000, signal }
     } })({ ...options, timeout });
     return { ...base, request(...args) {
       const pending = tail.then(async () => {
-        signal?.throwIfAborted();
-        if (Date.now() < cooldownUntil) throw new EconomicRpcError("rpc-rate-limited", cooldownUntil - Date.now());
-        await wait(Math.max(0, lastStarted + intervalMs - Date.now()), undefined, { signal });
-        lastStarted = Date.now();
-        // Supplying a signal replaces viem's internal timeout; retain both bounds explicitly.
-        return base.request(args[0], signal ? { ...args[1], signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]) } : args[1]);
+        for (let attempt = 0; ; attempt++) {
+          signal?.throwIfAborted();
+          const cooldown = cooldownUntil - Date.now();
+          if (cooldown > 0 && (!reads.has(args[0].method) || maxRateRetries === 0)) throw new EconomicRpcError("rpc-rate-limited", cooldown);
+          await wait(Math.max(0, cooldown, lastStarted + intervalMs - Date.now()), undefined, { signal });
+          lastStarted = Date.now();
+          try {
+            // Supplying a signal replaces viem's internal timeout; retain both bounds explicitly.
+            return await base.request(args[0], signal ? { ...args[1], signal: AbortSignal.any([signal, AbortSignal.timeout(timeout)]) } : args[1]);
+          } catch (error) {
+            if (!reads.has(args[0].method) || attempt >= maxRateRetries || economicRpcFailure(error).reason !== "rpc-rate-limited") throw error;
+          }
+        }
       });
       tail = pending.catch(() => {});
       return pending;

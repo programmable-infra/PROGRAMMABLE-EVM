@@ -78,6 +78,16 @@ describe("automatic economic module registration", () => {
     expect(second.processed).toBe(2);
     expect(second.position.block).toBe("200");
   });
+  it("can checkpoint each verified launch within one block", async () => {
+    const f = setup();
+    f.client.getLogs.mockResolvedValue([{ ...f.event, logIndex: 1 }, { ...f.event, logIndex: 2 }]);
+    const first = await discoverEconomicTargets({ ...f.input, maxLaunches: 1 });
+    expect(first.processed).toBe(1);
+    expect(first.position).toEqual({ block: "100", logIndex: 1, blockHash });
+    const second = await discoverEconomicTargets({ ...f.input, maxLaunches: 1, position: first.position });
+    expect(second.processed).toBe(1);
+    expect(second.position.block).toBe("200");
+  });
   it("requires a canonical Ethereum component stamp before using the per-launch engine", async () => {
     const f = setup(1);
     expect((await discoverEconomicTargets(f.input)).targets).toEqual([]);

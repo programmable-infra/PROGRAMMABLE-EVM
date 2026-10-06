@@ -68,7 +68,7 @@ export async function run(args: string[], root: string, options: { signal?: Abor
       options.signal?.throwIfAborted();
       const position = BigInt(state.position.block);
       const page = await discoverEconomicTargets({ clients, binding, admissions: config.discovery.admissions, position: state.position,
-        toBlock: position + 999n < head ? position + 999n : head });
+        toBlock: position + 999n < head ? position + 999n : head, maxLaunches: 1 });
       if (BigInt(page.position.block) < position || (BigInt(page.position.block) === position && page.position.logIndex <= state.position.logIndex)) {
         throw Error("Discovery did not advance its checkpoint.");
       }
