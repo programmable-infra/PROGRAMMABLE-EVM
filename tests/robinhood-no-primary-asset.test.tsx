@@ -41,7 +41,8 @@ describe("launch pages without a primary asset", () => {
     const html = renderToStaticMarkup(<RobinhoodTokenView address={component} token={token} status="ready" />);
     expect(token.primaryAssetAddress).toBe(component);
     expect(html).toContain('aria-label="Unnamed contract market"');
-    expect(html).toContain("Ticker unavailable");
+    expect(html).not.toContain("Ticker unavailable");
+    expect(html).toContain('aria-label="Token and quote pair"');
     expect(html).toContain("<dt>Price</dt>");
     expect(html).toContain("Market Cap");
     expect(html).toContain("No trading market is verified for this coin.");

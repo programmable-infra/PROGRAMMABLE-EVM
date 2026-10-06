@@ -21,11 +21,12 @@ function readDetails(query: string) {
   return request;
 }
 
-export function LaunchPairModules({ launch, chainId, market, className = "" }: {
+export function LaunchPairModules({ launch, chainId, market, className = "", showPair = true }: {
   launch: LaunchPresentationSource;
   chainId: number;
   market?: LaunchPairObservation | null;
   className?: string;
+  showPair?: boolean;
 }) {
   const binding = chainId === 4663 ? launchModuleDetailsBinding(launch) : null;
   const query = binding ? new URLSearchParams({ packages: binding.modulePackageIds.join(","), release: binding.sourceReleaseDigest,
@@ -38,9 +39,9 @@ export function LaunchPairModules({ launch, chainId, market, className = "" }: {
     return () => { active = false; };
   }, [query]);
   const { pair, modules, moduleCount } = launchPresentationDetails(launch, chainId, market, loaded?.query === query ? loaded?.details : null);
-  if (!pair && !moduleCount) return null;
+  if ((!pair || !showPair) && !moduleCount) return null;
   return <dl className={`${styles.details} ${className}`}>
-    {pair ? <div><dt>Pair</dt><dd title={pair.address}>{pair.label}</dd></div> : null}
+    {pair && showPair ? <div><dt>Pair</dt><dd title={pair.address}>{pair.label}</dd></div> : null}
     {moduleCount ? <div><dt>{moduleCount === 1 && modules.length ? "Module" : "Modules"}</dt><dd title={modules.join(", ") || undefined}>{modules.length ? modules.join(", ") : moduleCount}</dd></div> : null}
   </dl>;
 }

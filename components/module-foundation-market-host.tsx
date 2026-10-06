@@ -171,7 +171,7 @@ function ModuleFoundationMarketContent({ token, transactionHash, initialName, in
   }
 
   if (!details) return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} />
-    <RobinhoodMarketView chainId={chainId} address={token} name={initialName || "Loading coin…"} symbol={initialLaunch?.symbol} creator={initialLaunch?.creator}
+    <RobinhoodMarketView chainId={chainId} address={token} name={initialName || coinPresentation?.name || "Loading coin…"} symbol={initialLaunch?.symbol || coinPresentation?.symbol} creator={initialLaunch?.creator}
       launch={initialLaunch} presentation={coinPresentation} loading={presentation.loading || !error && session.availability.status !== "unavailable"} delayed={presentation.delayed}
       fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE}
       trade={<div className={`${styles.marketScope} ${tradeStyles.embedded}`}><section className={tradeStyles.card} aria-label="Trade loading">

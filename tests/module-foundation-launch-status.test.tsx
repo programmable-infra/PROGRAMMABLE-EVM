@@ -36,8 +36,8 @@ describe("compact completed-launch status", () => {
 
   it("keeps unresolved recovery visible even beside a successful saved launch", () => {
     const html = render({ pending: "unreadable" });
-    expect(html).toContain("Check your previous transaction");
-    expect(html).toContain("Check exact transaction");
+    expect(html).toContain("Finish your previous transaction");
+    expect(html).toContain("Check confirmation");
     expect(html).toContain("Your transaction is confirmed");
   });
 
@@ -51,6 +51,16 @@ describe("compact completed-launch status", () => {
 
   it("preserves active wallet progress", () => {
     expect(render({ progress: "Waiting for confirmation…" })).toContain("Waiting for confirmation…");
+    expect(render({ progress: "Confirm in your wallet…", pending: "unreadable" })).not.toContain("Recover wallet operation");
+  });
+
+  it("uses the saved hash without asking the user to paste it again", () => {
+    const html = render({ pending: JSON.stringify({ transactionHash: hash }), pendingTransactionHash: hash,
+      profile: { explorer: "https://etherscan.io" } as Session["profile"] });
+    expect(html).toContain("Waiting for transaction confirmation");
+    expect(html).toContain(`https://etherscan.io/tx/${hash}`);
+    expect(html).not.toContain("<input");
+    expect(html).not.toContain("stays protected");
   });
 });
 

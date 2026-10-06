@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { LaunchPairModules } from "@/components/launch-pair-modules";
 import { launchPresentationDetails, type LaunchPresentationSource } from "@/lib/launch-presentation-details";
 import type { PublicModuleDetails } from "@/lib/module-mode/public-details";
+import { coinPairTicker } from "@/lib/robinhood-presentation";
 
 const address = (digit: string) => `0x${digit.repeat(40)}`;
 const hash = (digit: string) => `0x${digit.repeat(64)}`;
@@ -10,6 +11,16 @@ const native = address("0"), weth = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"
 const launch: LaunchPresentationSource = { tokenAddress: address("1"), poolId: hash("2") };
 
 describe("canonical launch pair and module presentation", () => {
+  it.each([1, 4663])("keeps the read-back pair ticker without a market feed on chain %s", chainId => {
+    const source = { ...launch, sourceKind: "module-foundation-v1" as const, quoteAsset: address("3"), quoteSymbol: "CLAUS" };
+    const pair = launchPresentationDetails(source, chainId).pair;
+    expect(pair).toEqual({ address: address("3"), label: "CLAUS" });
+    expect(coinPairTicker("HELIX", pair?.label)).toBe("$HELIX / CLAUS");
+    expect(coinPairTicker("$HELIX", pair?.label)).toBe("$HELIX / CLAUS");
+    expect(coinPairTicker(null, pair?.label)).toBe("… / CLAUS");
+    expect(launchPresentationDetails({ ...source, quoteSymbol: "spoof\u202e" }, chainId).pair?.label).toBe("0x3333…3333");
+  });
+
   it("shows source-bound pair identities and never guesses a missing pair", () => {
     expect(launchPresentationDetails(launch, 4663).pair).toBeNull();
     expect(launchPresentationDetails({ ...launch, sourceKind: "module-native-v2" }, 4663).pair).toEqual({ address: native, label: "ETH" });
