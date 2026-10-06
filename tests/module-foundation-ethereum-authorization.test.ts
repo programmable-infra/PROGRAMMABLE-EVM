@@ -32,6 +32,15 @@ describe("Ethereum module authorization boundary", () => {
    expect(new Headers(init.headers).get("x-programmable-bff-assertion-version")).toBe("2");
    expect(init.redirect).toBe("error");
  });
+ it("preserves the module authority's own unavailable code and retry identity", async () => {
+   const requestId = "f778b220-d73f-420d-af7d-deee32c80f80";
+   fetchBackend.mockResolvedValueOnce(Response.json({ schemaVersion: "programmable.api-error.v1", error: {
+     code: "MODULE_LAUNCH_AUTHORIZATION_UNAVAILABLE", message: "The launch service is unavailable.", requestId,
+   } }, { status: 503, headers: { "Retry-After": "30" } }));
+   await expect(bridge().authorize(new Request("https://programmable.market"), request)).rejects.toMatchObject({
+     status: 503, code: "MODULE_LAUNCH_AUTHORIZATION_UNAVAILABLE", requestId, retryAfter: "30",
+   });
+ });
  it("never forwards an unlinked wallet", async () => {
    await expect(bridge().authorize(new Request("https://programmable.market"), { ...request, launchWallet: "0x2222222222222222222222222222222222222222" })).rejects.toMatchObject({ status: 403, code: "wallet_not_linked" });
    expect(fetchBackend).not.toHaveBeenCalled();
