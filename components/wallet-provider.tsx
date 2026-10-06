@@ -1576,6 +1576,7 @@ function PrivyWalletBridge({
   // SDK method wrappers can change without changing the authenticated account.
   // Network verification pins the underlying provider separately from these wrappers.
   const walletIdentityGenerationRef = useRef(0);
+  const walletNetworkGenerationRef = useRef(0);
   const walletRequestSessionRef = useRef({
     authenticated: activeAuthenticated && ready && walletsReady && !disconnecting,
     privyUserId: user?.id ?? null,
@@ -1664,6 +1665,7 @@ function PrivyWalletBridge({
       const current = walletRequestSessionRef.current;
       if (!current.account || !current.walletCapability) return;
       if (current.chainId === chainId) return;
+      walletNetworkGenerationRef.current += 1;
       current.chainId = chainId;
       if (!networkSwitchPendingRef.current) walletSessionGenerationRef.current += 1;
       setInjectedNetwork({ userId: owner, chainId });
@@ -2565,17 +2567,19 @@ function PrivyWalletBridge({
       const targetChainHex = `0x${targetChain.id.toString(16)}`;
       const boundWallet = connectedWallet;
       const account = wallet.account;
-      const expectedGeneration = walletSessionGenerationRef.current;
+      const expectedGeneration = walletIdentityGenerationRef.current;
+      let verifiedNetworkGeneration: number | undefined;
       let walletRequestAttempted = false;
       let enginePreparationPending = false;
       const isEmbeddedWallet = boundWallet.walletClientType === "privy" || boundWallet.walletClientType === "privy-v2";
       const assertCurrentSession = () => {
         const current = walletRequestSessionRef.current;
-        if (walletSessionGenerationRef.current !== expectedGeneration
+        if (walletIdentityGenerationRef.current !== expectedGeneration
+          || (verifiedNetworkGeneration !== undefined && walletNetworkGenerationRef.current !== verifiedNetworkGeneration)
           || !current.authenticated || current.privyUserId !== sessionSubject
           || current.account?.toLowerCase() !== account.toLowerCase()
-          || current.walletCapability?.getEthereumProvider !== boundWallet.getEthereumProvider
-          || current.walletCapability?.switchChain !== boundWallet.switchChain) {
+          || current.walletCapability?.walletClientType !== boundWallet.walletClientType
+          || current.walletCapability?.connectorType !== boundWallet.connectorType) {
           throw new Error("The selected wallet changed. Review the transaction again");
         }
       };
@@ -2586,18 +2590,38 @@ function PrivyWalletBridge({
           execute: async () => {
             try {
               assertCurrentSession();
+              // SDK renders may replace methods without replacing the connection.
+              // Pin the real external provider and reacquire it before submission.
+              let pinnedProvider: Awaited<ReturnType<typeof boundWallet.getEthereumProvider>> | undefined;
+              const currentWallet = {
+                chainId: boundWallet.chainId,
+                getEthereumProvider: async () => {
+                  assertCurrentSession();
+                  const candidate = await walletRequestSessionRef.current.walletCapability!.getEthereumProvider();
+                  assertCurrentSession();
+                  if (!isEmbeddedWallet && pinnedProvider && candidate !== pinnedProvider) throw new Error("The wallet connection changed. Try again.");
+                  pinnedProvider = candidate;
+                  return candidate;
+                },
+                switchChain: (chainId: number) => {
+                  assertCurrentSession();
+                  return walletRequestSessionRef.current.walletCapability!.switchChain(chainId);
+                },
+              };
               const provider = await getWalletProviderOnChain({
-                wallet: boundWallet, chainId: targetChain.id,
+                wallet: currentWallet, chainId: targetChain.id,
                 networkName: targetChain.name, assertCurrentSession,
               });
+              verifiedNetworkGeneration = walletNetworkGenerationRef.current;
               const assertAuthority = async () => {
                 assertCurrentSession();
+                const currentProvider = await readWalletProviderValue(() => currentWallet.getEthereumProvider());
                 await assertExternalWalletAuthorityCurrent({
                   expectedAccount: account, expectedChainId: targetChainHex,
                   networkName: targetChain.name,
                   request: async (method) => {
                     assertCurrentSession();
-                    const result = await provider.request({ method });
+                    const result = await readWalletProviderValue(() => currentProvider.request({ method }));
                     assertCurrentSession();
                     return result;
                   },
@@ -2614,7 +2638,6 @@ function PrivyWalletBridge({
               if (transaction.chainId !== targetChain.id || transaction.from.toLowerCase() !== account.toLowerCase()) {
                 throw new Error("The Module Mode transaction is bound to a different wallet or network");
               }
-              await assertAuthority();
               // Revalidation holds the reviewed target, calldata, value and expiry. No raw request is accepted here.
               let foundationNonce: number | undefined;
               if ("sourceKind" in prepared && prepared.sourceKind === "module-foundation-v1") {
@@ -2622,6 +2645,10 @@ function PrivyWalletBridge({
                 foundationNonce = await foundationWalletRequestNonce(prepared);
                 assertCurrentSession();
               }
+              await assertAuthority();
+              // A replacement during the final read must not submit through the old provider.
+              await readWalletProviderValue(() => currentWallet.getEthereumProvider());
+              assertCurrentSession();
               const submittedHash = async (hash: Hex) => {
                 if ("sourceKind" in prepared && prepared.sourceKind === "module-engine-v1") {
                   try {

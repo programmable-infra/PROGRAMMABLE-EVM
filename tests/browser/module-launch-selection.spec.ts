@@ -47,7 +47,7 @@ for (const [width, chainId] of [[1440, 4663], [390, 4663], [1440, 1], [390, 1]])
       expect(errors).toEqual([]); expect(requests).toEqual([]);
       await testInfo.attach("prepared-click-timing", { body: JSON.stringify({ width, elapsedMs: elapsed, ...result }), contentType: "application/json" });
       await page.screenshot({ path: testInfo.outputPath(`launch-speed-${width}.png`), fullPage: true });
-    } finally { studio.close(); await once(studio, "close"); }
+    } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
   });
 }
 
@@ -76,7 +76,7 @@ for (const width of [1440, 390]) {
       await expect(page.getByRole("button", { name: "Automatic USD", exact: true })).toHaveAttribute("aria-pressed", "true");
       await expect(page.getByLabel("Starting market cap · PAIR")).toHaveCount(0);
       await expect.poll(async () => (await lastDraft()).lastDraft?.initialBuy).toBe("0.001");
-    } finally { studio.close(); await once(studio, "close"); }
+    } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
   });
 }
 
@@ -101,7 +101,7 @@ test("a click joins pending launch work once, and wallet switches cancel the old
     await expect.poll(async () => (await events()).walletRequests).toBe(1);
     expect((await events()).preparations).toBe(2);
     expect((await events()).walletContext).toBe("other-wallet:4663:release");
-  } finally { studio.close(); await once(studio, "close"); }
+  } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
 });
 
 test("restoring a completed launch keeps the new draft open without background recovery reads", async ({ page }) => {
@@ -122,7 +122,7 @@ test("restoring a completed launch keeps the new draft open without background r
     await expect(page.getByLabel("Name", { exact: true })).toHaveValue("My next coin");
     await expect(page).toHaveURL(url);
     expect(apiCalls).toHaveLength(1);
-  } finally { studio.close(); await once(studio, "close"); }
+  } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
 });
 
 for (const width of [1440, 390, 320]) {

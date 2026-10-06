@@ -1,5 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { WEBSITE_ADMIN_WALLET } from "../../../lib/admin-access";
+import { fixtureSigningEnabled, fixtureSignTransaction } from "./module-signing-runtime";
 
 // Only the SDK boundary is substituted. Wallet ownership, selection, login
 // gating and the application dialog remain in the production WalletProvider.
@@ -38,6 +39,7 @@ type FixtureState = {
   waitingNetworkSwitches: number;
   providerAccountOverride: string | null;
   providerLocked: boolean;
+  unresponsiveProviderAccounts: boolean;
   providerChainOverride: string | number | null;
   refreshedUser: FixtureUser | null;
   delayedUserRefresh: boolean;
@@ -92,7 +94,11 @@ function wallet(address: string, linked = true, connectedAt = 1, initialChain = 
       record(method, { address });
       if (method === "eth_chainId") return state.providerChainOverride
         ?? `0x${Number(networkChain.slice("eip155:".length)).toString(16)}`;
-      if (method === "eth_accounts") return state.providerLocked ? [] : [state.providerAccountOverride ?? address];
+      if (method === "eth_accounts") {
+        if (state.unresponsiveProviderAccounts) return new Promise<string[]>(() => {});
+        return state.providerLocked ? [] : [state.providerAccountOverride ?? address];
+      }
+      if (method === "eth_sendTransaction" && fixtureSigningEnabled()) return fixtureSignTransaction(params ?? []);
       if (method === "wallet_requestPermissions") return [];
       if (method === "wallet_switchEthereumChain") {
         const chainId = (params?.[0] as { chainId: string }).chainId;
@@ -150,6 +156,7 @@ let state: FixtureState = {
   isOpen: false, calls: [], delayedLocks: false, waitingLocks: 0,
   delayedNetworkSwitch: false, waitingNetworkSwitches: 0,
   providerAccountOverride: null, providerChainOverride: null, providerLocked: false,
+  unresponsiveProviderAccounts: false,
   refreshedUser: null, delayedUserRefresh: false,
   publishNetworkChanges: true,
   rebuildNetworkMethods: false,
@@ -294,7 +301,7 @@ export function useIdentityToken() { return { identityToken: null }; }
 export function useUser() { return { refreshUser }; }
 export function useOAuthTokens() { return { reauthorize }; }
 export function useAuthorizationSignature() { return { generateAuthorizationSignature: forbidden }; }
-export function useSendTransaction() { return { sendTransaction: forbidden }; }
+export function useSendTransaction() { return { sendTransaction: fixtureSigningEnabled() ? fixtureSignTransaction : forbidden }; }
 export function useSignMessage() { return { signMessage: forbidden }; }
 export function useLoginWithSiwe() { return { generateSiweMessage: forbidden, loginWithSiwe: forbidden }; }
 
@@ -302,6 +309,7 @@ function chooseScenario(scenario: string) {
   const base = {
     ready: true, authenticated: true, walletsReady: true, isOpen: false, calls: [],
     providerAccountOverride: null, providerChainOverride: null, providerLocked: false,
+    unresponsiveProviderAccounts: false,
     refreshedUser: null, delayedUserRefresh: false,
     publishNetworkChanges: true,
     delayedLogoutReadback: false,
@@ -391,6 +399,10 @@ export function FixtureControls() {
       candidate.address, candidate.linked, candidate.connectedAt + 1, candidate.chainId,
     )) })}>Replace connected wallet capability</button>
     <button onClick={() => update({ wallets: state.wallets.map(candidate => ({ ...candidate })) })}>Refresh SDK wallet wrapper</button>
+    <button onClick={() => update({ wallets: state.wallets.map(candidate => ({ ...candidate,
+      getEthereumProvider: () => candidate.getEthereumProvider(), switchChain: chainId => candidate.switchChain(chainId),
+    })) })}>Refresh SDK methods without changing provider</button>
+    <button onClick={() => update({ wallets: state.wallets.map(candidate => ({ ...candidate, walletClientType: "privy", connectorType: "embedded" })) })}>Use embedded fixture wallet</button>
     <button onClick={() => update({ isOpen: true })}>Open SDK modal</button>
     <button onClick={() => update({ isOpen: false })}>Close SDK modal</button>
     <button onClick={() => update({ delayedLocks: !current.delayedLocks })} aria-pressed={current.delayedLocks}>Delay browser lock</button>
@@ -413,6 +425,7 @@ export function FixtureControls() {
       pending?.reject(Object.assign(new Error("User rejected network switch"), { code: 4001 }));
     }}>Reject network switch</button>
     <button onClick={() => update({ providerAccountOverride: accountC })}>Return a different provider account</button>
+    <button onClick={() => update({ unresponsiveProviderAccounts: true })}>Stop answering account reads</button>
     <button onClick={() => {
       update({ providerAccountOverride: accountB, providerLocked: false });
       emitInjected("accountsChanged", [accountB]);
@@ -426,6 +439,7 @@ export function FixtureControls() {
       update({ providerChainOverride: "0x1" });
       emitInjected("chainChanged", "0x1");
     }}>MetaMask selects Ethereum</button>
+    <button onClick={() => { update({ providerChainOverride: "0x1237" }); emitInjected("chainChanged", "0x1237"); }}>MetaMask selects Robinhood</button>
     <button onClick={() => update({ providerAccountOverride: accountB })}>Choose wallet B in permissions</button>
     <button onClick={() => update({ user: alphaBoth, wallets: [wallet(accountA), wallet(accountB)], providerAccountOverride: accountB })}>Restore linked session with MetaMask B</button>
     <button onClick={() => update({ providerChainOverride: "0x1237" })}>Return the wrong provider network</button>
