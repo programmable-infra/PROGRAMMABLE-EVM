@@ -47,7 +47,7 @@ export async function run([configFile],root){
  }
  await save();
  let busy=false,chainId=4663;
- const withLock=async fn=>{check(!busy,'Eine Vorbereitung läuft bereits');busy=true;try{return await fn();}finally{busy=false;}};
+ const withLock=async fn=>{if(busy)throw Object.assign(Error('Eine Vorbereitung läuft bereits'),{safeMessage:'Eine Vorbereitung läuft bereits',retryable:true});busy=true;try{return await fn();}finally{busy=false;}};
  const cstate=c=>state.chains[c.chainId];
  const current=()=>{for(const c of chains.values()){const pending=cstate(c).cases.filter(x=>!x.completed);if(!pending.length)continue;const now=Math.max(cstate(c).clock??0,Math.floor(Date.now()/1000));const item=pending.find(x=>!x.waitUntil||x.waitUntil<=now)??pending.reduce((a,b)=>(a.waitUntil??0)<(b.waitUntil??0)?a:b);return {c,item};}return null;};
  const bal=(c,token,blockNumber)=>c.clients[0].readContract({address:token,abi:tokenAbi,functionName:'balanceOf',args:[ACCOUNT],...(blockNumber?{blockNumber}:{})});
@@ -200,7 +200,7 @@ export async function run([configFile],root){
    if(pre.role==='pot-qualifying-buy')item.potRecoveryBuys=(item.potRecoveryBuys??0)+1;
    else item.position++;
   }
-  const entry={chainId:c.chainId,family:item.family,salt:item.salt,stage:pre.stage,role:pre.role,hash:pre.hash,blockNumber:String(receipt.blockNumber),blockHash:receipt.blockHash,gasUsed:String(receipt.gasUsed),gasApprovalId:pre.gasApprovalId??null,gasBudgetWei:pre.gasBudgetWei??String(MAXIMUM_GAS_DEBIT)};
+  const entry={requestId:pre.id,chainId:c.chainId,family:item.family,salt:item.salt,stage:pre.stage,role:pre.role,hash:pre.hash,blockNumber:String(receipt.blockNumber),blockHash:receipt.blockHash,gasUsed:String(receipt.gasUsed),gasApprovalId:pre.gasApprovalId??null,gasBudgetWei:pre.gasBudgetWei??String(MAXIMUM_GAS_DEBIT)};
   if(pre.gasApprovalId){state.gasApprovalsUsed??={};state.gasApprovalsUsed[pre.gasApprovalId]={hash:pre.hash,chainId:c.chainId,salt:item.salt};}
   item.transactions.push(entry);state.history.push(entry);state.prepared=null;await save();
  }
@@ -277,11 +277,11 @@ export async function run([configFile],root){
    let bytes=0,body='';for await(const part of req){bytes+=part.length;check(bytes<8192,'Anfrage zu groß');body+=part;}const input=JSON.parse(body||'{}');
    const result=await withLock(async()=>{
     if(req.url==='/next')return next();
-    if(req.url==='/submitted'){check(state.prepared&&input.id===state.prepared.id&&/^0x[0-9a-f]{64}$/i.test(input.hash),'Transaktion passt nicht zum vorbereiteten Schritt');check(!state.prepared.hash||state.prepared.hash===input.hash,'Dieser Schritt hat bereits eine andere Transaktion');state.prepared.hash=input.hash;await save();return display();}
-    if(req.url==='/revalidate'){check(state.prepared&&input.id===state.prepared.id&&!state.prepared.hash,'Vorbereitung ist nicht mehr aktuell');const pre=state.prepared,c=chains.get(pre.chainId);check(pre.expires>Math.floor(Date.now()/1000)+15,'Die Vorbereitung ist abgelaufen');check(await c.clients[0].getTransactionCount({address:ACCOUNT,blockTag:'pending'})===Number(BigInt(pre.request.nonce)),'Es ist bereits eine Transaktion offen');await c.clients[0].call({account:ACCOUNT,to:pre.request.to,data:pre.request.data,value:BigInt(pre.request.value),gas:BigInt(pre.request.gas)});return {request:pre.request};}
+    if(req.url==='/submitted'){if(state.history.some(entry=>entry.hash===input.hash&&entry.requestId===input.id))return display();check(state.prepared&&input.id===state.prepared.id&&/^0x[0-9a-f]{64}$/i.test(input.hash),'Transaktion passt nicht zum vorbereiteten Schritt');check(!state.prepared.hash||state.prepared.hash===input.hash,'Dieser Schritt hat bereits eine andere Transaktion');state.prepared.hash=input.hash;await save();return display();}
+    if(req.url==='/revalidate'){check(state.prepared&&input.id===state.prepared.id&&!state.prepared.hash,'Vorbereitung ist nicht mehr aktuell');const pre=state.prepared,c=chains.get(pre.chainId);if(pre.expires<=Math.floor(Date.now()/1000)+15)throw Object.assign(Error('Die Vorbereitung wird erneuert'),{safeMessage:'Die Vorbereitung wird erneuert',code:'PREPARATION_EXPIRED'});check(await c.clients[0].getTransactionCount({address:ACCOUNT,blockTag:'pending'})===Number(BigInt(pre.request.nonce)),'Es ist bereits eine Transaktion offen');await c.clients[0].call({account:ACCOUNT,to:pre.request.to,data:pre.request.data,value:BigInt(pre.request.value),gas:BigInt(pre.request.gas)});return {request:pre.request};}
     fail('Unbekannter Endpunkt');
    });send(200,result);
-  }catch(error){await durable(join(dir,'last-error.private.json'),{at:new Date().toISOString(),type:error.name,detail:String(error.shortMessage??error.cause?.shortMessage??error.message).replace(/https?:\/\/[^\s]+/g,'[rpc]').slice(0,700),cause:String(error.cause?.message??'').replace(/https?:\/\/[^\s]+/g,'[rpc]').slice(0,700),code:error.code,revertData:error.data??error.cause?.data??error.cause?.cause?.data,message:publicError(error),stage:state.prepared?.stage??(current()?.item?caseSteps(current().item.kind)[current().item.position]:null)}).catch(()=>{});send(400,{error:publicError(error)});}
+  }catch(error){await durable(join(dir,'last-error.private.json'),{at:new Date().toISOString(),type:error.name,detail:String(error.shortMessage??error.cause?.shortMessage??error.message).replace(/https?:\/\/[^\s]+/g,'[rpc]').slice(0,700),cause:String(error.cause?.message??'').replace(/https?:\/\/[^\s]+/g,'[rpc]').slice(0,700),code:error.code,revertData:error.data??error.cause?.data??error.cause?.cause?.data,message:publicError(error),stage:state.prepared?.stage??(current()?.item?caseSteps(current().item.kind)[current().item.position]:null)}).catch(()=>{});send(400,{error:publicError(error),retryable:error.retryable===true,code:error.code==='PREPARATION_EXPIRED'?error.code:undefined});}
  });
  server.on('close',()=>rm(join(dir,'console.lock'),{force:true}));
  await new Promise(r=>server.listen(port,'127.0.0.1',r));
