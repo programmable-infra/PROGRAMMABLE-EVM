@@ -3,9 +3,12 @@ import { decodeFunctionData, encodeFunctionResult, parseAbi } from "viem";
 import { canonicalTokenExploreEntryV1 } from "@/lib/explore-entry-v1";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/onchain/website-rpc-providers.server", () => ({ productionMainnetRpcPrimary: () => ({ url: "https://rpc.example.com" }) }));
+vi.mock("@/lib/onchain/website-rpc-providers.server", () => ({
+  productionMainnetRpcPrimary: () => ({ url: "https://rpc.example.com" }),
+  productionMainnetRpcPair: () => ({ secondary: { url: "https://secondary.example.com" } }),
+}));
 import { createEthereumPublicMetadataReader, ETHEREUM_METADATA_BATCH_SIZE, ETHEREUM_METADATA_RECOVERY_MS, ETHEREUM_METADATA_TTL_MS,
-  parseEthereumMetadataReads, parseEthereumTokenUri } from "@/lib/server/ethereum-public-token-metadata";
+  createProductionMetadataBatchReader, parseEthereumMetadataReads, parseEthereumTokenUri } from "@/lib/server/ethereum-public-token-metadata";
 
 const boundary = { asOfBlock: "26113816", asOfBlockHash: `0x${"ab".repeat(32)}` };
 const json = { name: "JSON spoof", symbol: "SPOOF", description: "A public token", image: "https://picsum.photos/id/960/512/512.jpg",
@@ -45,6 +48,24 @@ function rpcFixture(hash = boundary.asOfBlockHash, oversized = false) {
 }
 
 describe("public Ethereum token metadata", () => {
+  it("recovers current logo and links through the configured secondary and backs off the failed primary", async () => {
+    let clock = 0;
+    const healthy = rpcFixture();
+    const fetcher = vi.fn(async (url: unknown, init?: RequestInit) => String(url).includes("rpc.example.com")
+      ? new Response('{"error":{"code":10,"message":"User balance exceeded"}}', { status: 403 })
+      : healthy(url, init));
+    vi.stubGlobal("fetch", fetcher);
+    const read = createProductionMetadataBatchReader(() => clock);
+    const first = parseEthereumMetadataReads(await read([customGraphExploreEntry.tokenAddress], boundary));
+    expect(first?.imageUrl).toBe(json.image);
+    expect(first?.links).toEqual([{ kind: "website", url: json.external_url }, { kind: "x", url: json.twitter }]);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    await read([customGraphExploreEntry.tokenAddress], boundary);
+    expect(fetcher).toHaveBeenCalledTimes(6);
+    clock = 60_001;
+    await read([customGraphExploreEntry.tokenAddress], boundary);
+    expect(fetcher).toHaveBeenCalledTimes(10);
+  });
   it("uses one multicall and one exact-block read for all token fields, with no provider retry", async () => {
     const fetcher = rpcFixture();
     const [display] = await createEthereumPublicMetadataReader()([customGraphExploreEntry], boundary);
@@ -57,7 +78,7 @@ describe("public Ethereum token metadata", () => {
     expect(await createEthereumPublicMetadataReader()([customGraphExploreEntry], boundary)).toEqual([customGraphExploreEntry]);
     const fetcher = rpcFixture(boundary.asOfBlockHash, true);
     expect(await createEthereumPublicMetadataReader()([customGraphExploreEntry], boundary)).toEqual([customGraphExploreEntry]);
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(4);
   });
   it("imports inline ERC-1046 image, description, website and X without trusting JSON names", () => {
     expect(parseEthereumMetadataReads(reads())).toEqual({ name: "123", symbol: "123", description: "A public token",
