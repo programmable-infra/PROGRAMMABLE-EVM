@@ -11,7 +11,7 @@ import {buildFoundationEthereumGraph, assertFoundationEthereumTransaction,predic
 import {ETHEREUM_MODULE_SOURCE} from '../../lib/module-foundation/ethereum-release.ts';
 import {parseEthereumModuleAuthorization} from '../../lib/module-foundation/ethereum-authorization.ts';
 import {encodeFoundationFundingPath} from '../../lib/module-foundation/funding-path.ts';
-import {FAMILIES, ACCOUNT, BUY, FUNDING, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, publicError, check, fail} from './metamask-core.mjs';
+import {FAMILIES, ACCOUNT, BUY, FUNDING, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, publicError, check, fail} from './metamask-core.mjs';
 const origin='https://programmable.market';
 const cleanJson=value=>JSON.stringify(value,(_,v)=>typeof v==='bigint'?v.toString():v,2);
 const readJson=async file=>JSON.parse(await readFile(file,'utf8'));
@@ -36,7 +36,7 @@ export async function run([configFile],root){
   const clients=urls.map(url=>createPublicClient({chain:profile.chain,cacheTime:0,transport:custom({request:async({method,params})=>{
    check(allowed.has(method),'RPC-Methode ist nicht lesend');requests++;
    const r=await fetch(url,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:requests,method,params}),signal:AbortSignal.timeout(20000)});
-   if(!r.ok)fail('RPC gerade nicht erreichbar. Der Fortschritt ist gespeichert.');const b=await r.json();if(b.error){await durable(join(dir,'rpc-error.private.json'),{method,params,error:b.error});const e=Error('RPC reverted');e.code=b.error.code;e.data=b.error.data;throw e;}return b.result;
+   if(!r.ok)fail('RPC gerade nicht erreichbar. Der Fortschritt ist gespeichert.');const b=await r.json();if(b.error){await durable(join(dir,'rpc-error.private.json'),{method,params,error:b.error});const e=Error('RPC reverted');e.code=b.error.code;e.data=b.error.data;e.rpcMessage=String(b.error.message??'');throw e;}return b.result;
   }},{retryCount:0})}));
   check((await Promise.all(clients.map(c=>c.getChainId()))).every(v=>v===chainId),'RPC-Netzwerk stimmt nicht');
   const binding=await readJson(cfg.chains[chainId].bindingFile);
@@ -111,15 +111,25 @@ export async function run([configFile],root){
  async function swap(c,item,stage,target,buy,amount){
   const quote=c.profile.wrappedEth.address,input=buy?quote:target.token,output=buy?target.token:quote;
   const approved=await approval(c,item,stage,input,amount);if(approved)return approved;
-  const p=c.clients[0],block=await p.getBlock(),deadline=block.timestamp+300n;
-  const readBalance={to:output,data:encodeFunctionData({abi:tokenAbi,functionName:'balanceOf',args:[ACCOUNT]})};
-  const quoteSimulation=await p.simulateCalls({account:ACCOUNT,blockNumber:block.number,calls:[readBalance,{to:c.profile.infrastructure.universalRouter.address,data:swapData(target.poolKey,input,output,amount,1n,deadline),value:0n},readBalance]});
+  const waitForBlock=()=>{c.simulationRetries=(c.simulationRetries??0)+1;if(c.simulationRetries>6){c.simulationRetries=0;fail('Der RPC liefert noch keinen gemeinsamen Block. Bitte später fortsetzen; alle Bestätigungen bleiben gespeichert.');}return display({status:'waiting',message:'Warte, bis beide RPCs den letzten Schritt bereitstellen',waitSeconds:Math.min(2**c.simulationRetries,15)});};
+  const p=c.clients[0];let block,quoteSimulation,deadline;
+  try{
+   const heads=await Promise.all(c.clients.map(client=>client.getBlockNumber({cacheTime:0})));
+   const lastReceipt=state.history.filter(tx=>tx.chainId===c.chainId).reduce((last,tx)=>BigInt(tx.blockNumber)>last?BigInt(tx.blockNumber):last,0n);
+   const blockNumber=simulationCheckpoint(heads,c.profile.preparationLag,lastReceipt);
+   if(blockNumber===null)return waitForBlock();
+   const blocks=await Promise.all(c.clients.map(client=>client.getBlock({blockNumber})));
+   check(blocks[0].hash===blocks[1].hash,'RPCs bestätigen verschiedene Blöcke.');block=blocks[0];deadline=block.timestamp+300n;
+   const readBalance={to:output,data:encodeFunctionData({abi:tokenAbi,functionName:'balanceOf',args:[ACCOUNT]})};
+   quoteSimulation=await p.simulateCalls({account:ACCOUNT,blockNumber,calls:[readBalance,{to:c.profile.infrastructure.universalRouter.address,data:swapData(target.poolKey,input,output,amount,1n,deadline),value:0n},readBalance]});
+  }catch(error){if(isTransientBlockError(error))return waitForBlock();throw error;}
+  c.simulationRetries=0;
   check(quoteSimulation.results.length===3&&quoteSimulation.results.every(r=>r.status==='success'),'Der Swap ist mit den aktuellen Modulregeln nicht ausführbar.');
   const beforeQuote=decodeAbiParameters(parseAbiParameters('uint256'),quoteSimulation.results[0].data)[0],afterQuote=decodeAbiParameters(parseAbiParameters('uint256'),quoteSimulation.results[2].data)[0];
   const minOut=(afterQuote-beforeQuote)*9700n/10000n;check(minOut>0n,'Der Test-Swap würde keine Token liefern.');
   const data=swapData(target.poolKey,input,output,amount,minOut,deadline);
   const before=await bal(c,output);
-  return prepare(c,item,stage,{to:c.profile.infrastructure.universalRouter.address,data},buy?'Testkauf · 0,00001 ETH':'Test-Token verkaufen','step',{output,minimumOutput:String(minOut),outputBefore:String(before),tradeToken:target.token,buy,inputAmount:String(amount)});
+  return prepare(c,item,stage,{to:c.profile.infrastructure.universalRouter.address,data,expires:Number(deadline)},buy?'Testkauf · 0,00001 ETH':'Test-Token verkaufen','step',{output,minimumOutput:String(minOut),outputBefore:String(before),tradeToken:target.token,buy,inputAmount:String(amount),simulationBlock:String(block.number),simulationBlockHash:block.hash});
  }
  function display(extra={}){
   const cur=state.prepared?{c:chains.get(state.prepared.chainId),item:cstate(chains.get(state.prepared.chainId)).cases.find(x=>x.family===state.prepared.family)}:current();return {account:ACCOUNT,simulationOnly:cfg.simulationOnly===true,chainId:cur?.c.chainId??1,family:cur?.item.family??null,completed:Object.values(state.chains).flatMap(c=>c.cases).filter(i=>i.completed).length,total:Object.values(state.chains).flatMap(c=>c.cases).length,transactions:state.history.length,status:state.prepared?.hash?'pending':state.prepared?'review':cur?'ready':'complete',prepared:state.prepared?{id:state.prepared.id,label:state.prepared.label,request:state.prepared.request,maximumGasWei:state.prepared.maximumGasWei,hash:state.prepared.hash}:null,cases:Object.entries(state.chains).flatMap(([chain,c])=>c.cases.map(i=>({chainId:Number(chain),family:i.family,completed:i.completed,position:i.position,steps:caseSteps(i.kind).length}))),...extra};
@@ -205,7 +215,10 @@ export async function run([configFile],root){
   }
   return display({status:'waiting',message:'Nächster Schritt wird vorbereitet',waitSeconds:1});
  }
- const session=randomBytes(32).toString('base64url'),port=cfg.port??4188,host=`127.0.0.1:${port}`;
+ const port=cfg.port??4188,host=`127.0.0.1:${port}`;
+ let session=randomBytes(32).toString('base64url');
+ // Keep the existing local tab usable after an update without losing a pending wallet hash.
+ try{const previous=await readJson(join(dir,'local-console.private.json'));const url=new URL(previous.url);if(previous.sourceRoot===root&&previous.account===ACCOUNT&&url.origin===`http://${host}`&&/^#[A-Za-z0-9_-]{43}$/.test(url.hash))session=url.hash.slice(1);}catch(error){if(error.code!=='ENOENT')throw error;}
  const html=await readFile(join(root,'ops/economic-modules/metamask-console.html'),'utf8');
  const server=createServer(async(req,res)=>{
   const send=(code,body,type='application/json')=>{res.writeHead(code,{'content-type':type,'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer','content-security-policy':"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'"});res.end(type==='application/json'?cleanJson(body):body);};

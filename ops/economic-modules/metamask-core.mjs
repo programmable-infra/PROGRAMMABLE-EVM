@@ -47,6 +47,19 @@ export function assertEnvelope(actual, expected) {
  if(price===undefined||BigInt(price)>BigInt(expected.maxFeePerGas)) throw Error('Transaction fee exceeds reviewed limit');
 }
 export function digestRequest(request) { return keccak256(toHex(JSON.stringify(request))); }
+export function simulationCheckpoint(heads, lag, lastReceipt = 0n) {
+ if (!heads.length || lag < 0n || lastReceipt < 0n || heads.some(head => head < 0n)) throw Error('Invalid simulation checkpoint');
+ const block = heads.reduce((lowest, head) => head < lowest ? head : lowest) - lag;
+ return block < lastReceipt ? null : block;
+}
+export function isTransientBlockError(error) {
+ const seen = new Set();
+ for (let cause = error; cause && !seen.has(cause); cause = cause.cause) {
+  seen.add(cause);
+  if (cause.name === 'BlockNotFoundError' || /header not found|unknown block|block not found/i.test(cause.rpcMessage ?? '')) return true;
+ }
+ return false;
+}
 export function publicError(error) {
  return typeof error?.safeMessage==='string'?error.safeMessage:'Vorbereitung angehalten. Die bereits bestätigten Schritte bleiben gespeichert.';
 }
