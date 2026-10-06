@@ -2,9 +2,8 @@ import {createServer} from 'node:http';
 import {randomBytes, randomUUID} from 'node:crypto';
 import {readFile, mkdir, open, rename, rm} from 'node:fs/promises';
 import {join} from 'node:path';
-import {createPublicClient, custom, decodeAbiParameters, encodeAbiParameters, encodeFunctionData, getAddress, getCreate2Address, keccak256, parseAbi, parseAbiParameters, toHex} from 'viem';
-import Privy,{InMemoryCache} from '@privy-io/js-sdk-core';
-import {RefreshSession} from '@privy-io/routes';
+import {createPublicClient, custom, decodeAbiParameters, encodeAbiParameters, encodeFunctionData, getCreate2Address, keccak256, parseAbi, parseAbiParameters, toHex} from 'viem';
+import {fetchEthereumAuthorization} from './metamask-auth.mjs';
 import {foundationChainProfile} from '../../lib/module-foundation/chains.ts';
 import {foundationTransactionGasLimit} from '../../lib/module-foundation/gas.ts';
 import {foundationFactoryV2Abi, encodeFoundationParameters, encodeFoundationLaunchEntry} from '../../lib/module-foundation/abi.ts';
@@ -47,7 +46,7 @@ export async function run([configFile],root){
   chains.set(chainId,{chainId,profile,clients,binding,get requests(){return requests;}});
  }
  await save();
- let busy=false,chainId=4663;
+ let busy=false;
  const withLock=async fn=>{if(busy)throw Object.assign(Error('Eine Vorbereitung läuft bereits'),{safeMessage:'Eine Vorbereitung läuft bereits',retryable:true});busy=true;try{return await fn();}finally{busy=false;}};
  const cstate=c=>state.chains[c.chainId];
  const current=()=>{for(const c of chains.values()){const pending=cstate(c).cases.filter(x=>!x.completed);if(!pending.length)continue;const now=Math.max(cstate(c).clock??0,Math.floor(Date.now()/1000));const item=pending.find(x=>!x.waitUntil||x.waitUntil<=now)??pending.reduce((a,b)=>(a.waitUntil??0)<(b.waitUntil??0)?a:b);return {c,item};}return null;};
@@ -60,10 +59,7 @@ export async function run([configFile],root){
   for(const pin of entries){const code=await Promise.all(c.clients.map(p=>p.getCode({address:pin.address})));check(code.every(b=>b&&keccak256(b)===pin.runtimeCodeHash),'Contract-Code stimmt nicht mit der geprüften Version überein');}
  }
  async function authorization(request){
-  let session=await readJson(cfg.sessionFile);check(session.walletAddress.toLowerCase()===ACCOUNT.toLowerCase(),'Anmeldung gehört nicht zur Test-Wallet');
-  const send=()=>fetch(origin+'/api/module-foundation/authorize',{method:'POST',headers:{Origin:origin,'content-type':'application/json',Authorization:`Bearer ${session.token}`,...(session.identityToken?{'X-Privy-Identity-Token':session.identityToken}:{})},body:JSON.stringify(request),signal:AbortSignal.timeout(95000)});
-  let r=await send();
-  if(r.status===401&&session.refreshToken){const sdk=new Privy({appId:session.appId,storage:new InMemoryCache()});const fresh=await sdk.fetchPrivyRoute(RefreshSession,{body:{refresh_token:session.refreshToken},headers:{Origin:origin,Authorization:`Bearer ${session.privyAccessToken}`}});check(fresh.user.id===session.userId,'Anmeldung hat sich geändert');session={...session,token:fresh.token,refreshToken:fresh.refresh_token,privyAccessToken:fresh.privy_access_token,identityToken:fresh.identity_token};await durable(cfg.sessionFile,session);r=await send();}
+  const r=await fetchEthereumAuthorization(request,await readJson(cfg.sessionFile),session=>durable(cfg.sessionFile,session));
   const body=await r.json();if(!r.ok){if(r.status===429){state.retryNotBefore=Date.now()+Number(r.headers.get('retry-after')||300)*1000;await save();fail('Ethereum-Freigabe hat ein Anfragelimit erreicht. Der Countdown verhindert neue Anfragen.');}fail('Ethereum-Freigabe ist gerade nicht verfügbar: '+r.status);}
   return parseEthereumModuleAuthorization(body,request);
  }
@@ -214,7 +210,7 @@ export async function run([configFile],root){
   if(state.retryNotBefore>Date.now())return display({status:'waiting',message:'Warte auf das Ethereum-Anfragefenster',waitSeconds:Math.ceil((state.retryNotBefore-Date.now())/1000)});
   for(let advance=0;advance<10;advance++){
    const cur=current();if(!cur)return display({message:'Signierablauf abgeschlossen. Nachweise werden getrennt von der öffentlichen Freischaltung geprüft.'});
-   const {c,item}=cur;chainId=c.chainId;const p=c.clients[0];
+   const {c,item}=cur;const p=c.clients[0];
    if(!cstate(c).initialized){
     if(!c.runtimeChecked){await verifyPins(c);c.runtimeChecked=true;}
     const balance=await bal(c,c.profile.wrappedEth.address);
