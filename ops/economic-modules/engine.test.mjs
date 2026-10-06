@@ -175,3 +175,48 @@ test("a missing daily budget cannot broadcast and an exact pending retry is not 
   await runEconomicPass(f.options);
   assert.equal(f.state.gasReservedWei, "10");
 });
+
+test("a verified dip NotReady is waiting, while other callback and provider failures stay errors", async () => {
+  const { encodeAbiParameters, toFunctionSelector } = await import("viem");
+  const hostFailure = `${toFunctionSelector("ModuleFailure(uint256,uint8)")}${encodeAbiParameters([{type:"uint256"},{type:"uint8"}],[0n,4]).slice(2)}`;
+  const failed = data => Object.assign(new Error("RPC reverted"), { cause: { data } });
+  for (const inner of [toFunctionSelector("NotReady()"), toFunctionSelector("NoLiquidity()"), "0x", null]) {
+    const f = rpcFixture();
+    f.target.family = "dip-buyback"; f.target.kind = "strategy";
+    f.bound.descriptor.moduleId = keccak256(stringToHex("programmable.foundation.dip-buyback.v1"));
+    let calls = 0;
+    f.client.call = async request => {
+      calls++;
+      if (calls === 1) throw failed(hostFailure);
+      assert.equal(request.account, f.target.host);
+      assert.equal(request.to, f.target.module);
+      if (inner === null) throw new Error("provider unavailable");
+      throw failed(inner);
+    };
+    if (inner === toFunctionSelector("NotReady()")) assert.equal(await f.adapter.prepare(f.target, {}), null);
+    else await assert.rejects(f.adapter.prepare(f.target, {}), /RPC reverted/);
+    assert.equal(calls, 2);
+  }
+  const f = rpcFixture();
+  f.target.family = "dip-buyback"; f.target.kind = "strategy";
+  f.bound.descriptor.moduleId = keccak256(stringToHex("programmable.foundation.dip-buyback.v1"));
+  let calls = 0;
+  f.client.call = async () => { calls++; throw new Error("provider unavailable"); };
+  await assert.rejects(f.adapter.prepare(f.target, {}), /provider unavailable/);
+  assert.equal(calls, 1);
+});
+
+test("bundling the execution library into a worker does not start its CLI", async () => {
+  const { build } = await import("esbuild");
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join, resolve } = await import("node:path");
+  const { execFileSync } = await import("node:child_process");
+  const directory = await mkdtemp(join(tmpdir(), "economic-worker-import-"));
+  try {
+    const output = join(directory, "worker.mjs");
+    await build({ stdin: { contents: 'import { validateExecutionConfig } from "./ops/economic-modules/run.mjs"; console.log(typeof validateExecutionConfig);', resolveDir: resolve(".") },
+      outfile: output, bundle: true, platform: "node", format: "esm", logLevel: "silent" });
+    assert.equal(execFileSync(process.execPath, [output], { encoding: "utf8" }).trim(), "function");
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
