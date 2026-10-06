@@ -51,5 +51,5 @@ test("desktop remains nonmodal and resizing does not reopen the mobile sheet", a
   await page.getByRole("button", { name: "Trade TEST", exact: true }).click();
   await page.setViewportSize({ width: 1280, height: 800 });
   await expect(page.getByLabel("Amount")).toBeVisible();
-  expect(await page.getByRole("dialog").evaluate(element => element.matches(":modal"))).toBe(false);
+  await expect.poll(() => page.getByRole("dialog").evaluate(element => element.matches(":modal"))).toBe(false);
 });

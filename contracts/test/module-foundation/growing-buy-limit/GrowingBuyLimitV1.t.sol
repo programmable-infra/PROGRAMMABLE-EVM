@@ -161,8 +161,9 @@ contract GrowingBuyLimitV1Test {
         c.quote = c.token;
         vm.expectRevert(GrowingBuyLimitV1.InvalidContext.selector);
         new GrowingBuyLimitV1(c, abi.encode(uint16(50), uint16(500), uint32(600)));
+        c = host.context(true);
         vm.expectRevert(GrowingBuyLimitFactoryV1.OnlyBoundHost.selector);
-        factory.createModule(host.context(true), abi.encode(uint16(50), uint16(500), uint32(600)));
+        factory.createModule(c, abi.encode(uint16(50), uint16(500), uint32(600)));
     }
 
     function testFreshInstancesSameRuntimeAndFixedLimit() public {
