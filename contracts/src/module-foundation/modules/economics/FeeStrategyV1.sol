@@ -147,9 +147,12 @@ contract FeeStrategyV1 is SharedModuleBaseV1, PoolPriceWindowV1, IUnlockCallback
             uint128 input = uint128(kind == Kind.FullRangeLP ? amount / 2 : amount);
             if (input == 0) revert NotReady();
             uint256 expected = _quoteAtTick(mean, input, _context.quote < _context.token);
-            // Include the highest possible host fee (10% creator + 0.3% platform). Actual output is checked as well.
-            // Read actual configured fees so a low-fee launch does not get an unnecessarily loose bound.
+            // V3 has directional fees; the live Robinhood V2 factory creates V1 hosts
+            // with one symmetric fee. Read the actual rate on either host version.
             (bool ok, bytes memory feeData) = _context.host.staticcall(abi.encodeWithSignature("creatorBuyFeeBps()"));
+            if (!ok || feeData.length == 0) {
+                (ok, feeData) = _context.host.staticcall(abi.encodeWithSignature("creatorFeeBps()"));
+            }
             if (!ok || feeData.length != 32) revert InvalidContext();
             uint256 fee = abi.decode(feeData, (uint256));
             if (fee > 1000) revert InvalidContext();
