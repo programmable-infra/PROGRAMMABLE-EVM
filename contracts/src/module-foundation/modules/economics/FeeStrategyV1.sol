@@ -84,18 +84,17 @@ contract FeeStrategyV1 is SharedModuleBaseV1, PoolPriceWindowV1, IUnlockCallback
                 : kind == Kind.LPRewards
                     ? keccak256("programmable.foundation.lp-rewards.v1")
                     : keccak256("programmable.foundation.full-range-lp.v1");
-        return
-            T.Descriptor(
-                id,
-                1,
-                T.BEFORE_SWAP | T.AFTER_SWAP | T.ACTION,
-                T.OWN_QUOTE_BUDGET,
-                100_000,
-                40_000,
-                2_000_000,
-                false,
-                id
-            );
+        return T.Descriptor({
+            moduleId: id,
+            abiVersion: 1,
+            phases: T.BEFORE_SWAP | T.AFTER_SWAP | T.ACTION,
+            resources: T.OWN_QUOTE_BUDGET,
+            beforeGas: 100_000,
+            afterGas: 40_000,
+            actionGas: 2_000_000,
+            failOpenAfter: false,
+            exclusiveGroup: id
+        });
     }
 
     function poolKey() public view returns (PoolKey memory key) {
