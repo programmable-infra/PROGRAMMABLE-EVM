@@ -25,6 +25,11 @@ import { IERC721 } from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import { StateLibrary } from "@uniswap/v4-core/src/libraries/StateLibrary.sol";
 import { IPoolManager } from "@uniswap/v4-core/src/interfaces/IPoolManager.sol";
 import { PoolId } from "@uniswap/v4-core/src/types/PoolId.sol";
+import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
+import { FullMath } from "@uniswap/v4-core/src/libraries/FullMath.sol";
+import { IV4Router } from "@uniswap/v4-periphery-v211/src/interfaces/IV4Router.sol";
+import { Actions } from "@uniswap/v4-periphery/src/libraries/Actions.sol";
+import { IFoundationUniversalRouterV2 } from "../../src/module-foundation/FoundationFactoryV2.sol";
 
 interface VmColdStorage {
     function cool(address target) external;
@@ -107,6 +112,274 @@ abstract contract EconomicModulesForkBase is FoundationForkBaseV3 {
 
     function _module(L.LaunchResultV2 memory r, uint256 i) internal view returns (address) {
         return FoundationHookV2(r.hook).moduleAt(i).instance;
+    }
+
+    /// @dev A quote priced at $3,000 gives $4,997.25 FDV at this 60-aligned tick.
+    /// This is a deterministic valuation fixture, not a live USD price assertion.
+    /// Amount fields have no package defaults: use explicit, finite test amounts.
+    function _normalLaunch(uint8 kind, bool quoteFirst, address referenceHost)
+        internal
+        returns (L.LaunchResultV2 memory r)
+    {
+        P.LaunchParamsV3 memory p = _params(quoteFirst, kind < 7 ? 1000 : 0, kind < 7 ? 1000 : 0, 0, 0);
+        p.initialTick = quoteFirst ? int24(202_140) : int24(-202_140);
+        if (kind != type(uint8).max) {
+            p.modules = new T.ModuleSelection[](1);
+            p.modules[0] = _selection(kind, referenceHost, kind < 7 ? 10_000 : 0);
+            if (kind < 4) {
+                p.modules[0].configuration = abi.encode(
+                    uint128(0.000_001 ether),
+                    uint128(0.000_01 ether),
+                    uint32(300),
+                    uint32(300),
+                    uint16(500),
+                    uint16(kind == 1 ? 500 : 0)
+                );
+            } else if (kind < 7) {
+                p.modules[0].configuration = abi.encode(
+                    uint128(0.000_01 ether),
+                    uint16(kind == 4 ? 100 : 0),
+                    uint32(kind == 5 ? 10 : 0),
+                    uint32(kind == 6 ? 3600 : 0)
+                );
+            } else if (kind < 9) {
+                p.modules[0].configuration =
+                    abi.encode(uint128(kind == 7 ? 0.000_01 ether : 1 ether), uint32(kind == 7 ? 60 : 0));
+            } else {
+                p.modules[0].configuration = abi.encode(
+                    referenceHost,
+                    uint16(kind == 9 ? 100 : 0),
+                    uint16(kind == 9 ? 10 : 0),
+                    uint16(kind == 9 ? 500 : 0),
+                    uint16(kind == 10 ? 1000 : 0)
+                );
+            }
+        }
+        _mine(p);
+        r = _launch(p);
+        assertEq(r.creatorQuotePrincipal, 0);
+        assertEq(r.initialBuyTokenAmount, 0);
+        assertGt(r.baseTokenPrincipal, 0);
+        (uint160 sqrt,,,) = manager.getSlot0(PoolId.wrap(r.poolId));
+        uint256 square = uint256(sqrt) * sqrt;
+        uint256 quoteValue = quoteFirst
+            ? FullMath.mulDiv(T.TOKEN_SUPPLY, 1 << 192, square)
+            : FullMath.mulDiv(T.TOKEN_SUPPLY, square, 1 << 192);
+        uint256 dollars = quoteValue * 3000 / 1 ether;
+        assertGe(dollars, 4984);
+        assertLe(dollars, 5016);
+    }
+
+    function normalTradeExternal(L.LaunchResultV2 memory r, address actor, bool buy, uint128 amount)
+        external
+        returns (uint256 received)
+    {
+        FoundationHookV2 hook = FoundationHookV2(r.hook);
+        address input = buy ? address(quote) : r.token;
+        address output = buy ? r.token : address(quote);
+        uint256 beforeInput = IERC20(input).balanceOf(actor);
+        uint256 beforeOutput = IERC20(output).balanceOf(actor);
+        vm.startPrank(actor);
+        IERC20(input).approve(PERMIT2, amount);
+        permits.approve(input, ROUTER, amount, uint48(block.timestamp + 120));
+        bytes[] memory params = new bytes[](3);
+        params[0] =
+            abi.encode(IV4Router.ExactInputSingleParams(hook.poolKey(), input < output, amount, 1, 0, bytes("")));
+        params[1] = abi.encode(Currency.wrap(input), uint256(amount));
+        params[2] = abi.encode(Currency.wrap(output), uint256(1));
+        bytes[] memory inputs = new bytes[](1);
+        inputs[0] = abi.encode(
+            abi.encodePacked(uint8(Actions.SWAP_EXACT_IN_SINGLE), uint8(Actions.SETTLE_ALL), uint8(Actions.TAKE_ALL)),
+            params
+        );
+        IFoundationUniversalRouterV2(ROUTER).execute(hex"10", inputs, block.timestamp + 120);
+        vm.stopPrank();
+        assertEq(beforeInput - IERC20(input).balanceOf(actor), amount);
+        received = IERC20(output).balanceOf(actor) - beforeOutput;
+        assertGt(received, 0);
+        _assertClean(r);
+    }
+
+    function _normalPay(L.LaunchResultV2 memory r) internal {
+        BuyerRewardsV1 m = BuyerRewardsV1(_module(r, 0));
+        address[] memory recipients = new address[](2);
+        recipients[0] = ALICE;
+        recipients[1] = BOB;
+        uint256 aliceBefore = quote.balanceOf(ALICE);
+        uint256 bobBefore = quote.balanceOf(BOB);
+        uint256 aliceOwed = m.owed(ALICE);
+        uint256 bobOwed = m.owed(BOB);
+        assertGt(aliceOwed + bobOwed, 0);
+        bytes memory action = abi.encodePacked(m.PAY(), abi.encode(recipients));
+        vm.prank(address(0xCA401));
+        FoundationHookV2(r.hook).executeModuleAction(0, action);
+        assertEq(quote.balanceOf(ALICE), aliceBefore + aliceOwed);
+        assertEq(quote.balanceOf(BOB), bobBefore + bobOwed);
+        assertEq(m.totalOwed(), 0);
+        uint256 paid = m.totalPaid();
+        FoundationHookV2(r.hook).executeModuleAction(0, action);
+        assertEq(m.totalPaid(), paid);
+        assertEq(quote.balanceOf(ALICE), aliceBefore + aliceOwed);
+        assertEq(quote.balanceOf(BOB), bobBefore + bobOwed);
+        assertEq(m.reserve() + m.totalOwed() + m.totalPaid(), m.accountedCredits());
+    }
+
+    function _normalScenario(uint8 kind) internal {
+        for (uint256 order; order < 2; ++order) {
+            uint256 snapshot = vm.snapshotState();
+            bool quoteFirst = order == 0;
+            quote.mint(BOB, 1 ether);
+            L.LaunchResultV2 memory ref;
+            if (kind >= 9) {
+                ref = _normalLaunch(type(uint8).max, quoteFirst, address(0));
+                this.normalTradeExternal(ref, ALICE, true, 0.001 ether);
+            }
+            L.LaunchResultV2 memory r = _normalLaunch(kind, quoteFirst, ref.hook);
+            if (kind == 8) {
+                vm.expectRevert();
+                this.normalTradeExternal(r, BOB, true, 0.001 ether);
+            }
+            if (kind >= 9) {
+                L.LaunchResultV2 memory unrelated = _normalLaunch(type(uint8).max, quoteFirst, address(0));
+                LinkedPoolV1 linked = LinkedPoolV1(_module(r, 0));
+                uint256 cap = linked.currentCap();
+                this.normalTradeExternal(unrelated, ALICE, true, 0.2 ether);
+                if (kind == 9) {
+                    assertEq(linked.currentCap(), cap);
+                    vm.expectRevert();
+                    this.normalTradeExternal(r, ALICE, true, 0.1 ether);
+                } else {
+                    assertFalse(linked.unlockReached());
+                    vm.expectRevert();
+                    this.normalTradeExternal(r, ALICE, true, 0.001 ether);
+                }
+                this.normalTradeExternal(ref, ALICE, true, 0.2 ether);
+                if (kind == 9) assertGt(linked.currentCap(), cap);
+                else assertTrue(linked.unlockReached());
+            }
+            this.normalTradeExternal(r, ALICE, true, kind == 1 ? 0.2 ether : 0.001 ether);
+            if (kind < 4) {
+                FeeStrategyV1 m = FeeStrategyV1(_module(r, 0));
+                if (kind != 2) {
+                    vm.expectRevert();
+                    this.normalExecuteExternal(r);
+                }
+                vm.warp(block.timestamp + 301);
+                if (kind == 1) {
+                    vm.expectRevert();
+                    this.normalExecuteExternal(r);
+                    this.normalTradeExternal(r, ALICE, false, uint128(IERC20(r.token).balanceOf(ALICE)));
+                }
+                _execute(r, 0);
+                assertGt(m.totalQuoteUsed(), 0);
+                assertLe(m.totalQuoteUsed(), 0.000_01 ether);
+                if (kind < 2) assertGt(m.totalBurned(), 0);
+                if (kind == 3) assertGt(m.lockedLiquidity(), 0);
+                vm.expectRevert();
+                this.normalExecuteExternal(r);
+            } else if (kind == 5) {
+                BuyerRewardsV1 m = BuyerRewardsV1(_module(r, 0));
+                assertEq(m.everyN(), 10);
+                this.normalTradeExternal(r, BOB, true, 0.001 ether);
+                assertEq(m.qualifyingBuys(), 1);
+                uint256 buyBlock = block.number;
+                for (uint256 i = 2; i <= 10; ++i) {
+                    vm.roll(buyBlock + i);
+                    this.normalTradeExternal(r, i == 10 ? BOB : ALICE, true, 0.001 ether);
+                }
+                assertEq(m.qualifyingBuys(), 10);
+                assertEq(m.owed(ALICE), 0);
+                assertGt(m.owed(BOB), 0);
+                _normalPay(r);
+            } else if (kind == 6) {
+                BuyerRewardsV1 m = BuyerRewardsV1(_module(r, 0));
+                assertEq(m.king(), ALICE);
+                uint256 aliceOwed = m.owed(ALICE);
+                this.normalTradeExternal(r, BOB, true, 0.002 ether);
+                assertEq(m.king(), BOB);
+                assertGt(m.owed(ALICE), aliceOwed);
+                uint256 bobOwed = m.owed(BOB);
+                this.normalTradeExternal(r, ALICE, true, 0.000_02 ether);
+                assertEq(m.king(), BOB);
+                assertGt(m.owed(BOB), bobOwed);
+                this.normalTradeExternal(r, BOB, false, uint128(IERC20(r.token).balanceOf(BOB)));
+                assertEq(m.king(), address(0));
+                _normalPay(r);
+            } else if (kind == 4) {
+                _normalPay(r);
+            } else if (kind == 7) {
+                uint128 aliceTokens = uint128(IERC20(r.token).balanceOf(ALICE));
+                vm.expectRevert();
+                this.normalTradeExternal(r, ALICE, false, aliceTokens);
+                this.normalTradeExternal(r, BOB, true, 0.001 ether);
+                this.normalTradeExternal(r, ALICE, false, uint128(IERC20(r.token).balanceOf(ALICE)));
+                vm.warp(PoolGamesV1(_module(r, 0)).pausedUntil());
+                this.normalTradeExternal(r, BOB, false, uint128(IERC20(r.token).balanceOf(BOB)));
+            } else if (kind == 8) {
+                vm.prank(ALICE);
+                IERC20(r.token).transfer(BOB, 1 ether);
+                this.normalTradeExternal(r, BOB, true, 0.001 ether);
+                this.normalTradeExternal(r, BOB, false, uint128(IERC20(r.token).balanceOf(BOB)));
+            } else if (kind >= 9) {
+                this.normalTradeExternal(ref, ALICE, false, uint128(IERC20(ref.token).balanceOf(ALICE)));
+                if (kind == 10) {
+                    assertTrue(LinkedPoolV1(_module(r, 0)).unlocked());
+                    this.normalTradeExternal(r, ALICE, true, 0.001 ether);
+                }
+            }
+            uint256 remaining = IERC20(r.token).balanceOf(ALICE);
+            if (remaining > 0) this.normalTradeExternal(r, ALICE, false, uint128(remaining));
+            assertEq(IERC20(r.token).balanceOf(ALICE), 0);
+            assertTrue(vm.revertToState(snapshot));
+        }
+    }
+
+    function normalExecuteExternal(L.LaunchResultV2 memory r) external {
+        _execute(r, 0);
+    }
+
+    function testNormalValuationBuybackBurn() public {
+        _normalScenario(0);
+    }
+
+    function testNormalValuationDipBuyback() public {
+        _normalScenario(1);
+    }
+
+    function testNormalValuationLPRewards() public {
+        _normalScenario(2);
+    }
+
+    function testNormalValuationFullRangeLP() public {
+        _normalScenario(3);
+    }
+
+    function testNormalValuationBuyerRewards() public {
+        _normalScenario(4);
+    }
+
+    function testNormalValuationNthBuyPot() public {
+        _normalScenario(5);
+    }
+
+    function testNormalValuationKingOfTheHill() public {
+        _normalScenario(6);
+    }
+
+    function testNormalValuationHotPotato() public {
+        _normalScenario(7);
+    }
+
+    function testNormalValuationPlague() public {
+        _normalScenario(8);
+    }
+
+    function testNormalValuationReactivePair() public {
+        _normalScenario(9);
+    }
+
+    function testNormalValuationEntangled() public {
+        _normalScenario(10);
     }
 
     function _execute(L.LaunchResultV2 memory r, uint256 i) internal {

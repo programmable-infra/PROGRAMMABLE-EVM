@@ -40,7 +40,8 @@ export async function run(args: string[], root: string) {
   if (urls.some(url => url.protocol !== "https:" || url.username || url.password) || urls[0].hostname === urls[1].hostname) throw Error("Use independent HTTPS providers.");
   const chain = foundationChainProfile(execution.chainId).chain;
   const clients = urls.map(url => createPublicClient({ chain, transport: http(url.href, { retryCount: 0, timeout: 15_000 }) })) as unknown as Parameters<typeof discoverEconomicTargets>[0]["clients"];
-  const directory = path.resolve(directoryArg), registry = path.join(directory, "registry.json");
+  const directory = path.resolve(directoryArg), preview = flag !== "--broadcast";
+  const registry = path.join(directory, preview ? "preview-registry.json" : "registry.json");
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const lock = path.join(directory, "service.lock");
   await mkdir(lock);
@@ -69,14 +70,16 @@ export async function run(args: string[], root: string) {
       processed = page.processed;
     }
     const passConfig = validateExecutionConfig({ ...execution, targets: state.targets });
-    if (flag === "--broadcast") await writeDurable(registry, state);
-    const executionFile = path.join(directory, flag === "--broadcast" ? "execution.json" : "preview-execution.json");
+    // Preview advances its own discovery cursor without changing the live registry or nonce journal.
+    await writeDurable(registry, state);
+    const executionFile = path.join(directory, preview ? "preview-execution.json" : "execution.json");
     await writeDurable(executionFile, passConfig);
     const result = execFileSync(process.execPath, [path.join(root, "ops/economic-modules/run.mjs"), executionFile,
-      path.join(directory, "execution-journal.json"), ...(flag ? [flag] : [])], { encoding: "utf8", timeout: 240_000, maxBuffer: 65_536 });
+      path.join(directory, preview ? "preview-execution-journal.json" : "execution-journal.json"), preview ? "--preview-state" : "--broadcast"], { encoding: "utf8", timeout: 240_000, maxBuffer: 65_536 });
     const status = { checkedAt: new Date().toISOString(), processedLaunches: processed, targets: state.targets.length,
       discoveryBlock: state.position.block, execution: JSON.parse(result) };
-    if (flag === "--broadcast") await writeDurable(path.join(directory, "health.json"), status);
+    await writeDurable(path.join(directory, preview ? "preview-health.json" : "health.json"), status);
     console.log(JSON.stringify(status));
+    return status;
   } finally { await rm(lock, { recursive: true }); }
 }

@@ -125,7 +125,7 @@ export function createExecutionAdapter({ config, client, wallet, account }) {
 
 async function main() {
   const [configPath, journalPath, flag] = process.argv.slice(2);
-  if (!configPath || !journalPath || (flag && flag !== "--broadcast")) throw new Error("Usage: run.mjs CONFIG JOURNAL [--broadcast]");
+  if (!configPath || !journalPath || (flag && !["--broadcast", "--preview-state"].includes(flag))) throw new Error("Usage: run.mjs CONFIG JOURNAL [--broadcast|--preview-state]");
   const config = validateExecutionConfig(JSON.parse(await readFile(configPath, "utf8")));
   const rpc = process.env[config.rpcEnv];
   if (!rpc) throw new Error("Configured RPC environment variable is missing");
@@ -141,10 +141,12 @@ async function main() {
   try {
     let state;
     try { state = JSON.parse(await readFile(journal, "utf8")); }
-    catch (error) { if (error.code !== "ENOENT") throw error; state = { chainId: config.chainId, account: typeof account === "string" ? account : account.address }; }
+    catch (error) { if (error.code !== "ENOENT") throw error; state = { chainId: config.chainId, account: typeof account === "string" ? account : account.address, ...(flag === "--preview-state" ? { mode: "preview" } : {}) }; }
+    if ((flag === "--preview-state" && (state.mode !== "preview" || state.pending))
+      || (broadcast && state.mode === "preview")) throw new Error("Preview and live journals must remain separate");
     if (state.chainId !== config.chainId || getAddress(state.account) !== getAddress(typeof account === "string" ? account : account.address)) throw new Error("Journal account or chain mismatch");
     const persist = async value => {
-      if (!broadcast) return; // A dry run neither consumes event cursors nor changes a live journal.
+      if (!broadcast && flag !== "--preview-state") return; // Plain dry runs remain read-only; the service owns a separate preview journal.
       const tmp = `${journal}.${process.pid}.tmp`;
       const file = await open(tmp, "w", 0o600);
       try { await file.writeFile(`${JSON.stringify(value, null, 2)}\n`); await file.sync(); }

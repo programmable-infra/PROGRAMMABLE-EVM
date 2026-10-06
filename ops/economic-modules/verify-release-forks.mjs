@@ -132,7 +132,7 @@ for (const [name, suite] of Object.entries(suites)) {
   }
   report.suites.push({ name, tests });
 }
-report.success = result.code === 0 && report.failed === 0 && report.skipped === 0 && report.passed >= 70;
+report.success = result.code === 0 && report.failed === 0 && report.skipped === 0 && report.passed >= 92;
 await writeJson(path.join(output, "result.json"), report);
 console.log(JSON.stringify({ passed: report.passed, failed: report.failed, skipped: report.skipped, success: report.success, output }));
 if (!report.success) process.exitCode = 1;
