@@ -5,7 +5,7 @@ import { mainnet } from "viem/chains";
 import { characterLength, hasUnsafeDisplayCharacters, isValidTokenSymbol, MAX_TOKEN_DESCRIPTION_BYTES,
   MAX_TOKEN_NAME_BYTES, MAX_TOKEN_NAME_CHARACTERS, MAX_TOKEN_SYMBOL_BYTES, utf8ByteLength } from "@/lib/metadata-policy";
 import { buildTokenLinks, sanitizeImageUrl, sanitizeSocialUrl, sanitizeWebsiteUrl } from "@/lib/onchain/metadata";
-import { productionMainnetRpcPrimary } from "@/lib/onchain/website-rpc-providers.server";
+import { productionMainnetRpcPair, productionMainnetRpcPrimary } from "@/lib/onchain/website-rpc-providers.server";
 import { isLaunchStampProvenanceV1, type CanonicalTokenExploreEntry, type TokenLink } from "@/lib/tokens";
 import { parseStrictJson } from "./projection-target/canonical-json";
 import { readBoundedUtf8BodyV1 } from "./custom-launch/bounded-utf8-body-v1";
@@ -88,9 +88,9 @@ export function parseEthereumMetadataReads(reads: readonly ReadResult[]): Ethere
   return Object.keys(display).length ? display : null;
 }
 
-async function readProductionMetadataBatch(addresses: readonly Address[], boundary: EthereumMetadataBoundary): Promise<readonly ReadResult[]> {
+async function readMetadataBatchAt(url: string, addresses: readonly Address[], boundary: EthereumMetadataBoundary): Promise<readonly ReadResult[]> {
   const signal = AbortSignal.timeout(2_500);
-  const client = createPublicClient({ chain: mainnet, transport: http(productionMainnetRpcPrimary().url, {
+  const client = createPublicClient({ chain: mainnet, transport: http(url, {
     retryCount: 0, timeout: 2_500,
     fetchFn: async (input, init) => {
       const response = await fetch(input, { ...init, cache: "no-store", redirect: "error", signal });
@@ -110,10 +110,23 @@ async function readProductionMetadataBatch(addresses: readonly Address[], bounda
   return results.map(row => row.status === "success" ? { status: "success", result: row.result } : { status: "failure" });
 }
 
+/** Display-only fallback; both providers must match the saved canonical block. */
+export function createProductionMetadataBatchReader(now = Date.now): BatchReader {
+  let retryPrimaryAt = 0;
+  return async (addresses, boundary) => {
+    if (now() >= retryPrimaryAt) {
+      try { return await readMetadataBatchAt(productionMainnetRpcPrimary().url, addresses, boundary); }
+      catch { retryPrimaryAt = now() + 60_000; }
+    }
+    return readMetadataBatchAt(productionMainnetRpcPair().secondary.url, addresses, boundary);
+  };
+}
+
 /** Display refreshes never alter the saved Router identity, stamp proof or admission. */
-export function createEthereumPublicMetadataReader({ readBatch = readProductionMetadataBatch, now = Date.now }: {
+export function createEthereumPublicMetadataReader({ readBatch, now = Date.now }: {
   readBatch?: BatchReader; now?: () => number;
 } = {}) {
+  const read = readBatch ?? createProductionMetadataBatchReader(now);
   type Record = { boundary: EthereumMetadataBoundary; value: EthereumPublicTokenMetadata | null; observedAt: number; expiresAt: number };
   const cache = new Map<string, Record>();
   const pending = new Map<string, Promise<Record>>();
@@ -137,7 +150,7 @@ export function createEthereumPublicMetadataReader({ readBatch = readProductionM
       });
     const selected = missing.filter(entry => !pending.has(key(entry))).slice(0, Math.min(ETHEREUM_METADATA_BATCH_SIZE, ETHEREUM_METADATA_CACHE_SIZE - pending.size));
     if (selected.length) {
-      const operation = Promise.resolve().then(() => readBatch(selected.map(entry => entry.tokenAddress as Address), boundary));
+      const operation = Promise.resolve().then(() => read(selected.map(entry => entry.tokenAddress as Address), boundary));
       selected.forEach((entry, index) => {
         const identity = key(entry);
         const read = operation.then(results => ({ boundary, value: parseEthereumMetadataReads(results.slice(index * 4, index * 4 + 4)),
