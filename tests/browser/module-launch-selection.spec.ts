@@ -85,7 +85,7 @@ test("a click joins pending launch work once, and wallet switches cancel the old
   const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
   const events = () => page.evaluate(() => (window as unknown as { launchEvents: { preparations: number; walletRequests: number; aborts: number; walletContext?: string } }).launchEvents);
   try {
-    await page.goto(`http://127.0.0.1:${address.port}/?mode=launch-speed`);
+    await page.goto(`http://127.0.0.1:${address.port}/?mode=launch-speed&holdWallet=1`);
     await page.getByLabel("Name", { exact: true }).fill("My coin");
     await page.getByLabel("Ticker", { exact: true }).fill("COIN");
     await expect.poll(async () => (await events()).preparations).toBe(1);
@@ -101,6 +101,12 @@ test("a click joins pending launch work once, and wallet switches cancel the old
     await expect.poll(async () => (await events()).walletRequests).toBe(1);
     expect((await events()).preparations).toBe(2);
     expect((await events()).walletContext).toBe("other-wallet:4663:release");
+    // Keep the wallet open until both submissions were observed. An immediate fixture
+    // rejection correctly warms another attempt and raced this assertion on slow CI.
+    await page.evaluate(() => (window as unknown as { rejectFixtureWallet: () => void }).rejectFixtureWallet());
+    await expect(page.getByRole("alert")).toContainText("Fixture wallet rejected");
+    await expect.poll(async () => (await events()).preparations).toBe(3);
+    expect((await events()).walletRequests).toBe(1);
   } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
 });
 
