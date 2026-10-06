@@ -8,12 +8,12 @@ function fixture(overrides = {}) {
   const events = [], state = {};
   const adapter = {
     prepare: async target => { events.push(`prepare:${target.id}`); return { to: target.id }; },
-    sign: async () => { events.push("sign"); return { raw: "0x1234", hash: "0xhash" }; },
+    sign: async () => { events.push("sign"); return { raw: "0x1234", hash: "0xhash", maxGasCostWei: "10" }; },
     submit: async raw => events.push(`submit:${raw}`),
     receipt: async () => null,
     ...overrides,
   };
-  const options = { targets: [{ id: "a" }, { id: "b" }], state, adapter, now: 100, broadcast: true,
+  const options = { targets: [{ id: "a" }, { id: "b" }], state, adapter, now: 100, broadcast: true, maxGasSpendPerDayWei: 1000n,
     persist: async value => events.push(value.pending ? "persist:signed" : "persist:state") };
   return { options, events, state };
 }
@@ -71,6 +71,7 @@ test("reverted confirmed receipts back off, confirmed success advances, and scan
 const address = "0x1111111111111111111111111111111111111111";
 const code = "0x1234", runtimeHash = keccak256(code), configurationHash = keccak256("0xab");
 const config = { chainId: 1, confirmations: 12, rpcEnv: "ECONOMIC_ETH_RPC", keyEnv: "ECONOMIC_KEY", maxFeePerGasWei: "100", simulationAccount: address,
+  maxGasSpendPerDayWei: "1000",
   targets: [{ host: address, module: address, family: "buyer-rewards", index: 0, runtimeHash, configurationHash, deployedBlock: "10" }] };
 
 test("requires supported chains, confirmations, known modules and unique bindings", () => {
@@ -147,4 +148,30 @@ test("gas price ceiling prevents signing", async () => {
   const adapter = createExecutionAdapter({ config: normalized, client: {}, wallet: { prepareTransactionRequest: async () => ({ maxFeePerGas: 101n }) },
     account: { signTransaction: () => { throw new Error("should not sign"); } } });
   await assert.rejects(adapter.sign({}), /ceiling/);
+});
+
+test("the daily gas ceiling prevents submission and a new UTC day restores the budget", async () => {
+  const f = fixture();
+  f.options.maxGasSpendPerDayWei = 9n;
+  assert.equal((await runEconomicPass(f.options)).budgetExhausted, true);
+  assert.equal(f.state.pending, undefined);
+  assert.equal(f.events.some(event => event.startsWith("submit:")), false);
+  f.options.maxGasSpendPerDayWei = 10n;
+  f.options.now += 61;
+  await runEconomicPass(f.options);
+  assert.equal(f.state.gasReservedWei, "10");
+  f.options.adapter.receipt = async () => ({ success: true });
+  f.options.now += 61;
+  assert.equal((await runEconomicPass(f.options)).budgetExhausted, true);
+  f.options.now += 86400;
+  assert.equal((await runEconomicPass(f.options)).submitted, 1);
+  assert.equal(f.state.gasReservedWei, "10");
+});
+
+test("a missing daily budget cannot broadcast and an exact pending retry is not charged twice", async () => {
+  const f = fixture();
+  await assert.rejects(runEconomicPass({ ...f.options, maxGasSpendPerDayWei: 0n }), /budget/);
+  await runEconomicPass(f.options);
+  await runEconomicPass(f.options);
+  assert.equal(f.state.gasReservedWei, "10");
 });

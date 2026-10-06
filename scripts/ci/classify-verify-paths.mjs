@@ -239,6 +239,7 @@ export const CONTRACT_RELEASE_TEST_PATHS = Object.freeze([
   "tests/classic-v3-deployment-sequence.test.ts",
   "tests/deep-release-verifier.test.ts",
   "tests/deep-v2-release-verifier.test.ts",
+  "tests/module-foundation-economic-modules.test.ts",
 ]);
 
 export const DATABASE_RUNTIME_TEST_PATHS = Object.freeze([

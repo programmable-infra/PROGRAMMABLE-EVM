@@ -1,0 +1,26 @@
+[Unit]
+Description=Programmable economic modules on chain %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=programmable
+Group=programmable
+WorkingDirectory=/opt/programmable
+EnvironmentFile=/etc/programmable/economics-%i.env
+ExecStart=/usr/bin/node /opt/programmable/ops/economic-modules/service.mjs /etc/programmable/economics-%i.json /var/lib/programmable-economics-%i --broadcast
+StateDirectory=programmable-economics-%i
+StateDirectoryMode=0700
+UMask=0077
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/programmable/contracts/out/economic-modules
+TimeoutStartSec=300
+MemoryMax=768M
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

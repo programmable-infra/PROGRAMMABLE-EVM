@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Programmable economic modules on chain %i once per minute
+
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=60s
+AccuracySec=5s
+Unit=programmable-economics@%i.service
+
+[Install]
+WantedBy=timers.target

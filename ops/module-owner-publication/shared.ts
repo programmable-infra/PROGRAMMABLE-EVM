@@ -1,4 +1,3 @@
-import ethereumRelease from "@/contracts/deployments/ethereum-module-release-v1.json";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createPublicClient, http } from "viem";
@@ -6,6 +5,7 @@ import { foundationChainProfile } from "@/lib/module-foundation/chains";
 import { verifyFoundationOwnerRuntimeV1 } from "@/lib/module-foundation/owner-runtime";
 import type { FoundationOwnerPublicationV1 } from "@/lib/module-foundation/owner-publication";
 import { run as stageTarget, publishCatalogBatch } from "./main";
+import { assertEthereumAuthority, readEthereumAuthority } from "./authority";
 
 /** One job, resumable per-chain journals, one atomic catalog compare-and-swap. */
 export async function run(args: string[], repositoryRoot: string) {
@@ -37,10 +37,7 @@ export async function run(args: string[], repositoryRoot: string) {
   }
   if (job.activate !== true) return;
   const ethereum = publications.find(publication => publication.release.chainId === 1)!;
-  if (ethereum.protocolReleaseDigest !== ethereumRelease.releaseDigest || !ethereumRelease.payload.modules.some(module =>
-    module.factory.toLowerCase() === ethereum.release.factory.toLowerCase()
-    && module.factoryCodeHash === ethereum.release.factoryCodeHash && module.moduleCodeHash === ethereum.release.moduleCodeHash
-    && module.descriptorHash === ethereum.release.descriptorHash)) throw Error("The Ethereum host release must admit this module before joint publication.");
+  assertEthereumAuthority(ethereum, await readEthereumAuthority());
   // Staging can precede a host rollout. Activation must use the live host on both networks.
   await Promise.all(publications.map(async publication => {
     const response = await fetch(`https://programmable.market/api/module-foundation?chainId=${publication.release.chainId}`,

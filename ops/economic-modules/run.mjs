@@ -22,11 +22,13 @@ export function validateExecutionConfig(config) {
   if (!config || ![1, 4663].includes(config.chainId) || !Array.isArray(config.targets) || config.targets.length > 1000
     || !Number.isSafeInteger(config.confirmations) || config.confirmations < (config.chainId === 1 ? 12 : 64)
     || !/^[A-Z][A-Z0-9_]+$/.test(config.rpcEnv ?? "") || !/^[A-Z][A-Z0-9_]+$/.test(config.keyEnv ?? "")
-    || !/^[1-9][0-9]*$/.test(config.maxFeePerGasWei ?? "")) throw new Error("Invalid execution configuration");
+    || !/^[1-9][0-9]*$/.test(config.maxFeePerGasWei ?? "")
+    || !/^[1-9][0-9]*$/.test(config.maxGasSpendPerDayWei ?? "")) throw new Error("Invalid execution configuration");
   const targets = config.targets.map(target => {
     if (!families.has(target.family) || !Number.isInteger(target.index) || target.index < 0 || target.index > 7
       || !isHash(target.runtimeHash) || !isHash(target.configurationHash)
-      || !/^[0-9]+$/.test(target.deployedBlock ?? "")) throw new Error("Invalid admitted target");
+      || !/^[0-9]+$/.test(target.deployedBlock ?? "")
+      || (target.deploymentBlockHash !== undefined && !isHash(target.deploymentBlockHash))) throw new Error("Invalid admitted target");
     const host = getAddress(target.host), instance = getAddress(target.module);
     return { ...target, host, module: instance, id: `${host}:${target.index}`, kind: families.get(target.family) };
   });
@@ -51,6 +53,9 @@ export function createExecutionAdapter({ config, client, wallet, account }) {
       head ??= await client.getBlockNumber();
       const blockNumber = head - BigInt(config.confirmations);
       if (blockNumber < BigInt(target.deployedBlock)) return null;
+      if (target.deploymentBlockHash && (await client.getBlock({ blockNumber: BigInt(target.deployedBlock) })).hash !== target.deploymentBlockHash) {
+        throw new Error("The registered launch was reorganized");
+      }
       const bound = await client.readContract({ address: target.host, abi: hostAbi, functionName: "moduleAt", args: [BigInt(target.index)], blockNumber });
       const code = await client.getCode({ address: target.module, blockNumber });
       if (getAddress(bound.instance) !== target.module || bound.codeHash !== target.runtimeHash
@@ -113,7 +118,7 @@ export function createExecutionAdapter({ config, client, wallet, account }) {
       const fee = request.maxFeePerGas ?? request.gasPrice;
       if (fee === undefined || fee > maxFee) throw new Error("Gas price exceeds the configured ceiling");
       const raw = await account.signTransaction(request);
-      return { raw, hash: keccak256(raw) };
+      return { raw, hash: keccak256(raw), maxGasCostWei: (fee * request.gas).toString() };
     },
   };
 }
@@ -149,7 +154,7 @@ async function main() {
       try { await directory.sync(); } finally { await directory.close(); }
     };
     const report = await runEconomicPass({ targets: config.targets, state, adapter: createExecutionAdapter({ config, client, wallet, account }), persist,
-      now: Math.floor(Date.now() / 1000), broadcast });
+      now: Math.floor(Date.now() / 1000), broadcast, maxGasSpendPerDayWei: BigInt(config.maxGasSpendPerDayWei) });
     console.log(JSON.stringify({ chainId: config.chainId, broadcast, ...report }));
   } finally { await rm(lock, { recursive: true }); }
 }
