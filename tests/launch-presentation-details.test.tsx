@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { LaunchPairModules } from "@/components/launch-pair-modules";
-import { launchPresentationDetails, type LaunchPresentationSource } from "@/lib/launch-presentation-details";
+import { ethereumFoundationPresentation, ethereumPairPresentation, launchPresentationDetails, type LaunchPresentationSource } from "@/lib/launch-presentation-details";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 import type { PublicModuleDetails } from "@/lib/module-mode/public-details";
 import { coinPairTicker } from "@/lib/robinhood-presentation";
 
@@ -11,6 +12,15 @@ const native = address("0"), weth = "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73"
 const launch: LaunchPresentationSource = { tokenAddress: address("1"), poolId: hash("2") };
 
 describe("canonical launch pair and module presentation", () => {
+  it("reads the Ethereum quote from the saved pool proof when optional quote metadata is absent", () => {
+    expect(launchPresentationDetails(ethereumFoundationPresentation(customGraphExploreEntry), 1).pair)
+      .toEqual({ address: native, label: "ETH" });
+    const proof = customGraphExploreEntry.launchStampProvenance;
+    const reversed = { ...customGraphExploreEntry, launchStampProvenance: { ...proof,
+      poolKey: { ...proof.poolKey, currency0: customGraphExploreEntry.tokenAddress, currency1: address("3") as `0x${string}` } } };
+    expect(ethereumPairPresentation(reversed).quoteAsset).toBe(address("3"));
+    expect(ethereumPairPresentation({ ...reversed, poolId: hash("9") }).quoteAsset).toBeUndefined();
+  });
   it.each([1, 4663])("keeps the read-back pair ticker without a market feed on chain %s", chainId => {
     const source = { ...launch, sourceKind: "module-foundation-v1" as const, quoteAsset: address("3"), quoteSymbol: "CLAUS" };
     const pair = launchPresentationDetails(source, chainId).pair;

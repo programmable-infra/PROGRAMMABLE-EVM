@@ -21,7 +21,7 @@ describe("Ethereum live public presentation", () => {
   it("renders updated name, symbol, artwork and links from the matching presentation refresh", () => {
     display.items = [presentation];
     const html = render();
-    expect(html).toContain("Updated coin"); expect(html).toContain("$NEW"); expect(html).toContain("https://example.com/new.png");
+    expect(html).toContain("Updated coin"); expect(html).toContain("$NEW / ETH"); expect(html).toContain("https://example.com/new.png");
     expect(html).toContain('href="https://x.com/new"'); expect(html).toContain("Current description");
     expect(html).not.toContain("Old description"); expect(token.name).toBe(customGraphExploreEntry.name);
   });

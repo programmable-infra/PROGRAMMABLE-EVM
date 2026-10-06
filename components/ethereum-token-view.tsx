@@ -12,7 +12,7 @@ import { ArrowLeft, ArrowUpRight, Check, Copy } from "lucide-react";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { RobinhoodProjectLinks } from "@/components/robinhood-project-links";
 import { coinDollars, coinPairTicker, coinValuation, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
-import { launchPresentationDetails } from "@/lib/launch-presentation-details";
+import { ethereumPairPresentation, launchPresentationDetails } from "@/lib/launch-presentation-details";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import styles from "./robinhood-token-view.module.css";
 
@@ -34,9 +34,8 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
   const market = display?.market ?? null;
   const name = display?.name ?? token?.name ?? "Unnamed token";
   const symbol = display?.symbol ?? token?.symbol;
-  const launch = { tokenAddress: address, poolId: token?.poolId };
-  const pairMarket = token?.quoteAssetAddress ? { poolId: token.poolId,
-    quoteAsset: { address: token.quoteAssetAddress, symbol: token.quoteAssetSymbol ?? null } } : market;
+  const launch = { tokenAddress: address, poolId: token?.poolId, ...(token ? ethereumPairPresentation(token) : {}) };
+  const pairMarket = market;
   const pair = launchPresentationDetails(launch, 1, pairMarket).pair;
   const imageUrl = display ? display.imageUrl : token?.imageUrl;
   const description = display ? display.description : token?.description;
