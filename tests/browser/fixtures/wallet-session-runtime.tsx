@@ -62,6 +62,7 @@ const forbidden = async (): Promise<never> => {
 };
 
 const pendingNetworkSwitches: { resolve: () => void; reject: (error: Error) => void }[] = [];
+let supportedChainIds: readonly number[] = [];
 const injectedListeners = new Map<string, Set<(value: unknown) => void>>();
 const injectedProvider = {
   isMetaMask: true,
@@ -113,6 +114,8 @@ function wallet(address: string, linked = true, connectedAt = 1, initialChain = 
     isConnected: async () => true,
     switchChain: async (chainId) => {
       record("switchChain", { address, chainId });
+      // Match Privy's configured-chain check instead of accepting every test network.
+      if (!supportedChainIds.includes(chainId)) throw new Error("Unsupported chain: add this network to supportedChains.");
       if (state.delayedNetworkSwitch) {
         await new Promise<void>((resolve, reject) => {
           pendingNetworkSwitches.push({ resolve, reject });
@@ -268,7 +271,10 @@ const refreshUser = async () => {
 };
 const reauthorize = async () => { record("reauthorize"); };
 
-export function PrivyProvider({ children }: { children: ReactNode }) { return children; }
+export function PrivyProvider({ children, config }: { children: ReactNode; config: { supportedChains: { id: number }[] } }) {
+  supportedChainIds = config.supportedChains.map(chain => chain.id);
+  return children;
+}
 export function usePrivy() {
   const current = useFixtureState();
   return {

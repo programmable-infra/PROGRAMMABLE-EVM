@@ -96,24 +96,30 @@ export async function assertFoundationInfrastructure(client: PublicClient, bindi
     const code = await client.getCode({ address: pin.address, blockNumber: block.number! });
     if (!code || code === "0x" || keccak256(code).toLowerCase() !== pin.runtimeCodeHash.toLowerCase()) throw new Error(`The ${role} runtime does not match this release.`);
   }));
-  const version = await client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "VERSION_ID", blockNumber: block.number });
-  if (version.toLowerCase() !== (factoryVersion === "v3" ? FOUNDATION_FACTORY_V3_ID : factoryVersion === "v2" ? FOUNDATION_FACTORY_V2_ID : FOUNDATION_ABI_ID).toLowerCase()) throw new Error("This factory uses a different reviewed factory version.");
-  if (factoryVersion !== "v1") {
-    const [moduleAbi, custody, recipient, roundingRecipient, fee] = await Promise.all([
-      client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "MODULE_ABI_ID", blockNumber: block.number }),
-      client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "LP_CUSTODY_ID", blockNumber: block.number }),
-      client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "LP_RECIPIENT", blockNumber: block.number }),
-      client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "ROUNDING_INVENTORY_RECIPIENT", blockNumber: block.number }),
-      client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "LP_FEE", blockNumber: block.number }),
-    ]);
-    if (moduleAbi !== FOUNDATION_ABI_ID || custody !== FOUNDATION_LP_CUSTODY_DEAD_ID || getAddress(recipient) !== FOUNDATION_DEAD_ADDRESS
-      || getAddress(roundingRecipient) !== FOUNDATION_DEAD_ADDRESS || fee !== 0) throw new Error("The V2 factory's irreversible LP custody or module interface is inconsistent.");
-  }
-  await Promise.all((["poolManager", "positionManager", "universalRouter", "permit2", "hookDeployer"] as const).map(async role => {
-    const actual = await client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: role, blockNumber: block.number! });
-    const expected = role === "hookDeployer" ? binding.hookDeployer.address : FOUNDATION_INFRASTRUCTURE[role].address;
-    if (getAddress(actual) !== getAddress(expected)) throw new Error(`The factory's ${role} binding changed.`);
-  }));
+  // These getters share the same verified code and immutable block. Fetch them together.
+  await Promise.all([
+    (async () => {
+      const version = await client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: "VERSION_ID", blockNumber: block.number });
+      if (version.toLowerCase() !== (factoryVersion === "v3" ? FOUNDATION_FACTORY_V3_ID : factoryVersion === "v2" ? FOUNDATION_FACTORY_V2_ID : FOUNDATION_ABI_ID).toLowerCase()) throw new Error("This factory uses a different reviewed factory version.");
+    })(),
+    (async () => {
+      if (factoryVersion === "v1") return;
+      const [moduleAbi, custody, recipient, roundingRecipient, fee] = await Promise.all([
+        client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "MODULE_ABI_ID", blockNumber: block.number }),
+        client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "LP_CUSTODY_ID", blockNumber: block.number }),
+        client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "LP_RECIPIENT", blockNumber: block.number }),
+        client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "ROUNDING_INVENTORY_RECIPIENT", blockNumber: block.number }),
+        client.readContract({ address: binding.factory.address, abi: foundationFactoryV2Abi, functionName: "LP_FEE", blockNumber: block.number }),
+      ]);
+      if (moduleAbi !== FOUNDATION_ABI_ID || custody !== FOUNDATION_LP_CUSTODY_DEAD_ID || getAddress(recipient) !== FOUNDATION_DEAD_ADDRESS
+        || getAddress(roundingRecipient) !== FOUNDATION_DEAD_ADDRESS || fee !== 0) throw new Error("The V2 factory's irreversible LP custody or module interface is inconsistent.");
+    })(),
+    ...(["poolManager", "positionManager", "universalRouter", "permit2", "hookDeployer"] as const).map(async role => {
+      const actual = await client.readContract({ address: binding.factory.address, abi: factoryAbi, functionName: role, blockNumber: block.number! });
+      const expected = role === "hookDeployer" ? binding.hookDeployer.address : FOUNDATION_INFRASTRUCTURE[role].address;
+      if (getAddress(actual) !== getAddress(expected)) throw new Error(`The factory's ${role} binding changed.`);
+    }),
+  ]);
   return { blockNumber: block.number, blockHash: block.hash, timestamp: block.timestamp };
 }
 

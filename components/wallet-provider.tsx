@@ -128,9 +128,6 @@ type WalletState = {
   chainId: string;
 };
 
-type ColorTheme = "light" | "dark";
-const themeChangeEvent = "programmable:theme-changed";
-
 export type WalletTradeBalances = {
   nativeBalanceWei: bigint;
   tokenBalanceRaw: bigint;
@@ -769,7 +766,7 @@ function getEmptyProfileValue() {
 const privyConfig = {
   loginMethods: ["wallet", "email", "github"],
   appearance: {
-    theme: "light",
+    theme: "dark",
     accentColor: "#465a6f",
     logo: "/brand/loop/programmable-loop-mark-warm-ivory-v1-1536.png",
     landingHeader: "Connect to Programmable",
@@ -791,7 +788,7 @@ const privyConfig = {
       createOnLogin: "users-without-wallets",
     },
   },
-  supportedChains: [robinhoodChain],
+  supportedChains: [robinhoodChain, mainnet],
   defaultChain: robinhoodChain,
 } satisfies PrivyClientConfig;
 
@@ -1152,19 +1149,6 @@ function DeferredWalletProvider({
   );
 }
 
-function subscribeToTheme(callback: () => void) {
-  window.addEventListener(themeChangeEvent, callback);
-  return () => window.removeEventListener(themeChangeEvent, callback);
-}
-
-function getThemeSnapshot(): ColorTheme {
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-}
-
-function getServerThemeSnapshot(): ColorTheme {
-  return "light";
-}
-
 // Adopting the bridge value rerenders WalletProvider. Keep that parent update
 // from feeding back through Privy's hook callbacks and emitting it again.
 const ConfiguredWalletProvider = memo(function ConfiguredWalletProvider({
@@ -1181,28 +1165,8 @@ const ConfiguredWalletProvider = memo(function ConfiguredWalletProvider({
   runtime: WalletProviderRuntime;
 }) {
   const { PrivyProvider } = runtime;
-  const theme = useSyncExternalStore(
-    subscribeToTheme,
-    getThemeSnapshot,
-    getServerThemeSnapshot,
-  );
-
-  const themedPrivyConfig = useMemo<PrivyClientConfig>(
-    () => ({
-      ...privyConfig,
-      appearance: {
-        ...privyConfig.appearance,
-        theme,
-      },
-    }),
-    [theme],
-  );
-
   return (
-    <PrivyProvider
-      appId={appId}
-      config={themedPrivyConfig}
-    >
+    <PrivyProvider appId={appId} config={privyConfig}>
       <PrivyWalletBridge
         autoAction={autoAction}
         onAutoActionConsumed={onAutoActionConsumed}
