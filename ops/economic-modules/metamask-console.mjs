@@ -155,11 +155,18 @@ export async function run([configFile],root){
  async function reconcile(){
   const pre=state.prepared;if(!pre)return;
   const c=chains.get(pre.chainId),p=c.clients[0];
+  const walletConstraints={};
+  if(pre.role==='step'&&pre.stage.startsWith('payout')){
+   const item=cstate(c).cases.find(i=>i.family===pre.family);
+   const debts=await Promise.all(c.clients.map(client=>client.readContract({address:item.module,abi:moduleAbi,functionName:'owed',args:[ACCOUNT],blockNumber:BigInt(pre.preparedBlock)})));
+   check(debts.every(v=>v===debts[0])&&debts[0]>0n,'Die RPCs bestätigen unterschiedliche vorbereitete Auszahlungen.');
+   walletConstraints.erc20Increase={token:c.profile.wrappedEth.address,recipient:ACCOUNT,maximumAmount:debts[0]};
+  }
   if(!pre.hash){
    const nonce=await p.getTransactionCount({address:ACCOUNT,blockTag:'latest'}),pending=await p.getTransactionCount({address:ACCOUNT,blockTag:'pending'});
    if(nonce>Number(BigInt(pre.request.nonce))){
     const head=await p.getBlockNumber();check(head-BigInt(pre.preparedBlock)<128n,'Die Transaktion muss anhand ihres Hashes wiederhergestellt werden.');
-    for(let b=BigInt(pre.preparedBlock);b<=head;b++){const block=await p.getBlock({blockNumber:b,includeTransactions:true});const found=block.transactions.find(t=>t.from.toLowerCase()===ACCOUNT.toLowerCase()&&t.nonce===Number(BigInt(pre.request.nonce)));if(found){assertWalletEnvelope(found,pre.request);pre.hash=found.hash;await save();break;}}
+    for(let b=BigInt(pre.preparedBlock);b<=head;b++){const block=await p.getBlock({blockNumber:b,includeTransactions:true});const found=block.transactions.find(t=>t.from.toLowerCase()===ACCOUNT.toLowerCase()&&t.nonce===Number(BigInt(pre.request.nonce)));if(found){assertWalletEnvelope(found,pre.request,walletConstraints);pre.hash=found.hash;await save();break;}}
     check(pre.hash,'Die gesendete Transaktion konnte noch nicht wiedergefunden werden.');
    }else if(pending>Number(BigInt(pre.request.nonce)))return display({status:'waiting',message:'MetaMask-Transaktion ist noch im Netzwerk. Bitte nicht erneut senden.',waitSeconds:5});
    else if(pre.expires<Math.floor(Date.now()/1000)+20){state.prepared=null;await save();return;}
@@ -168,7 +175,7 @@ export async function run([configFile],root){
   const results=await Promise.all(c.clients.map(async client=>{try{return {tx:await client.getTransaction({hash:pre.hash}),receipt:await client.getTransactionReceipt({hash:pre.hash})};}catch(e){if(/NotFound/.test(e.name))return null;throw e;}}));
   if(results.some(x=>!x))return display({status:'pending',message:'Warte auf Bestätigung im Netzwerk',waitSeconds:c.chainId===1?8:3});
   for(const result of results)check(result.receipt.status==='success','Transaktion ist fehlgeschlagen. Sie wird nicht automatisch erneut gesendet.');
-  const walletEnvelopes=await Promise.all(results.map((result,i)=>verifyWalletReceipt(c.clients[i],result.tx,pre.request,result.receipt)));
+  const walletEnvelopes=await Promise.all(results.map((result,i)=>verifyWalletReceipt(c.clients[i],result.tx,pre.request,result.receipt,walletConstraints)));
   check(walletEnvelopes.every(kind=>kind===walletEnvelopes[0]),'RPCs bestätigen verschiedene Wallet-Aufrufe.');
   check(results[0].receipt.blockHash===results[1].receipt.blockHash,'RPCs bestätigen verschiedene Blöcke.');
   const receipt=results[0].receipt,item=cstate(c).cases.find(i=>i.family===pre.family);

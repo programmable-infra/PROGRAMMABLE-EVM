@@ -9,13 +9,14 @@ export const METAMASK_RECEIPT_PINS = {
  manager:{address:'0xdb9B1e94B5b69Df7e401DDbedE43491141047dB3',hash:'0x762a7ccac3fba1fce7751870298c097c0d050451d9b4a1f0935e65dc4078d1d3'},
  implementation:{address:'0x63c0c19a282a1B52b07dD5a65b58948A07DAE32B',hash:'0x0b77e469f5603ed1e9ff0e7ee56238b61a8cf7cb3185b33e53e2eeaad50109ab'},
  balanceEnforcer:{address:'0xbD7B277507723490Cd50b12EaaFe87C616be6880',hash:'0x61f455a893e4dcb39599bfcd8f59000e438c52639b278b933e469610c7761b76'},
+ erc20BalanceEnforcer:{address:'0xcdF6aB796408598Cea671d79506d7D48E97a5437',hash:'0x7661ade9afeeb057a8189e93979ce5d812bfb3cfba24c5d6be54f19bd02647a3'},
 };
 export const selfDelegationType=parseAbiParameters('(address delegate,address delegator,bytes32 authority,(address enforcer,bytes terms,bytes args)[] caveats,uint256 salt,bytes signature)[]');
 const same=(a,b)=>typeof a==='string'&&typeof b==='string'&&a.toLowerCase()===b.toLowerCase();
 const requireMatch=(value)=>check(value,'Die MetaMask-Transaktion stimmt nicht mit dem vorbereiteten Auftrag überein.');
 
 // This only verifies a mined wallet envelope; it never creates or signs delegations.
-export function assertWalletEnvelope(actual,expected){
+export function assertWalletEnvelope(actual,expected,constraints={}){
  if(same(actual.to,expected.to)){assertEnvelope(actual,expected);return {kind:'direct'};}
  requireMatch(BigInt(expected.chainId)===1n&&BigInt(actual.chainId)===1n);
  requireMatch(same(actual.to,METAMASK_RECEIPT_PINS.manager.address)&&BigInt(actual.value)===0n);
@@ -36,12 +37,23 @@ export function assertWalletEnvelope(actual,expected){
  if(delegations.length){
   const d=delegations[0];
   requireMatch(same(d.delegate,expected.from)&&same(d.delegator,expected.from)&&d.authority==='0x'+'ff'.repeat(32));
-  requireMatch(d.caveats.length<=1);
+  requireMatch(d.caveats.length<=2&&new Set(d.caveats.map(c=>c.enforcer.toLowerCase())).size===d.caveats.length);
   for(const caveat of d.caveats){
-   requireMatch(same(caveat.enforcer,METAMASK_RECEIPT_PINS.balanceEnforcer.address)&&caveat.args==='0x');
-   // Only the wallet's native-balance guard, bounded by the requested native value.
-   requireMatch(same(caveat.terms,'0x01'+expected.from.slice(2)+toHex(BigInt(expected.value),{size:32}).slice(2)));
-   pins.push(METAMASK_RECEIPT_PINS.balanceEnforcer);
+   requireMatch(caveat.args==='0x');
+   if(same(caveat.enforcer,METAMASK_RECEIPT_PINS.balanceEnforcer.address)){
+    // Native debit remains bounded by the requested native value.
+    requireMatch(same(caveat.terms,'0x01'+expected.from.slice(2)+toHex(BigInt(expected.value),{size:32}).slice(2)));
+    pins.push(METAMASK_RECEIPT_PINS.balanceEnforcer);
+   }else{
+    const increase=constraints.erc20Increase;
+    requireMatch(same(caveat.enforcer,METAMASK_RECEIPT_PINS.erc20BalanceEnforcer.address)&&increase&&same(increase.recipient,expected.from));
+    // v1.3.0: increase flag, token, recipient, minimum increase. Only the
+    // prepared payout asset and its independently recorded debt are admitted.
+    requireMatch(/^0x[0-9a-f]{40}$/i.test(increase.token)&&caveat.terms.length===148&&same(caveat.terms.slice(0,84),'0x00'+increase.token.slice(2)+expected.from.slice(2)));
+    const amount=BigInt('0x'+caveat.terms.slice(84));
+    requireMatch(amount>0n&&amount<=BigInt(increase.maximumAmount));
+    pins.push(METAMASK_RECEIPT_PINS.erc20BalanceEnforcer);
+   }
   }
  }
  const auth=actual.authorizationList??[];requireMatch(auth.length<=1);
@@ -51,8 +63,8 @@ export function assertWalletEnvelope(actual,expected){
  return {kind:'metamask-self-delegation',pins,permissionContext:contexts[0],hasDelegation:delegations.length===1};
 }
 
-export async function verifyWalletReceipt(client,actual,expected,receipt){
- const envelope=assertWalletEnvelope(actual,expected);
+export async function verifyWalletReceipt(client,actual,expected,receipt,constraints={}){
+ const envelope=assertWalletEnvelope(actual,expected,constraints);
  if(envelope.kind==='direct')return envelope.kind;
  requireMatch(receipt.status==='success');
  const codes=await Promise.all(envelope.pins.map(pin=>client.getCode({address:pin.address,blockNumber:receipt.blockNumber})));
