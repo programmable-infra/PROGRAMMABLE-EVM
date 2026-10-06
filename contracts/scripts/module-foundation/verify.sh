@@ -36,18 +36,25 @@ unset FOUNDRY_SRC FOUNDRY_TEST FOUNDRY_SCRIPT FOUNDRY_OUT FOUNDRY_CACHE_PATH
 unset FOUNDRY_VIA_IR FOUNDRY_OPTIMIZER FOUNDRY_OPTIMIZER_RUNS FOUNDRY_AUTO_DETECT_REMAPPINGS
 unset FOUNDRY_FUZZ_RUNS FOUNDRY_INVARIANT_RUNS FOUNDRY_INVARIANT_DEPTH FOUNDRY_INVARIANT_FAIL_ON_REVERT
 export FOUNDATION_RPC_URL="${FOUNDATION_RPC_URL:-https://rpc.mainnet.chain.robinhood.com}"
+export FOUNDATION_ETHEREUM_RPC_URL="${FOUNDATION_ETHEREUM_RPC_URL:-https://ethereum-rpc.publicnode.com}"
 # The public RPC does not retain historic metadata for every previously unused CREATE2 address.
 # Fix a fresh block for this entire run, or supply an archive-capable endpoint and explicit retained block.
 if [[ -z "${FOUNDATION_FORK_BLOCK:-}" ]]; then
   FOUNDATION_FORK_BLOCK="$(cast block-number --rpc-url "${FOUNDATION_RPC_URL}")"
 fi
 export FOUNDATION_FORK_BLOCK
-if [[ ! "${FOUNDATION_FORK_BLOCK}" =~ ^[1-9][0-9]*$ ]]; then
+if [[ -z "${FOUNDATION_ETHEREUM_FORK_BLOCK:-}" ]]; then
+  FOUNDATION_ETHEREUM_FORK_BLOCK="$(cast block-number --rpc-url "${FOUNDATION_ETHEREUM_RPC_URL}")"
+fi
+export FOUNDATION_ETHEREUM_FORK_BLOCK
+if [[ ! "${FOUNDATION_FORK_BLOCK}" =~ ^[1-9][0-9]*$ || ! "${FOUNDATION_ETHEREUM_FORK_BLOCK}" =~ ^[1-9][0-9]*$ ]]; then
   printf 'Foundation requires an explicit positive fork block.\n' >&2
   exit 1
 fi
 printf 'Foundation fork block: %s\n' "${FOUNDATION_FORK_BLOCK}"
+printf 'Foundation Ethereum fork block: %s\n' "${FOUNDATION_ETHEREUM_FORK_BLOCK}"
 forge fmt --check src/module-foundation test/module-foundation
 forge lint src/module-foundation
 forge build src/module-foundation/FoundationFactoryV1.sol src/module-foundation/FoundationFactoryV2.sol src/module-foundation/FoundationFactoryV3Native.sol --sizes
 forge test --match-path 'test/module-foundation/*.t.sol' -vv
+forge test --match-path 'test/module-foundation/economics/*.t.sol' -vv
