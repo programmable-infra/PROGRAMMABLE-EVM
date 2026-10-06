@@ -26,6 +26,8 @@ import { IFoundationUniversalRouterV2 } from "../../src/module-foundation/Founda
 import { FoundationTokenV1 } from "../../src/module-foundation/FoundationTokenV1.sol";
 import { FoundationHookV2 } from "../../src/module-foundation/FoundationHookV2.sol";
 import { FoundationLedgerV1 } from "../../src/module-foundation/FoundationLedgerV1.sol";
+import { IFoundationModuleV1, IFoundationModuleFactoryV1 } from "../../src/module-foundation/IFoundationModuleV1.sol";
+import { FeeStrategyV1 } from "../../src/module-foundation/modules/economics/FeeStrategyV1.sol";
 import { FoundationTypesV1 as T } from "../../src/module-foundation/FoundationTypesV1.sol";
 import { FoundationLaunchTypesV3 as P } from "../../src/module-foundation/FoundationLaunchTypesV3.sol";
 import { FoundationLaunchTypesV2 as L } from "../../src/module-foundation/FoundationLaunchTypesV2.sol";
@@ -36,6 +38,10 @@ import {
 import {
     IProgrammableCreate2GraphDeployerV1 as G
 } from "../../src/robinhood-custom-launch/interfaces/IProgrammableCreate2GraphDeployerV1.sol";
+
+interface FoundationStampColdVm {
+    function cool(address target) external;
+}
 
 interface IFoundationGraphPlannerV1 is G {
     function computeGraphCommitment(GraphAuthorization calldata authorization, Target[] calldata targets)
@@ -102,6 +108,13 @@ contract FoundationEthereumStampV1Test is FoundationForkBaseV3 {
         internal
         returns (R.LaunchPermitV1 memory permit, R.StampRequestV1 memory request, bytes memory payload, address engine)
     {
+        return _buildWithModules(moduleCount, firstBuy, new T.ModuleSelection[](0));
+    }
+
+    function _buildWithModules(uint8 moduleCount, uint128 firstBuy, T.ModuleSelection[] memory selected)
+        internal
+        returns (R.LaunchPermitV1 memory permit, R.StampRequestV1 memory request, bytes memory payload, address engine)
+    {
         P.LaunchParamsV3 memory p;
         p.metadata = T.Metadata(
             "Ethereum Module Fixture",
@@ -119,8 +132,8 @@ contract FoundationEthereumStampV1Test is FoundationForkBaseV3 {
         p.initialBuyMinimumTokenAmount = firstBuy == 0 ? 0 : 1;
         p.deadline = uint64(block.timestamp + 120);
         p.tokenSalt = keccak256(abi.encode("foundation-ethereum-stamp-fixture", moduleCount, firstBuy));
-        p.modules = new T.ModuleSelection[](moduleCount);
-        if (moduleCount == 1) {
+        p.modules = selected.length == 0 ? new T.ModuleSelection[](moduleCount) : selected;
+        if (selected.length == 0 && moduleCount == 1) {
             LaunchWalletCapEthereumFactoryV1 f = new LaunchWalletCapEthereumFactoryV1();
             T.Descriptor memory d = T.Descriptor(
                 keccak256("programmable.foundation.launch-wallet-cap.v1"),
@@ -141,7 +154,7 @@ contract FoundationEthereumStampV1Test is FoundationForkBaseV3 {
                 abi.encode(uint16(1), uint32(3)),
                 0
             );
-        } else if (moduleCount > 0) {
+        } else if (selected.length == 0 && moduleCount > 0) {
             FoundationFixtureFactory moduleFactory = new FoundationFixtureFactory();
             for (uint256 i; i < moduleCount; ++i) {
                 T.Descriptor memory descriptor =
@@ -472,5 +485,130 @@ contract FoundationEthereumStampV1Test is FoundationForkBaseV3 {
         stampRouter.launchAndStampV1{ value: permit.value }(permit, request, payload, hex"dead");
         assertEq(request.token.code.length, 0);
         assertEq(stampRouter.launchIdByToken(request.token), bytes32(0));
+    }
+
+    function testEconomicStrategiesThroughCanonicalStamp() public {
+        for (uint8 kind; kind < 4; ++kind) {
+            uint256 snapshot = vm.snapshotState();
+            _verifyEconomicStamp(kind, address(0));
+            assertTrue(vm.revertToState(snapshot));
+        }
+    }
+
+    function testEconomicRewardsThroughCanonicalStamp() public {
+        for (uint8 kind = 4; kind < 7; ++kind) {
+            uint256 snapshot = vm.snapshotState();
+            _verifyEconomicStamp(kind, address(0));
+            assertTrue(vm.revertToState(snapshot));
+        }
+    }
+
+    function testEconomicGamesThroughCanonicalStamp() public {
+        for (uint8 kind = 7; kind < 9; ++kind) {
+            uint256 snapshot = vm.snapshotState();
+            _verifyEconomicStamp(kind, address(0));
+            assertTrue(vm.revertToState(snapshot));
+        }
+    }
+
+    function testEconomicLinkedPoolsThroughCanonicalStamp() public {
+        (R.LaunchPermitV1 memory permit, R.StampRequestV1 memory referenceRequest, bytes memory payload,) =
+            _build(0, 0.005 ether);
+        _authorizeOnlyOnFork(permit);
+        vm.prank(ALICE);
+        stampRouter.launchAndStampV1{ value: permit.value }(permit, referenceRequest, payload, hex"c0ffee");
+        for (uint8 kind = 9; kind < 11; ++kind) {
+            uint256 snapshot = vm.snapshotState();
+            _verifyEconomicStamp(kind, address(referenceRequest.poolKey.hooks));
+            assertTrue(vm.revertToState(snapshot));
+        }
+    }
+
+    function _verifyEconomicStamp(uint8 kind, address referenceHost) internal {
+        string[11] memory names = [
+            "BuybackBurn",
+            "DipBuyback",
+            "LPRewards",
+            "FullRangeLP",
+            "BuyerRewards",
+            "NthBuyPot",
+            "KingOfTheHill",
+            "HotPotato",
+            "Plague",
+            "ReactivePair",
+            "Entangled"
+        ];
+        IFoundationModuleFactoryV1 moduleFactory = IFoundationModuleFactoryV1(
+            deployCode(string.concat("EconomicModuleFactoriesV1.sol:", names[kind], "FactoryV1"))
+        );
+        bytes memory configuration;
+        if (kind < 4) {
+            configuration = abi.encode(
+                uint128(1), uint128(0.000_01 ether), uint32(30), uint32(300), uint16(500), uint16(kind == 1 ? 500 : 0)
+            );
+        } else if (kind < 7) {
+            configuration = abi.encode(
+                uint128(1), uint16(kind == 4 ? 100 : 0), uint32(kind == 5 ? 2 : 0), uint32(kind == 6 ? 300 : 0)
+            );
+        } else if (kind < 9) {
+            configuration = abi.encode(uint128(1), uint32(kind == 7 ? 60 : 0));
+        } else {
+            configuration = abi.encode(
+                referenceHost,
+                uint16(kind == 9 ? 100 : 0),
+                uint16(kind == 9 ? 10 : 0),
+                uint16(kind == 9 ? 500 : 0),
+                uint16(kind == 10 ? 100 : 0)
+            );
+        }
+        address sample = moduleFactory.createModule(
+            T.ModuleContext(address(this), address(1), WETH, ALICE, address(3), bytes32(uint256(1))), configuration
+        );
+        T.ModuleSelection[] memory selections = new T.ModuleSelection[](1);
+        selections[0] = T.ModuleSelection(
+            address(moduleFactory),
+            address(moduleFactory).codehash,
+            sample.codehash,
+            keccak256(abi.encode(IFoundationModuleV1(sample).descriptor())),
+            configuration,
+            kind < 7 ? 10_000 : 0
+        );
+        (R.LaunchPermitV1 memory permit, R.StampRequestV1 memory request, bytes memory payload, address engine) =
+            _buildWithModules(1, kind == 10 ? 0 : 0.005 ether, selections);
+        _authorizeOnlyOnFork(permit);
+        bytes memory data = abi.encodeCall(stampRouter.launchAndStampV1, (permit, request, payload, hex"c0ffee"));
+        uint256 intrinsicGas = 21_000;
+        for (uint256 i; i < data.length; ++i) {
+            intrinsicGas += data[i] == 0 ? 4 : 16;
+        }
+        FoundationStampColdVm(address(vm)).cool(address(moduleFactory));
+        vm.prank(ALICE);
+        uint256 beforeGas = gasleft();
+        bytes32 stamp = stampRouter.launchAndStampV1{ value: permit.value }(permit, request, payload, hex"c0ffee");
+        uint256 used = beforeGas - gasleft() + intrinsicGas;
+        emit log_named_uint(names[kind], used);
+        assertLt(used, 16_777_216, "Economic module must fit the Ethereum transaction limit");
+        assertTrue(stamp != bytes32(0));
+        assertEq(stampRouter.launchIdByToken(request.token), request.launchId);
+        L.LaunchResultV2 memory result = FoundationEthereumGraphLaunchV1(payable(engine)).launchOf(request.token);
+        FoundationHookV2 host = FoundationHookV2(result.hook);
+        assertEq(host.initializer(), engine);
+        assertEq(host.creator(), ALICE);
+        assertEq(host.moduleCount(), 1);
+        assertEq(host.moduleAt(0).codeHash, sample.codehash);
+        assertEq(IERC20(request.token).balanceOf(ALICE), result.initialBuyTokenAmount);
+        assertEq(FoundationLedgerV1(result.ledger).platformReceived(), permit.value * 30 / 10_000);
+        if (kind == 10) return; // Gate opening is exercised by the linked-pool lifecycle tests.
+        vm.warp(block.timestamp + 300);
+        vm.startPrank(ALICE);
+        IFoundationWrappedEth(WETH).deposit{ value: 0.001 ether }();
+        IERC20(WETH).approve(PERMIT2, type(uint256).max);
+        permits.approve(WETH, ROUTER, type(uint160).max, uint48(block.timestamp + 1 days));
+        _buy(request, 0.001 ether);
+        vm.stopPrank();
+        if (kind < 4 && kind != 1) {
+            host.executeModuleAction(0, abi.encodePacked(bytes4(keccak256("execute()"))));
+            assertGt(FeeStrategyV1(host.moduleAt(0).instance).totalQuoteUsed(), 0);
+        }
     }
 }

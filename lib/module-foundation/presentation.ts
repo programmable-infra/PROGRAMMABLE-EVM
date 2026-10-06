@@ -1,7 +1,7 @@
 import { foundationCreatorFeeFields, type FoundationCreatorFees } from "./creator-fees";
 import { foundationStudioPresentation } from "./studio";
 import { FOUNDATION_PERCENT_BPS_UNIT_V1, foundationPercentFromBpsV1, foundationPercentToBpsV1 } from "./percentage";
-import { encodeFunctionData, getAddress, keccak256, parseAbi, type Address, type Hex } from "viem";
+import { encodeFunctionData, formatUnits, getAddress, keccak256, parseAbi, parseUnits, type Address, type Hex } from "viem";
 import {
   assertOpenConfigSchema, compileOpenConfig, type OpenAssetContext, type OpenConfigContext, type OpenConfigSchema, type OpenConfigValue,
 } from "@/packages/classic-modules/src/open-config.mjs";
@@ -86,6 +86,16 @@ function verifiedAssetValues(node: OpenConfigSchema, value: unknown, context: Op
   return value;
 }
 
+function amountDecimals(unit: string | undefined, context: OpenConfigContext, required = true): number | undefined {
+  if (unit === "programmable.token-amount") return 18;
+  if (unit !== "programmable.quote-amount") return undefined;
+  const quote = context.assets?.quote;
+  if (!quote && !required) return undefined;
+  foundationRequire(quote && Number.isInteger(quote.decimals) && quote.decimals >= 0 && quote.decimals <= 36,
+    "FOUNDATION_QUOTE_DECIMALS_REQUIRED", "Choose a quote token before setting module amounts.");
+  return quote.decimals;
+}
+
 /** Pure schema projection. Nested records become JSON-pointer keys; bounded compound values remain inert JSON text. */
 export function presentFoundationFieldsV1(schema: OpenConfigSchema, defaults: unknown = undefined,
   context: OpenConfigContext = {}): readonly FoundationConfigurationField[] {
@@ -104,9 +114,12 @@ export function presentFoundationFieldsV1(schema: OpenConfigSchema, defaults: un
     };
     if (node.type === "uint") {
       const percent = node.unit === FOUNDATION_PERCENT_BPS_UNIT_V1;
-      field.kind = percent ? "decimal" : "integer";
-      if (typeof value === "string" || typeof value === "number") field.defaultValue = percent ? foundationPercentFromBpsV1(value) : String(value);
-      field.description = percent
+      const isAmount = node.unit === "programmable.quote-amount" || node.unit === "programmable.token-amount";
+      const decimals = amountDecimals(node.unit, context, false);
+      field.kind = percent || isAmount ? "decimal" : "integer";
+      if ((!isAmount || decimals !== undefined) && (typeof value === "string" || typeof value === "number")) field.defaultValue = percent ? foundationPercentFromBpsV1(value)
+        : decimals !== undefined ? formatUnits(BigInt(value), decimals) : String(value);
+      field.description = isAmount ? [node.help, `Enter an amount in ${node.unit === "programmable.quote-amount" ? "the selected quote token" : "your token"}${decimals === undefined ? "" : ` with up to ${decimals} decimal places`}.`].filter(Boolean).join(" ") : percent
         ? [node.help, `Range: ${foundationPercentFromBpsV1(node.min ?? "0")}% to ${foundationPercentFromBpsV1(node.max ?? "10000")}%. Up to two decimal places.`].filter(Boolean).join(" ")
         : [node.help, node.unit ? `Unit: ${node.unit}.` : undefined,
           node.max !== undefined ? `Range: ${node.min ?? 0} to ${node.max}.` : node.min !== undefined ? `Minimum: ${node.min}.` : undefined].filter(Boolean).join(" ");
@@ -150,6 +163,14 @@ export function decodeFoundationFieldsV1(schema: OpenConfigSchema, input: Founda
     const key = pointer(path), supplied = hasOwn(raw, key) ? raw[key] : undefined;
     if (supplied === undefined) return value === undefined ? missing : nativeJson(value);
     if (node.type === "uint" && node.unit === FOUNDATION_PERCENT_BPS_UNIT_V1) return foundationPercentToBpsV1(supplied);
+    if (node.type === "uint") {
+      const decimals = amountDecimals(node.unit, context);
+      if (decimals !== undefined) {
+        foundationRequire(typeof supplied === "string" && supplied.length <= 160 && /^(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(supplied)
+          && (supplied.split(".")[1]?.length ?? 0) <= decimals, "FOUNDATION_AMOUNT_PRECISION", `Enter an amount with at most ${decimals} decimal places.`, key);
+        return parseUnits(supplied, decimals).toString();
+      }
+    }
     if (node.type === "account" || node.type === "component") return { address: supplied };
     if (node.type === "asset") {
       foundationRequire(typeof supplied === "string", "FOUNDATION_ASSET_CONTEXT_REQUIRED", "Enter an ERC20 contract address.", key);

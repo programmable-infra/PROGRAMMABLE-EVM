@@ -8,6 +8,8 @@ import { FOUNDATION_OWNER_PUBLICATION_V1, foundationOwnerDigestV1, foundationOwn
 import { verifyFoundationOwnerPublicationV1 } from "@/lib/module-foundation/owner-verification";
 import { verifyFoundationOwnerRuntimeV1 } from "@/lib/module-foundation/owner-runtime";
 import { bindFoundationCatalogV1, FOUNDATION_CATALOG_SCHEMA_V1 } from "@/lib/module-foundation/catalog";
+import { buildEthereumAdmissions } from "@/ops/module-owner-publication/ethereum-admissions-core";
+import { assertEthereumAuthority } from "@/ops/module-owner-publication/authority";
 
 const account = privateKeyToAccount(`0x${"11".repeat(32)}`), hash = (value: string) => keccak256(toHex(value));
 async function fixture(chainId: 1 | 4663 = 4663) {
@@ -27,6 +29,28 @@ async function fixture(chainId: 1 | 4663 = 4663) {
   return { ...contents, publicationDigest, signature: await account.signMessage({ message: foundationOwnerSigningMessageV1(publicationDigest) }) };
 }
 describe("direct owner module publication", () => {
+  it("creates Ethereum admission pins only from the owner's exact signed publication", async () => {
+    const p = await fixture(1);
+    const result = await buildEthereumAdmissions([p], "b".repeat(40), [account.address.toLowerCase()], p.protocolReleaseDigest);
+    expect(JSON.parse(result.json)).toEqual(result.artifact);
+    expect(result.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(result.artifact.modules).toEqual([{ factory: p.release.factory, factoryCodeHash: p.release.factoryCodeHash,
+      moduleCodeHash: p.release.moduleCodeHash, descriptorHash: p.release.descriptorHash, publicationDigest: p.publicationDigest }]);
+    await expect(buildEthereumAdmissions([p], "b".repeat(40), [], p.protocolReleaseDigest)).rejects.toThrow();
+    await expect(buildEthereumAdmissions([p, p], "b".repeat(40), [account.address.toLowerCase()], p.protocolReleaseDigest)).rejects.toThrow();
+    await expect(buildEthereumAdmissions([await fixture(4663)], "b".repeat(40), [account.address.toLowerCase()], p.protocolReleaseDigest)).rejects.toThrow();
+    await expect(buildEthereumAdmissions([{ ...p, release: { ...p.release, moduleCodeHash: hash("changed") } }], "b".repeat(40), [account.address.toLowerCase()], p.protocolReleaseDigest)).rejects.toThrow();
+  });
+  it("blocks joint publication until the live Ethereum authority admits the exact module", async () => {
+    const p = await fixture(1);
+    const current = { schemaVersion: "programmable.ethereum-module-authority.v1", chainId: 1,
+      enabled: true, releaseDigest: p.protocolReleaseDigest, modules: [p.release] };
+    expect(() => assertEthereumAuthority(p, current)).not.toThrow();
+    for (const change of [{ enabled: false }, { chainId: 4663 }, { releaseDigest: hash("wrong-host") }, { modules: [] },
+      { modules: [{ ...p.release, descriptorHash: hash("other-module") }] }, { modules: [{ ...p.release, moduleCodeHash: hash("other-code") }] }]) {
+      expect(() => assertEthereumAuthority(p, { ...current, ...change })).toThrow();
+    }
+  });
   it.each([1, 4663] as const)("makes signed source selectable through owner authority, without a contributor submission or DB review on chain %i", async chainId => {
     const p = await verifyFoundationOwnerPublicationV1(await fixture(chainId), [account.address.toLowerCase()]);
     const review = foundationOwnerReferenceV1(p), document = { schemaVersion: FOUNDATION_CATALOG_SCHEMA_V1, entries: [{ manifest: p.manifest, review, release: p.release }] };

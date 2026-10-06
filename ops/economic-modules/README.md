@@ -1,0 +1,18 @@
+# Economic module execution
+
+The contracts enforce fee ownership, payout backing and execution conditions. Automatic execution additionally requires a funded, monitored service. A deployment or catalog entry alone does not provide that service.
+
+`service.mjs CONFIG STATE_DIRECTORY` performs a read-only preview. Add `--broadcast` only for the released, funded service. Use a separate state directory and signing account for each chain. The included systemd service and timer run one pass per minute, waiting for the previous pass to finish. They are templates and are not installed or enabled by the source package.
+
+The configuration has two fields:
+
+- `execution`: `chainId` (1 or 4663), `rpcEnv`, `secondaryRpcEnv`, `keyEnv`, `simulationAccount`, `confirmations` (at least 64), `maxFeePerGasWei`, and `maxGasSpendPerDayWei`. RPC and key fields name environment variables; they do not contain credentials. The two RPC providers must have different hosts. The gas budget reserves each transaction's maximum fee once per UTC day and does not recycle unused gas. A pending exact-transaction retry does not consume a second reservation.
+- `discovery`: the complete admitted `binding`, decimal `startBlock`, and `admissions`. Each admitted automatic module contains `family`, `factory`, `factoryCodeHash`, `moduleCodeHash` and `descriptorHash`, taken from verified owner publications. The start block must include the first supported module launch. Keep the entire discovery configuration fixed while its registry is active. A configuration change requires a deliberate registry migration retaining previously supported instances.
+
+Discovery scans up to 1,000 blocks and processes at most eight launches per pass. It reads the canonical Robinhood factory or Ethereum stamp Router, restores the exact original launch using the existing verifier on both providers, and registers only matching module instances. The Ethereum path requires the pinned engine component stamp. It does not read Explore or trust an arbitrary `ModuleBound` event. Intermediate cursors include their canonical block hash. A changed cursor stops discovery for reconciliation rather than silently accepting a different history.
+
+The execution pass checks at most eight targets and submits at most one transaction. Reward scans are bounded and resume from their last checkpoint. Transactions are written and synced before submission; restart retries identical bytes. A stale process lock requires inspection before removal. Never run another transaction sender with the same account while this service owns its nonce.
+
+For systemd, install the reviewed repository and Node 24 under `/opt/programmable`, use a dedicated `programmable` OS account, and pre-create `contracts/out/economic-modules` writable only by that account. Store root-owned environment files under `/etc/programmable` with mode 0600; systemd reads these before switching users. Give the public configuration files group `programmable` and mode 0640 so the service can read them. Install the service and timer templates and enable separate instances for `1` and `4663` only after both chain lifecycles pass. Connect `node ops/economic-modules/health.mjs STATE_DIRECTORY` to the host's monitoring. It flags stale execution, deferred work and an exhausted budget. Check persistent deferrals against the configured dip/interval conditions before increasing any budget.
+
+Release requires both contract deployments, source/runtime readback, real launch and execution evidence, the installed Ethereum authority, running timers, monitored state directories and sufficient account funds. The repository tests and timer templates do not establish those production conditions.

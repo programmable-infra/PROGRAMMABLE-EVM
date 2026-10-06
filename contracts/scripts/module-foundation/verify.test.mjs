@@ -33,6 +33,7 @@ function run(environment = {}) {
       const command=process.argv[2];
       fs.appendFileSync(${JSON.stringify(log)},JSON.stringify({tool:'forge',args:process.argv.slice(2),
         profile:process.env.FOUNDRY_PROFILE,rpc:process.env.FOUNDATION_RPC_URL,block:process.env.FOUNDATION_FORK_BLOCK,
+        ethRpc:process.env.FOUNDATION_ETHEREUM_RPC_URL,ethBlock:process.env.FOUNDATION_ETHEREUM_FORK_BLOCK,
         override:process.env.FOUNDRY_INVARIANT_RUNS??null,src:process.env.FOUNDRY_SRC??null})+'\\n');
       if(command===process.env.STUB_FAIL_COMMAND) process.exit(1);`);
     const result = spawnSync("bash", [path.join(scripts, "verify.sh")], {
@@ -50,25 +51,30 @@ test("complete Foundation verification fixes a public fork checkpoint and the co
   assert.equal(Object.keys(pins).length, 8);
   const result = run({ FOUNDRY_PROFILE: "default", FOUNDRY_SRC: "src/another", FOUNDRY_INVARIANT_RUNS: "1" });
   assert.equal(result.status, 0, result.stderr);
-  const [capture, ...forge] = result.calls;
+  const [capture, ethereumCapture, ...forge] = result.calls;
   assert.deepEqual(capture, { tool: "cast", args: ["block-number", "--rpc-url", "https://rpc.mainnet.chain.robinhood.com"] });
+  assert.deepEqual(ethereumCapture, { tool: "cast", args: ["block-number", "--rpc-url", "https://ethereum-rpc.publicnode.com"] });
   assert.deepEqual(forge.map(call => call.args), [
     ["fmt", "--check", "src/module-foundation", "test/module-foundation"],
     ["lint", "src/module-foundation"],
     ["build", "src/module-foundation/FoundationFactoryV1.sol", "src/module-foundation/FoundationFactoryV2.sol", "src/module-foundation/FoundationFactoryV3Native.sol", "--sizes"],
     ["test", "--match-path", "test/module-foundation/*.t.sol", "-vv"],
+    ["test", "--match-path", "test/module-foundation/economics/*.t.sol", "-vv"],
   ]);
   for (const call of forge) assert.deepEqual({ profile: call.profile, rpc: call.rpc, block: call.block, override: call.override, src: call.src }, {
     profile: "module-foundation", rpc: "https://rpc.mainnet.chain.robinhood.com", block: "63715501", override: null, src: null,
   });
+  for (const call of forge) { assert.equal(call.ethRpc, "https://ethereum-rpc.publicnode.com"); assert.equal(call.ethBlock, "63715501"); }
 });
 
 test("an explicitly selected public/archive checkpoint is preserved for every command", () => {
-  const result = run({ FOUNDATION_RPC_URL: "https://archive.example.invalid", FOUNDATION_FORK_BLOCK: "63713262" });
+  const result = run({ FOUNDATION_RPC_URL: "https://archive.example.invalid", FOUNDATION_FORK_BLOCK: "63713262",
+    FOUNDATION_ETHEREUM_RPC_URL: "https://eth.example.invalid", FOUNDATION_ETHEREUM_FORK_BLOCK: "26132482" });
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.calls.some(call => call.tool === "cast"), false);
   for (const call of result.calls) assert.equal(call.block, "63713262");
   for (const call of result.calls) assert.equal(call.rpc, "https://archive.example.invalid");
+  for (const call of result.calls) { assert.equal(call.ethRpc, "https://eth.example.invalid"); assert.equal(call.ethBlock, "26132482"); }
 });
 
 test("missing RPC configuration resolves a real public endpoint and failed RPC access cannot become skipped test success", () => {

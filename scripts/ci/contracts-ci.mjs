@@ -48,6 +48,8 @@ export const CONTRACT_CI_RELEASE = Object.freeze([
   ["npx", "vitest", "run", "tests/classic-v3-deployment-sequence.test.ts"],
   ["npx", "vitest", "run", "tests/deep-release-verifier.test.ts"],
   ["npx", "vitest", "run", "tests/deep-v2-release-verifier.test.ts"],
+  // Source-package tests need the pinned libraries installed by contracts:bootstrap.
+  ["npx", "vitest", "run", "tests/module-foundation-economic-modules.test.ts"],
   ["npm", "run", "contracts:classic-v4:release:test"],
   ["npm", "run", "contracts:classic-v4:launcher-upgrade:test"],
   ["npm", "run", "contracts:robinhood:owner-envelope:test"],
