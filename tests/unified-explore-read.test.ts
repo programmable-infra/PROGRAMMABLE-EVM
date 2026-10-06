@@ -5,6 +5,8 @@ import type { RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
 
 vi.mock("server-only", () => ({}));
 const sources = vi.hoisted(() => ({ rh: vi.fn(), eth: vi.fn(), rhMarkets: vi.fn(), ethMarkets: vi.fn(), presentations: vi.fn() }));
+const recent = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/server/module-foundation/recent-launch-store", () => ({ readRecentFoundationLaunches: recent }));
 vi.mock("@/lib/server/robinhood-index/read", () => ({ readRobinhoodExploreCatalog: sources.rh }));
 vi.mock("@/lib/server/ethereum-explore", () => ({ readEthereumUnifiedExploreCatalog: sources.eth }));
 vi.mock("@/lib/server/robinhood-presentation", () => ({ readRobinhoodMarkets: sources.rhMarkets, readRobinhoodPresentations: sources.presentations }));
@@ -22,6 +24,7 @@ const market = (cap: number): RobinhoodCoinMarket => ({ poolId: pool, marketCapU
 
 beforeEach(() => {
   vi.clearAllMocks();
+  recent.mockResolvedValue([]);
   sources.rh.mockResolvedValue({ status: "ready", updatedAt: "2026-10-03T10:00:00Z", items: [rh], sourceEvidence: { verified: "rh" } });
   sources.eth.mockResolvedValue({ status: "ready", updatedAt: "2026-10-03T10:00:00Z", entries: [eth], sourceEvidence: { verified: "eth" } });
   sources.rhMarkets.mockResolvedValue(new Map([[address, market(20)]]));
@@ -32,6 +35,17 @@ beforeEach(() => {
 });
 
 describe("Unified verified source adapter", () => {
+  it("includes receipt-confirmed launches before the historical index without requesting their market data", async () => {
+    const fresh = { ...rh, tokenAddress: other, name: "Fresh", symbol: "FRESH", quoteAsset: address, quoteSymbol: "PAIR",
+      transactionHash: pool, blockNumber: "123", launchedAt: "2026-10-04T10:00:00Z" };
+    recent.mockResolvedValue([{ chainId: 1, row: fresh, observedAt: Date.now(),
+      presentation: { chainId: 1, tokenAddress: other, imageUrl: "/fresh.png", description: null, links: [], market: null } }]);
+    const result = await readUnifiedLaunches();
+    expect(result.items.find(row => row.tokenAddress === other)).toMatchObject({ chainId: 1, mode: "module", confirmation: "confirmed", symbol: "FRESH" });
+    expect(result.presentations.find(row => row.tokenAddress === other)).toMatchObject({ imageUrl: "/fresh.png", market: null });
+    expect(recent).toHaveBeenCalledWith(new Set([`1:${address}`, `4663:${address}`]));
+    expect(sources.ethMarkets).toHaveBeenCalledWith([eth], 1);
+  });
   it("starts a ready network's market batch without waiting for the other catalog", async () => {
     const slowCatalog = Promise.withResolvers<unknown>();
     const marketStarted = Promise.withResolvers<void>();

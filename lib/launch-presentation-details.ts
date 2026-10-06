@@ -1,10 +1,21 @@
 import { foundationChainProfile } from "./module-foundation/chains";
 import type { RobinhoodLaunch } from "./robinhood-launches";
+import type { CanonicalTokenExploreEntry } from "./tokens";
 import { moduleDetailsForLaunch, type ModuleLaunchDetailsBinding, type PublicModuleDetails } from "./module-mode/public-details";
 
 export type LaunchPresentationSource = Pick<RobinhoodLaunch, "tokenAddress"> & Partial<Pick<RobinhoodLaunch,
-  "sourceKind" | "poolId" | "quoteAsset" | "launchProjection" | "modulePackageIds" | "moduleFamilyIds" | "sourceReleaseDigest">>;
+  "sourceKind" | "poolId" | "quoteAsset" | "launchProjection" | "modulePackageIds" | "moduleFamilyIds" | "sourceReleaseDigest">> & {
+    /** Display-only symbol read alongside the source-bound quote asset. */
+    quoteSymbol?: string | null;
+  };
 export type LaunchPairObservation = { poolId: string; quoteAsset?: { address: string; symbol: string | null } };
+
+/** Immutable launch identity for display while optional market and wallet reads load. */
+export function ethereumFoundationPresentation(entry: CanonicalTokenExploreEntry) {
+  return { tokenAddress: entry.tokenAddress, sourceKind: "module-foundation-v1" as const,
+    poolId: entry.poolId, quoteAsset: entry.quoteAssetAddress, quoteSymbol: entry.quoteAssetSymbol,
+    symbol: entry.symbol, creator: entry.creatorAddress };
+}
 
 const ADDRESS = /^0x[\da-f]{40}$/i;
 const HASH = /^0x[\da-f]{64}$/i;
@@ -30,8 +41,7 @@ export function launchPresentationDetails(launch: LaunchPresentationSource, chai
   market?: LaunchPairObservation | null, moduleDetails?: PublicModuleDetails | null) {
   let quote: string | null = null;
   if (chainId === 4663 || chainId === 1) {
-    if (["module-foundation-v1", "module-engine-v1"].includes(launch.sourceKind ?? "")
-      && launch.poolId && launch.quoteAsset && ADDRESS.test(launch.quoteAsset)) quote = launch.quoteAsset;
+    if (launch.poolId && launch.quoteAsset && ADDRESS.test(launch.quoteAsset)) quote = launch.quoteAsset;
     else if (chainId === 4663 && ["module-native-v1", "module-native-v2"].includes(launch.sourceKind ?? "") && launch.poolId) quote = NATIVE;
     else if (launch.launchProjection) {
       const projection = launch.launchProjection;
@@ -49,7 +59,8 @@ export function launchPresentationDetails(launch: LaunchPresentationSource, chai
   if (!quote && observed) quote = observed.address;
   const knownSymbol = quote === NATIVE ? "ETH" : (chainId === 4663 || chainId === 1) && same(quote, foundationChainProfile(chainId).wrappedEth.address) ? "WETH"
     : chainId === 4663 && same(quote, ROBINHOOD_USDG) ? "USDG" : null;
-  const label = knownSymbol ?? (same(observed?.address, quote) ? cleanSymbol(observed?.symbol) : null)
+  const label = knownSymbol ?? (same(launch.quoteAsset, quote) ? cleanSymbol(launch.quoteSymbol) : null)
+    ?? (same(observed?.address, quote) ? cleanSymbol(observed?.symbol) : null)
     ?? (quote ? `${quote.slice(0, 6)}…${quote.slice(-4)}` : null);
   const pair = quote && ADDRESS.test(quote) && !same(quote, launch.tokenAddress) && label ? { address: quote, label } : null;
   const binding = chainId === 4663 ? launchModuleDetailsBinding(launch) : null;

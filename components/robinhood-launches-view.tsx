@@ -7,14 +7,14 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { ExploreFilters } from "@/components/explore-filters";
 import { ChainMark } from "@/components/chain-mark";
 import { exploreIdentityKey } from "@/lib/unified-explore";
-import type { LaunchPresentationSource } from "@/lib/launch-presentation-details";
+import { launchPresentationDetails, type LaunchPresentationSource } from "@/lib/launch-presentation-details";
 import { AnimatedMarketCap } from "@/components/animated-market-cap";
 import { ETHEREUM_EXPLORE_FILTERS, ETHEREUM_EXPLORE_MODES } from "@/lib/ethereum-explore";
 import { useRouteViewChain, type ViewChainId } from "@/components/view-chain";
 import { MODULE_TOKEN_FALLBACK_IMAGE, RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { RobinhoodProjectLinks } from "@/components/robinhood-project-links";
 import { rememberRobinhoodTokenPresentations } from "@/components/robinhood-presentation-cache";
-import { coinAge, coinTicker, coinValuation, mergeRobinhoodPresentations, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+import { coinAge, coinPairTicker, coinValuation, mergeRobinhoodPresentations, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { activeExploreFilterCount, DEFAULT_EXPLORE_FILTERS, ROBINHOOD_EXPLORE_PAGE_SIZE, sameRobinhoodExploreRequest, type RobinhoodExploreFilters, type RobinhoodExploreRequest } from "@/lib/robinhood-explore-filters";
 import { isRobinhoodModuleLaunch } from "@/lib/robinhood-launches";
 import { isRobinhoodProjectedLaunch } from "@/lib/custom-launch/launch-projection-v1";
@@ -29,6 +29,7 @@ type Launch = LaunchPresentationSource & {
   hookAddress: string | null;
   category?: "classic" | "custom";
   mode?: "classic" | "custom" | "module";
+  confirmation?: "confirmed";
   creator: string;
   transactionHash: string;
   blockNumber: string;
@@ -62,7 +63,7 @@ type Snapshot = { request: Request; data: LaunchResponse; fetchedAt: number };
 
 const ADDRESS = /^0x[0-9a-f]{40}$/i;
 const HASH = /^0x[0-9a-f]{64}$/i;
-const REFRESH_MS = 30_000;
+const REFRESH_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 const ROBINHOOD_WEBSITE_FILTERS: RobinhoodExploreFilters = { ...DEFAULT_EXPLORE_FILTERS, sort: "highest" };
 
@@ -389,6 +390,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
               const identity = exploreIdentityKey({ ...launch, chainId: launchChainId });
               const details = presentations.get(chainId === "all" ? identity : exploreIdentityKey({ tokenAddress: launch.tokenAddress }));
               const valuation = coinValuation(details?.market);
+              const pair = launchPresentationDetails(launch, launchChainId, details?.market).pair;
               const hasAsset = !launch.launchProjection || launch.launchProjection.primaryComponentId !== null;
               // The unified index classifies Ethereum modules from their launch
               // provenance. They do not have Robinhood's source record shape.
@@ -396,7 +398,9 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
               return (
               <li key={identity} className={styles.item}>
                 <article className={styles.row}>
-                <Link className={styles.cardLink} href={`/token/${launch.tokenAddress}${launchChainId === 1 ? "?chain=1" : ""}`}>
+                <Link className={styles.cardLink} href={launch.confirmation === "confirmed"
+                  ? `/modules/${launch.tokenAddress}?chainId=${launchChainId}&transaction=${launch.transactionHash}`
+                  : `/token/${launch.tokenAddress}${launchChainId === 1 ? "?chain=1" : ""}`}>
                   <RobinhoodCoinArtwork
                     eager={index < 5}
                     imageUrl={details?.imageUrl} loading={loading && !details}
@@ -406,7 +410,7 @@ function IndexedLaunchList({ embedded, enabled, chainId }: { embedded: boolean; 
                   <div className={styles.identity}>
                     <div className={styles.nameRow}>
                       <strong className={styles.name} title={launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}>{launch.name?.trim() || (launch.launchProjection ? "Unnamed contract" : "Unnamed token")}</strong>
-                      {hasAsset ? <span className={styles.symbol} title={launch.symbol || undefined}>{coinTicker(launch.symbol)}</span> : null}
+                      {hasAsset ? <span className={styles.symbol} title={pair?.address}>{coinPairTicker(launch.symbol || details?.symbol, pair?.label)}</span> : null}
                     </div>
                     <span className={styles.mode}>{{ classic: "Classic", module: "Module", custom: "Custom" }[launchMode]}
                       <ChainMark chainId={launchChainId} className={styles.chainMark} />

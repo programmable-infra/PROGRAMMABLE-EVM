@@ -91,5 +91,9 @@ export function coinAge(value: string | null, now: number) {
 
 export function coinTicker(value: string | null) {
   const ticker = value?.trim();
-  return ticker ? ticker.startsWith("$") ? ticker : `$${ticker}` : "Ticker unavailable";
+  return ticker ? ticker.startsWith("$") ? ticker : `$${ticker}` : "…";
+}
+
+export function coinPairTicker(symbol: string | null | undefined, pair: string | null | undefined) {
+  return `${coinTicker(symbol ?? null)} / ${pair || "…"}`;
 }
