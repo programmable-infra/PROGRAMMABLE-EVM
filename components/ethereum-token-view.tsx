@@ -11,7 +11,8 @@ import { TokenPoolChart } from "@/components/robinhood-chart";
 import { ArrowLeft, ArrowUpRight, Check, Copy } from "lucide-react";
 import { RobinhoodCoinArtwork } from "@/components/robinhood-coin-artwork";
 import { RobinhoodProjectLinks } from "@/components/robinhood-project-links";
-import { coinDollars, coinTicker, coinValuation, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+import { coinDollars, coinPairTicker, coinValuation, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+import { launchPresentationDetails } from "@/lib/launch-presentation-details";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import styles from "./robinhood-token-view.module.css";
 
@@ -33,6 +34,10 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
   const market = display?.market ?? null;
   const name = display?.name ?? token?.name ?? "Unnamed token";
   const symbol = display?.symbol ?? token?.symbol;
+  const launch = { tokenAddress: address, poolId: token?.poolId };
+  const pairMarket = token?.quoteAssetAddress ? { poolId: token.poolId,
+    quoteAsset: { address: token.quoteAssetAddress, symbol: token.quoteAssetSymbol ?? null } } : market;
+  const pair = launchPresentationDetails(launch, 1, pairMarket).pair;
   const imageUrl = display ? display.imageUrl : token?.imageUrl;
   const description = display ? display.description : token?.description;
   const links = display?.links ?? token?.links?.map(link => ({ label: link.kind, url: link.url })) ?? [];
@@ -55,12 +60,11 @@ export function EthereumTokenView({ address, token, status, updatedAt, market: i
           <RobinhoodCoinArtwork className={styles.avatar} imageUrl={imageUrl} eager />
           <div className={styles.identityText}>
             <div className={styles.nameRow}><h1>{name}</h1>
-              <span className={styles.ticker}>{coinTicker(symbol ?? null)}</span><ChainMark chainId={1} className={styles.chainLogo} />
+              <span className={styles.ticker} aria-label="Token and quote pair" title={pair?.address}>{coinPairTicker(symbol, pair?.label)}</span><ChainMark chainId={1} className={styles.chainLogo} />
               {links.length ? <RobinhoodProjectLinks links={links} name={name} /> : null}
             </div>
-            <LaunchPairModules launch={{ tokenAddress: address, poolId: token.poolId }} chainId={1}
-              market={token.quoteAssetAddress ? { poolId: token.poolId, quoteAsset: { address: token.quoteAssetAddress, symbol: token.quoteAssetSymbol ?? null } } : null}
-              className={styles.launchProperties} />
+            <LaunchPairModules launch={launch} chainId={1} market={pairMarket}
+              showPair={false} className={styles.launchProperties} />
             {description ? <p className={styles.bio}>{description}</p> : null}
           </div>
         </div>

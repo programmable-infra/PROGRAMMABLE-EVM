@@ -11,8 +11,8 @@ import { RobinhoodCoinArtwork } from "./robinhood-coin-artwork";
 import { RobinhoodProjectLinks } from "./robinhood-project-links";
 import { LaunchPairModules } from "./launch-pair-modules";
 import { ResponsiveTradePanel } from "./responsive-trade-panel";
-import type { LaunchPresentationSource } from "@/lib/launch-presentation-details";
-import { coinDollars, coinTicker, coinValuation, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+import { launchPresentationDetails, type LaunchPresentationSource } from "@/lib/launch-presentation-details";
+import { coinDollars, coinPairTicker, coinValuation, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import styles from "./robinhood-token-view.module.css";
 
 const EXPLORER = "https://robinhoodchain.blockscout.com";
@@ -36,6 +36,8 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
   children?: ReactNode;
 }) {
   const market = presentation?.market;
+  const pair = launchPresentationDetails(launch ?? { tokenAddress: address, poolId: market?.poolId }, chainId, market).pair;
+  const displaySymbol = symbol?.trim() || presentation?.symbol;
   const valuation = coinValuation(market);
   const change = market?.change24hPercent;
   const description = presentation?.description?.trim();
@@ -51,11 +53,11 @@ export function RobinhoodMarketView({ address, name, symbol, creator, launch, pr
           <div className={styles.identityText}>
             <div className={styles.nameRow}>
               <h1>{name}</h1>
-              {hasAsset && (symbol || !loading) ? <span className={styles.ticker}>{coinTicker(symbol ?? null)}</span> : null}
+              {hasAsset ? <span className={styles.ticker} aria-label="Token and quote pair" title={pair?.address}>{coinPairTicker(displaySymbol, pair?.label)}</span> : null}
               <ChainMark chainId={chainId} className={styles.chainLogo} />
               {presentation?.links.length ? <RobinhoodProjectLinks links={presentation.links} name={name} /> : null}
             </div>
-            {launch ? <LaunchPairModules launch={launch} chainId={chainId} market={market} className={styles.launchProperties} /> : null}
+            {launch ? <LaunchPairModules launch={launch} chainId={chainId} market={market} showPair={false} className={styles.launchProperties} /> : null}
             {description && description.toLowerCase() !== name.trim().toLowerCase() ? <p className={styles.bio}>{description}</p> : null}
           </div>
         </div>

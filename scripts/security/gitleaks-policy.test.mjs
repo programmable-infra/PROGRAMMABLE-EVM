@@ -24,6 +24,7 @@ const anyQuoteEthBasis = "contracts/scripts/module-engine/any-quote-eth-basis.mj
 const visibilityTest = "tests/robinhood-website-index.test.ts";
 const completedLaunchTest = "tests/module-foundation-launch-status.test.tsx";
 const completedLaunchCoin = "0x2CCE608219d32eA1Eb6c7EA4d04a0eACd1F08da9";
+const recentLaunchTest = "tests/module-foundation-recent-launches.test.ts";
 const anyQuoteCanary = "0xb36271399c031ce270e0d1eed5f26dcd08367119";
 const pairTokenPackage = "public/developers/modules/0xa51c62d66f474e63d68e35e5d9596612ed226811799a9f8fd8489ac85091f2bd";
 const pairTokenPublicPaths = [`${pairTokenPackage}/manifest.json`, `${pairTokenPackage}/source.json`];
@@ -99,6 +100,17 @@ function assertFiles(findings, paths, count = paths.length) {
   assert.equal(findings.length, count);
   assert.deepEqual([...new Set(findings.map(({ File }) => File))].sort(), [...paths].sort());
 }
+
+test("recent launch visibility allows only the exact public coin field", (t) => {
+  const coin = completedLaunchCoin.toLowerCase();
+  const field = `tokenAddress: "${coin}"`;
+  assert.deepEqual(scan(t, { [recentLaunchTest]: `const hidden = { ${field} };` }, { raw: true }), []);
+  for (const fields of [`${field}, apiKey: "${coin}"`, `tokenAddress: "0x${material.slice(0, 40)}"`]) {
+    assertFiles(scan(t, { [recentLaunchTest]: `const hidden = { ${fields} };` }, { raw: true }), [recentLaunchTest]);
+  }
+  const adjacent = `fixtures/${recentLaunchTest}`;
+  assertFiles(scan(t, { [adjacent]: `const hidden = { ${field} };` }, { raw: true }), [adjacent]);
+});
 
 test("Ethereum compiler exports allow only the exact public source hash lines", (t) => {
   const paths = ["contracts/spec/module-foundation/ethereum-graph-bytecode.v1.json", "packages/module-foundation-ethereum/dist/index.mjs"];

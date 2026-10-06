@@ -1,15 +1,17 @@
 import { getAddress, hexToString, type Address } from "viem";
 import { sanitizeSocialUrl, sanitizeWebsiteUrl, type SocialMetadataKind } from "@/lib/onchain/metadata";
 import type { FoundationPoolDetails } from "./readback";
-import { FOUNDATION_INFRASTRUCTURE } from "./constants";
+import { foundationBindingChainId, foundationChainProfile } from "./chains";
 import type { FoundationPoolIdentity, FoundationPositionIdentity } from "./ui-types";
 import type { prepareFoundationLaunch } from "./client";
 import { assertFoundationV2Result, foundationFactoryVersion } from "./protocol";
 
 export function foundationPoolPresentation(details: FoundationPoolDetails): FoundationPoolIdentity {
+  const FOUNDATION_INFRASTRUCTURE = foundationChainProfile(foundationBindingChainId(details.binding)).infrastructure;
   return { ...details.key, poolId: details.pool.poolId, poolManager: FOUNDATION_INFRASTRUCTURE.poolManager.address };
 }
 export function foundationPositionPresentation(details: FoundationPoolDetails): FoundationPositionIdentity[] {
+  const FOUNDATION_INFRASTRUCTURE = foundationChainProfile(foundationBindingChainId(details.binding)).infrastructure;
   const result: FoundationPositionIdentity[] = [];
   for (const [kind, position] of Object.entries(details.positions)) {
     if (!position || position.status !== "active" || !position.owner || position.tickLower === null || position.tickUpper === null) continue;
@@ -26,6 +28,7 @@ export function foundationPositionPresentation(details: FoundationPoolDetails): 
 }
 /** Predicted identities from the source-bound simulation; mined IDs are established by the receipt reader. */
 export function foundationLaunchPositionPresentation(sequence: Awaited<ReturnType<typeof prepareFoundationLaunch>>, account: Address): FoundationPositionIdentity[] {
+  const FOUNDATION_INFRASTRUCTURE = foundationChainProfile(foundationBindingChainId(sequence.binding)).infrastructure;
   if (getAddress(account) !== getAddress(sequence.account) || sequence.result.factoryVersion !== foundationFactoryVersion(sequence.binding)) throw new Error("The launch position presentation belongs to another wallet or source version.");
   const result = sequence.result, dead = result.factoryVersion !== "v1";
   if (dead) assertFoundationV2Result(result, sequence.parameters);

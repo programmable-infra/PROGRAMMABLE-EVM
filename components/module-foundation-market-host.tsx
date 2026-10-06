@@ -29,13 +29,14 @@ import { useRobinhoodPresentation } from "./use-robinhood-presentation";
 import { maximumSwapInput } from "./swap-amount";
 import { TradePanelStateProvider } from "./responsive-trade-panel";
 import type { RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
-import type { RobinhoodLaunch } from "@/lib/robinhood-launches";
+import type { LaunchPresentationSource } from "@/lib/launch-presentation-details";
 import styles from "./module-foundation-ui.module.css";
 import tradeStyles from "./swap-panel.module.css";
 
 type ModuleFoundationMarketHostProps = {
   chainId?: FoundationChainId;
-  token: Address; transactionHash?: Hex; initialName?: string; initialLaunch?: RobinhoodLaunch;
+  token: Address; transactionHash?: Hex; initialName?: string;
+  initialLaunch?: LaunchPresentationSource & { symbol?: string | null; creator?: string | null };
   initialPresentation?: Promise<RobinhoodCoinPresentation | null>;
 };
 
@@ -171,7 +172,7 @@ function ModuleFoundationMarketContent({ token, transactionHash, initialName, in
   }
 
   if (!details) return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} />
-    <RobinhoodMarketView chainId={chainId} address={token} name={initialName || "Loading coin…"} symbol={initialLaunch?.symbol} creator={initialLaunch?.creator}
+    <RobinhoodMarketView chainId={chainId} address={token} name={initialName || coinPresentation?.name || "Loading coin…"} symbol={initialLaunch?.symbol || coinPresentation?.symbol} creator={initialLaunch?.creator ?? undefined}
       launch={initialLaunch} presentation={coinPresentation} loading={presentation.loading || !error && session.availability.status !== "unavailable"} delayed={presentation.delayed}
       fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE}
       trade={<div className={`${styles.marketScope} ${tradeStyles.embedded}`}><section className={tradeStyles.card} aria-label="Trade loading">

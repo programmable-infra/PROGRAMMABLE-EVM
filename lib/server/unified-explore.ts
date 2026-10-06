@@ -9,6 +9,7 @@ import { isRobinhoodModuleSourceKind } from "@/lib/robinhood-launches";
 import { coinValuation, type RobinhoodCoinMarket } from "@/lib/robinhood-presentation";
 import { exploreIdentityKey, selectUnifiedExplorePage } from "@/lib/unified-explore";
 import type { RobinhoodExploreFilters } from "@/lib/robinhood-explore-filters";
+import { readRecentFoundationLaunches } from "./module-foundation/recent-launch-store";
 
 const readers = {
   robinhood: readRobinhoodExploreCatalog,
@@ -48,31 +49,40 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
     hookAddress: entry.hookAddress, creator: entry.creatorAddress, transactionHash: entry.launchTransactionHash,
     blockNumber: entry.launchBlockNumber, launchedAt: entry.launchedAt, name: entry.name, symbol: entry.symbol,
     decimals: entry.tokenDecimals ?? null, provenance: entry.launchCategoryProvenance,
+    poolId: entry.poolId,
+    quoteAsset: entry.quoteAssetAddress ?? undefined, quoteSymbol: entry.quoteAssetSymbol ?? undefined,
   }));
   const markets = new Map<string, RobinhoodCoinMarket>([
     ...[...rhMarkets].map(([address, market]) => [`4663:${address}`, market] as const),
     ...[...ethMarkets].map(([address, market]) => [`1:${address}`, market] as const),
   ]);
+  const indexed = new Set([...rhRows, ...ethRows].map(exploreIdentityKey));
+  const recent = await readRecentFoundationLaunches(indexed).catch(() => []);
+  const recentRows = recent.map(item => ({ ...item.row, chainId: item.chainId, mode: "module" as const,
+    category: "custom" as const, confirmation: "confirmed" as const }));
   const values = new Map<string, number>();
   for (const [identity, market] of markets) {
     const value = filters.sort === "activity" ? market.volume24hUsd : coinValuation(market).value;
     if (value !== null && Number.isFinite(value) && value >= 0) values.set(identity, value);
   }
-  const selection = selectUnifiedExplorePage<(typeof rhRows)[number] | (typeof ethRows)[number]>(
-    [...rhRows, ...ethRows], page, query, filters, values, size);
-  const selectedRh = selection.items.filter(row => row.chainId === 4663);
+  const selection = selectUnifiedExplorePage<(typeof rhRows)[number] | (typeof ethRows)[number] | (typeof recentRows)[number]>(
+    [...rhRows, ...ethRows, ...recentRows], page, query, filters, values, size);
+  const selectedKeys = new Set(selection.items.map(exploreIdentityKey));
+  const selectedRh = rhRows.filter(row => selectedKeys.has(exploreIdentityKey(row)));
   const rhPresentations = await dependencies.robinhoodPresentations(selectedRh, rhMarkets)
     .catch(() => selectedRh.map(row => ({ tokenAddress: row.tokenAddress, imageUrl: null, description: null,
       links: [], market: rhMarkets.get(row.tokenAddress.toLowerCase()) ?? null })));
   const metadata = new Map(eth.entries.map(entry => [exploreIdentityKey({ chainId: 1, tokenAddress: entry.tokenAddress }), entry]));
   const presentations = [
     ...rhPresentations.map(presentation => ({ ...presentation, chainId: 4663 as const })),
-    ...selection.items.filter(row => row.chainId === 1).map(row => {
+    ...selection.items.filter(row => row.chainId === 1 && indexed.has(exploreIdentityKey(row))).map(row => {
       const entry = metadata.get(exploreIdentityKey(row))!;
       return { chainId: 1 as const, tokenAddress: row.tokenAddress, imageUrl: entry.imageUrl ?? null,
         description: entry.description ?? null, links: (entry.links ?? []).map(link => ({ label: link.kind, url: link.url })),
         market: markets.get(exploreIdentityKey(row)) ?? null };
     }),
+    ...recent.filter(item => selection.items.some(row => exploreIdentityKey(row) === exploreIdentityKey({ chainId: item.chainId, tokenAddress: item.row.tokenAddress })))
+      .map(item => item.presentation),
   ];
   return { scope: "all" as const, status, sources, sourceEvidence: { robinhood: rh.sourceEvidence, ethereum: eth.sourceEvidence },
     updatedAt, ...selection, presentations };

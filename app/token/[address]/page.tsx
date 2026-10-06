@@ -14,6 +14,7 @@ import { readRobinhoodTokenPresentation } from "@/lib/server/robinhood-index/rea
 import { genericTokenDetailMetadata } from "@/lib/token-detail-metadata";
 import { tokenDetailPageChainId } from "@/lib/token-page-chain";
 import { isRobinhoodFoundationLaunch, robinhoodLaunchDescription } from "@/lib/robinhood-launches";
+import { ethereumFoundationPresentation } from "@/lib/launch-presentation-details";
 
 type TokenPageSearchParams = Promise<
   Record<string, string | string[] | undefined>
@@ -77,8 +78,9 @@ export default async function TokenPage({
   }
   if (resolved.chainId === 1) {
     const initialPresentation = readEthereumTokenPresentation(address).then(result => result.presentation).catch(() => null);
-    if (isEthereumModuleLaunchCandidate(resolved.token)) return <TokenRouteChainSync key={1} chainId={1}>
+    if (resolved.token && isEthereumModuleLaunchCandidate(resolved.token)) return <TokenRouteChainSync key={1} chainId={1}>
       <ModuleFoundationMarketHost chainId={1} token={getAddress(address)} transactionHash={resolved.token?.launchTransactionHash as Hex}
+        initialLaunch={ethereumFoundationPresentation(resolved.token)}
         initialName={resolved.token?.name || undefined} initialPresentation={initialPresentation} />
     </TokenRouteChainSync>;
     return <TokenRouteChainSync key={1} chainId={1}><EthereumTokenView address={address} token={resolved.token} status={resolved.status} updatedAt={resolved.updatedAt} initialPresentation={initialPresentation} /></TokenRouteChainSync>;
