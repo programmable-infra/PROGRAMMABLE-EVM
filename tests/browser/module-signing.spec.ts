@@ -59,6 +59,17 @@ test("Ethereum: a normal SDK network update can rewrap its methods before signin
   await signing(page);
 });
 
+test("a delayed event confirming the verified network does not cancel signing", async ({ page }) => {
+  await page.getByRole("button", { name: "Keep the SDK network label stale", exact: true }).click();
+  await page.getByLabel("Provider chain format", { exact: true }).selectOption("hex");
+  await page.getByRole("button", { name: "Hold fresh validation" }).click();
+  await page.getByRole("button", { name: "Launch Ethereum fixture" }).click();
+  await expect(page.getByLabel("Module validation count")).toHaveText("1");
+  await page.getByRole("button", { name: "MetaMask selects Ethereum", exact: true }).click();
+  await page.getByRole("button", { name: "Finish fresh validation" }).click();
+  await signing(page);
+});
+
 for (const change of ["Replace connected wallet capability", "Return a different provider account", "MetaMask selects wallet B", "Change SDK user, same linked addresses", "Return the wrong provider network"]) {
   test(`a pending signature is stopped after: ${change}`, async ({ page }) => {
     await page.getByRole("button", { name: "Request Ethereum wallet network", exact: true }).click();

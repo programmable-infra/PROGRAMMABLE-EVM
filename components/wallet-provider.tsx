@@ -2612,6 +2612,14 @@ function PrivyWalletBridge({
                 wallet: currentWallet, chainId: targetChain.id,
                 networkName: targetChain.name, assertCurrentSession,
               });
+              // Persist the provider readback even when the SDK event arrives later.
+              // That confirmation is not a second network change.
+              const walletAtVerification = walletRequestSessionRef.current.walletCapability;
+              walletRequestSessionRef.current.chainId = targetChainHex;
+              if (walletAtVerification) setVerifiedWalletNetwork({
+                userId: sessionSubject, account, chainId: targetChainHex,
+                walletSnapshot: walletAtVerification,
+              });
               verifiedNetworkGeneration = walletNetworkGenerationRef.current;
               const assertAuthority = async () => {
                 assertCurrentSession();
