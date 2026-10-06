@@ -175,6 +175,26 @@ describe("foundation V2 final wallet revalidation dispatch", () => {
 });
 
 describe("foundation private wallet preparation", () => {
+  it("estimates gas alongside simulation but waits for both before releasing wallet bytes", async () => {
+    const f = fixture(), simulationStarted = deferred<void>(), finishSimulation = deferred<object>();
+    const gasStarted = deferred<void>(), finishGas = deferred<bigint>();
+    sdk.simulate.mockImplementationOnce(async () => { simulationStarted.resolve(); return finishSimulation.promise; });
+    f.estimateGas.mockImplementationOnce(async () => { gasStarted.resolve(); return finishGas.promise; });
+    const signed = vi.fn();
+    const work = submitFoundationWalletStep(f.bind(), async value => {
+      await revalidateFoundationWalletStep(value, account);
+      signed();
+      return transactionHash;
+    });
+    await Promise.all([simulationStarted.promise, gasStarted.promise]);
+    expect(signed).not.toHaveBeenCalled();
+    finishGas.resolve(100_000n);
+    await Promise.resolve();
+    expect(signed).not.toHaveBeenCalled();
+    finishSimulation.resolve({});
+    await work;
+    expect(signed).toHaveBeenCalledOnce();
+  });
   it("preserves exact debit, minimum output and zero-loss additional asset checks at wallet replay", async () => {
     const f = fixture(), extra = a(23);
     if (f.sequence.kind !== "trade") throw new Error("Trade fixture required");

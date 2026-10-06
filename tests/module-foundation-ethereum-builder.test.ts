@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { decodeAbiParameters, decodeFunctionData, getAddress, keccak256, stringToHex, type Hex } from "viem";
 import fixture from "./fixtures/module-foundation-ethereum-graph.json";
 import bytecode from "@/contracts/spec/module-foundation/ethereum-graph-bytecode.v1.json";
@@ -46,6 +46,21 @@ describe("Ethereum graph materialization", () => {
     expect(call.args[2]).toBe(graph.hook);
     expect(graph.parameters.modules).toEqual(input.parameters.modules);
     expect(graph.parameters.metadata).toEqual(input.parameters.metadata);
+  }, 30_000);
+
+  it("reuses its own exact hook proof when only funding protection changes", async () => {
+    const input = sample(), first = await buildFoundationEthereumGraph(input);
+    const timer = vi.spyOn(globalThis, "setTimeout");
+    try {
+      const changed = { ...input.parameters, initialBuyMinimumTokenAmount: input.parameters.initialBuyMinimumTokenAmount + 1n };
+      const next = await buildFoundationEthereumGraph({ ...input, parameters: changed });
+      expect(next.hook).toBe(first.hook);
+      expect(next.parameters.initialBuyMinimumTokenAmount).toBe(changed.initialBuyMinimumTokenAmount);
+      expect(next.targets[0].initializerCalldata).not.toBe(first.targets[0].initializerCalldata);
+      expect(timer).not.toHaveBeenCalled();
+      const controller = new AbortController(); controller.abort(new Error("Draft changed"));
+      await expect(buildFoundationEthereumGraph({ ...input, signal: controller.signal })).rejects.toThrow("Draft changed");
+    } finally { timer.mockRestore(); }
   }, 30_000);
 
   it("cancels a stale preparation and rejects insufficient or unsolicited funding", async () => {

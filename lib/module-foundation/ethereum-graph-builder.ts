@@ -22,6 +22,8 @@ const nonceDomain = hash("programmable.module-foundation.ethereum-graph-nonce.v1
 const launchDomain = hash("programmable.module-foundation.ethereum-launch-id.v1");
 const contracts = bytecode.contracts;
 type ContractName = keyof typeof contracts;
+// Only locally mined proofs are retained. Funding, deadlines and authorization are rebuilt every time.
+const minedHooks = new Map<string, Readonly<{ address: Address; applicantSalt: Hex }>>();
 
 function creation(name: ContractName, args: readonly unknown[]): Hex {
   const artifact = contracts[name];
@@ -74,7 +76,11 @@ export async function mineFoundationEthereumHook(input: {
 }) {
   const maximum = input.maximumAttempts ?? 262_144;
   if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 1_048_576) throw new Error("Invalid hook mining limit.");
+  input.signal?.throwIfAborted();
   const initHash = keccak256(input.initCode), targetIdHash = hash("hook");
+  const key = `${input.identity.routeNamespace}:${input.identity.topologyHash}:${input.identity.routeNonce}:${initHash}`;
+  const cached = minedHooks.get(key);
+  if (cached && BigInt(cached.applicantSalt) < BigInt(maximum)) return { ...cached };
   for (let index = 0; index < maximum; index++) {
     if (index % 256 === 0) {
       input.signal?.throwIfAborted();
@@ -83,7 +89,12 @@ export async function mineFoundationEthereumHook(input: {
     const applicantSalt = toHex(BigInt(index), { size: 32 });
     const effectiveSalt = foundationEthereumTargetSalt(input.identity, { targetIdHash, applicantSalt });
     const address = getContractAddress({ opcode: "CREATE2", from: factory, salt: effectiveSalt, bytecodeHash: initHash });
-    if ((BigInt(address) & 0x3fffn) === 0x20ccn) return { address, applicantSalt };
+    if ((BigInt(address) & 0x3fffn) === 0x20ccn) {
+      const result = { address, applicantSalt };
+      if (minedHooks.size >= 16) minedHooks.delete(minedHooks.keys().next().value!);
+      minedHooks.set(key, Object.freeze(result));
+      return { ...result };
+    }
   }
   throw new Error("A hook address was not found within this preparation attempt. Try a new launch salt.");
 }

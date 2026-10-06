@@ -14,8 +14,8 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) { server.close(); await once(server, "close"); } });
 
-for (const width of [1440, 390]) {
-  test(`Module Mode warms the exact draft and reaches the wallet immediately at ${width}px`, async ({ page }, testInfo) => {
+for (const [width, chainId] of [[1440, 4663], [390, 4663], [1440, 1], [390, 1]]) {
+  test(`Module Mode warms the exact draft and reaches the wallet immediately on ${chainId} at ${width}px`, async ({ page }, testInfo) => {
     const studio = await createModuleStudioServer(); studio.listen(0, "127.0.0.1"); await once(studio, "listening");
     const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
     const errors: string[] = [], requests: string[] = [];
@@ -23,7 +23,7 @@ for (const width of [1440, 390]) {
     page.on("request", request => { if (!request.url().startsWith(`http://127.0.0.1:${address.port}`) && !request.url().startsWith("data:")) requests.push(request.url()); });
     try {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`http://127.0.0.1:${address.port}/?mode=launch-speed`);
+      await page.goto(`http://127.0.0.1:${address.port}/?mode=launch-speed&chainId=${chainId}`);
       if (width < 700) await page.getByRole("button", { name: "Settings", exact: true }).click();
       await page.getByLabel("Name", { exact: true }).fill("My coin");
       await page.getByLabel("Ticker", { exact: true }).fill("COIN");
@@ -93,8 +93,11 @@ test("a click joins pending launch work once, and wallet switches cancel the old
     await expect.poll(async () => (await events()).preparations).toBe(2);
     expect((await events()).aborts).toBeGreaterThanOrEqual(1);
     expect((await events()).walletRequests).toBe(0);
-    // Two synchronous submits must join the warm request and still open the wallet only once.
-    await page.evaluate(() => { const form = document.querySelector("form")!; form.requestSubmit(); form.requestSubmit(); });
+    // A real click must be available during preparation and join it without a second click.
+    const launch = page.getByRole("button", { name: "Launch coin", exact: true });
+    await expect(launch).toBeEnabled();
+    await launch.click();
+    await page.evaluate(() => document.querySelector("form")!.requestSubmit());
     await expect.poll(async () => (await events()).walletRequests).toBe(1);
     expect((await events()).preparations).toBe(2);
     expect((await events()).walletContext).toBe("other-wallet:4663:release");

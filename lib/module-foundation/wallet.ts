@@ -104,8 +104,13 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
       binding.state = "ready";
       return transaction;
     }
-    if (sequence.kind === "launch" && current.ethereumGraph) await assertFoundationEthereumTransaction({ source: current.ethereumGraph, transaction: sequence.steps.at(-1)!.transaction });
-    let checkpoint = await assertFoundationInfrastructure(binding.client, current);
+    const [, infrastructure] = await Promise.all([
+      sequence.kind === "launch" && current.ethereumGraph
+        ? assertFoundationEthereumTransaction({ source: current.ethereumGraph, transaction: sequence.steps.at(-1)!.transaction })
+        : undefined,
+      assertFoundationInfrastructure(binding.client, current),
+    ]);
+    let checkpoint = infrastructure;
     if (sequence.kind === "launch" && sequence.parameters.modules.length > 0) {
       if (!binding.resolveCatalog) throw new Error("The current module admissions cannot be checked. Review again.");
       // Re-decode and exactly re-encode against today's admissions; a stable host release does not freeze module approval.
@@ -135,15 +140,22 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
       ? [{ token: sequence.pool.quote, account: sequence.recipient, minimumDelta: sequence.minimumOutput }]
       : sequence.balanceChecks;
     // Prior approved steps are omitted. Every remaining operation is simulated against fresh real balances and allowances.
-    if (sequence.kind === "launch" && foundationFactoryVersion(current) === "v2") {
+    const legacyLaunch = sequence.kind === "launch" && foundationFactoryVersion(current) === "v2";
+    if (legacyLaunch) {
       const checked = await simulateFoundationV2Launch({ client: binding.client, binding: current, parameters: sequence.parameters,
         steps: remaining, checkpoint, checks, expected: sequence.result, price: sequence.price });
       if (sequence.steps.some(step => step.transaction.value > 0n)) await assertFoundationNativeBalance(binding.client, account, checked.simulation.steps, checkpoint.blockNumber);
-    } else {
-      const simulation = await simulateFoundationSequence(binding.client, remaining, checkpoint, checks);
-      if (sequence.steps.some(step => step.transaction.value > 0n)) await assertFoundationNativeBalance(binding.client, account, simulation.steps, checkpoint.blockNumber);
     }
-    const transaction = await estimateCurrentWalletStep(value, binding);
+    const [transaction] = await Promise.all([
+      estimateCurrentWalletStep(value, binding),
+      (async () => {
+        if (!legacyLaunch) {
+          const simulation = await simulateFoundationSequence(binding.client, remaining, checkpoint, checks);
+          if (sequence.steps.some(step => step.transaction.value > 0n)) await assertFoundationNativeBalance(binding.client, account, simulation.steps, checkpoint.blockNumber);
+        }
+      })(),
+    ]);
+    assertFoundationWalletSubmissionContext(value);
     binding.state = "ready";
     return transaction;
   } catch (error) { binding.state = "ready"; throw error; }

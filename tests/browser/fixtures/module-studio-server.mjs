@@ -21,9 +21,10 @@ export async function createModuleStudioServer() {
       description:'This module limits how much each wallet can buy during the opening period.',capabilities:['beforeSwap'],
       fields:[],available:true,studio:{category:'trading'}}];
     const launchEvents = window.launchEvents = {preparations:0,coldPreparations:0,walletRequests:0,aborts:0};
-    const quote = {address:'0xC91D9BBCEa565eCaA0821DFAff2E377b4FeaDd5f',chainId:4663,name:'Wrapped Ether',symbol:'WETH',decimals:18,supported:true,supportsNativeEth:true};
+    const chainId = new URLSearchParams(location.search).get('chainId')==='1' ? 1 : 4663;
+    const quote = {address:chainId===1?'0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2':'0xC91D9BBCEa565eCaA0821DFAff2E377b4FeaDd5f',chainId,name:'Wrapped Ether',symbol:'WETH',decimals:18,supported:true,supportsNativeEth:true};
     function LaunchSpeedFixture() {
-      const [context,setContext] = useState('wallet:4663:release');
+      const [context,setContext] = useState('wallet:'+chainId+':release');
       const [renders,setRenders] = useState(0);
       const warm = async (draft,signal) => {
         launchEvents.preparations++; launchEvents.startedAt=performance.now(); launchEvents.lastDraft=draft;
@@ -31,12 +32,12 @@ export async function createModuleStudioServer() {
         await new Promise(resolve=>setTimeout(resolve,1200)); signal.throwIfAborted();
         launchEvents.readyAt=performance.now();
         return {id:String(launchEvents.preparations),contextKey:context,expiresAt:Math.floor(Date.now()/1000)+120,
-          quote:{...quote,address:draft.quoteAsset},chainId:4663,platformFeeBps:30,platformFeeRecipient:FOUNDATION_PLATFORM_FEE_RECIPIENT,creatorFeeBps:draft.creatorFeeBps,
-          transactions:[{label:'Launch coin',to:quote.address,chainId:4663,value:'0',effect:'Launch coin'}]};
+          quote:{...quote,address:draft.quoteAsset},chainId,platformFeeBps:30,platformFeeRecipient:FOUNDATION_PLATFORM_FEE_RECIPIENT,creatorFeeBps:draft.creatorFeeBps,
+          transactions:[{label:'Launch coin',to:quote.address,chainId,value:'0',effect:'Launch coin'}]};
       };
-      return <><button data-testid="wallet-switch" onClick={()=>setContext('other-wallet:4663:release')}>Fixture wallet switch</button>
+      return <><button data-testid="wallet-switch" onClick={()=>setContext('other-wallet:'+chainId+':release')}>Fixture wallet switch</button>
         <button data-testid="rerender" onClick={()=>setRenders(value=>value+1)}>Fixture render {renders}</button>
-        <ModuleFoundationBuilder layout="studio" availability={{status:'ready',chainId:4663,chainName:'Robinhood Chain'}}
+        <ModuleFoundationBuilder layout="studio" availability={{status:'ready',chainId,chainName:chainId===1?'Ethereum':'Robinhood Chain'}}
           contextKey={context} catalog={catalog} quoteAssets={[quote]} suggestedInitialBuy="0.001"
           walletAction={new URLSearchParams(location.search).get('mode')==='wallet-recovery' && context==='wallet:4663:release'
             ? {label:'Switch to Ethereum',onClick:async()=>{throw new Error('Network change cancelled.');}} : undefined}
