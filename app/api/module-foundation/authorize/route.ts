@@ -17,7 +17,15 @@ export async function POST(request: Request) {
     const result = await getProductionEthereumModuleAuthorizationBridgeV1().authorize(request, input);
     return NextResponse.json(result, { headers });
   } catch (error) {
-    if (error instanceof EthereumModuleAuthorizationBridgeErrorV1) return NextResponse.json({ code: error.code }, { status: error.status, headers });
+    if (error instanceof EthereumModuleAuthorizationBridgeErrorV1) {
+      const errorHeaders = new Headers(headers);
+      if (error.requestId) errorHeaders.set("X-Request-Id", error.requestId);
+      if (error.retryAfter) errorHeaders.set("Retry-After", error.retryAfter);
+      if (error.status >= 500) console.warn("Ethereum launch authorization unavailable", {
+        code: error.code, requestId: error.requestId, status: error.status,
+      });
+      return NextResponse.json({ code: error.code, requestId: error.requestId }, { status: error.status, headers: errorHeaders });
+    }
     return NextResponse.json({ code: "INVALID_MODULE_REQUEST" }, { status: 400, headers });
   }
 }

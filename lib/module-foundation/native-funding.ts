@@ -53,8 +53,13 @@ export async function assertFoundationWrapRuntime(client: PublicClient, steps: r
 
 /** Reserve gas for every remaining wallet step, not just the ETH deposit. */
 export async function assertFoundationNativeBalance(client: PublicClient, account: Address, steps: readonly FoundationPreparedStep[], blockNumber: bigint): Promise<void> {
-  const [balance, gasPrice] = await Promise.all([client.getBalance({ address: account, blockNumber }), client.getGasPrice()]);
   const value = steps.reduce((sum, step) => sum + step.transaction.value, 0n);
   const gas = steps.reduce((sum, step) => sum + step.gasUsed * 120n / 100n + 15_000n, 0n);
+  await assertFoundationNativeBudget(client, account, value, gas, blockNumber);
+}
+
+/** Check ETH funding before asking the launch authority to sign a permit. Gas includes the caller's reserve. */
+export async function assertFoundationNativeBudget(client: PublicClient, account: Address, value: bigint, gas: bigint, blockNumber: bigint): Promise<void> {
+  const [balance, gasPrice] = await Promise.all([client.getBalance({ address: account, blockNumber }), client.getGasPrice()]);
   if (gasPrice <= 0n || balance < value + gas * gasPrice * 2n) throw new Error("Keep enough ETH for this transaction and its network fees. Reduce the amount or add ETH to your wallet.");
 }

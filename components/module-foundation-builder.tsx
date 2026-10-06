@@ -121,7 +121,6 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const imageUploader = useRef(onUploadImage);
   const selectedImage = useRef(localImage);
   const imageUpload = useRef<{ key: string; promise: Promise<FoundationImage> } | null>(null);
-  const [warmState, setWarmState] = useState<{ key: string; status: "pending" | "ready" | "error" } | null>(null);
   const [warmRetry, setWarmRetry] = useState(0);
   useLayoutEffect(() => {
     if (currentContext.current !== contextKey) {
@@ -301,19 +300,17 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       const prepareWarm = warmLaunch.current;
       if (!prepareWarm || !current || lock.current) return;
       attempts += 1;
-      setWarmState({ key: warmKey, status: "pending" });
       void preparation.prepare(snapshot.draft, snapshot.contextKey, prepareWarm)
         .then(review => {
-          if (current) setWarmState({ key: warmKey, status: review ? "ready" : "error" });
-          if (!review || !current || attempts >= (availability.chainId === 1 ? 1 : 3)) return;
+          if (!review || !current || attempts >= 3) return;
           // Keep a short price reference ready while the owner is still editing. Never poll an idle/hidden tab forever.
           refreshTimer = window.setTimeout(() => {
             if (document.visibilityState === "visible" && document.hasFocus() && form.current?.contains(document.activeElement)) run();
           }, Math.max(1_000, review.expiresAt * 1_000 - Date.now() - 14_000));
         })
-        .catch(() => { if (current) setWarmState({ key: warmKey, status: "error" }); });
+        .catch(() => { /* The explicit launch action reports preparation errors. */ });
     };
-    const timer = window.setTimeout(run, availability.chainId === 1 ? 2_000 : 800);
+    const timer = window.setTimeout(run, 800);
     return () => { current = false; window.clearTimeout(timer); window.clearTimeout(refreshTimer); preparation.invalidate(); };
     // Only exact draft/context changes should start RPC work, never callback identity or progress renders.
   }, [warmKey, warmRetry, availability.chainId]);
@@ -428,13 +425,11 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     requestAnimationFrame(() => document.getElementById("foundation-name")?.focus());
   }
 
-  const imageWarming = Boolean(canWarm && localImage && !draft.image && !imageError);
-  const warmPending = imageWarming || Boolean(warmKey && (warmState?.key !== warmKey || warmState.status === "pending"));
-  const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" || imageWarming ? "Saving image…" : phase === "signing" ? launchProgress || "Opening coin…" : phase === "preparing" || warmPending ? "Preparing launch…" : "Launch coin");
+  const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" ? "Saving image…" : phase === "signing" ? launchProgress || "Opening coin…" : phase === "preparing" ? "Preparing launch…" : "Launch coin");
   if (layout === "studio" && phase !== "result") return <FoundationStudio draft={draft} catalog={catalog} imageSource={imageSource}
     previousLaunchAction={previousLaunchAction} networkControl={networkControl} quoteSymbol={quoteSymbol} quoteStatus={quoteStatus}
     initialBuy={initialBuy} actionLabel={actionLabel} disabled={locked || imagePreparing} busy={busy || walletAction?.busy}
-    actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy || warmPending} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
+    actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
     error={error || submissionBlocked} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
     customQuote={customQuote} canResolveQuote={canResolveQuote} modulesLoading={availability.status === "checking" && !catalog.length} formRef={form} imageInput={imageInput}
     onSocialChange={updateSocial} onImageError={() => setImageError("The image could not load. Choose another image.")}
@@ -509,7 +504,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
               </div>
             </section>
           </fieldset>
-          <div className={styles.formFooter}><p className={styles.error} role="alert">{error}</p>{phase === "preparing" ? <p className={styles.help} role="status">Checking your launch. MetaMask will open when the checks finish.</p> : null}<button type="submit" className={styles.primaryButton} disabled={locked || imagePreparing || unavailable || Boolean(submissionBlocked) || walletAction?.busy || warmPending} aria-busy={busy || walletAction?.busy || warmPending}><span>{actionLabel}</span><ArrowRightIcon size={18} aria-hidden="true" /></button></div>
+          <div className={styles.formFooter}><p className={styles.error} role="alert">{error}</p>{phase === "preparing" ? <p className={styles.help} role="status">Checking your launch. Your wallet will open when it is ready.</p> : null}<button type="submit" className={styles.primaryButton} disabled={locked || imagePreparing || unavailable || Boolean(submissionBlocked) || walletAction?.busy} aria-busy={busy || walletAction?.busy}><span>{actionLabel}</span><ArrowRightIcon size={18} aria-hidden="true" /></button></div>
         </form>}
       </div>
       <aside className={styles.preview} aria-label="Coin preview">

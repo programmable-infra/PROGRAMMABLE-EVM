@@ -39,10 +39,30 @@ export function parseEthereumModuleAuthorization(value: unknown, input: Ethereum
     simulation: { blockNumber: decimal(s.blockNumber), blockHash: hex(s.blockHash, 32), gasEstimate: decimal(s.gasEstimate), stampHash: hex(s.stampHash, 32), providerCount: 2 },
     transaction: { chainId: "1", from: address(t.from), to: address(t.to), valueWei: decimal(t.valueWei), calldata: hex(t.calldata), gasLimit: decimal(t.gasLimit) } };
 }
+export class EthereumModuleAuthorizationError extends Error {
+  constructor(readonly status: number, readonly code: string, readonly requestId: string | null) {
+    super(status === 401 ? "Your wallet session expired. Connect your wallet again."
+      : status === 429 ? "Too many launch preparations. Wait a moment and try again."
+      : status === 400 ? "These launch settings could not be prepared. Check your coin details and try again."
+      : "The launch service could not prepare your transaction. Try again. Your coin details are kept.");
+    this.name = "EthereumModuleAuthorizationError";
+  }
+}
 export async function requestEthereumModuleAuthorization(input: EthereumModuleAuthorizationRequest, accessToken: string, signal?: AbortSignal) {
   const response = await fetch("/api/module-foundation/authorize", { method: "POST", credentials: "same-origin", redirect: "error", signal,
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` }, body: JSON.stringify(input) });
-  if (!response.ok) throw new Error(response.status === 401 ? "Reconnect your wallet to prepare this launch." : "The launch could not be authorized. Your coin details are saved here.");
+  if (!response.ok) {
+    let code = "MODULE_LAUNCH_AUTHORIZATION_UNAVAILABLE", requestId: string | null = null;
+    try {
+      const text = await response.text();
+      if (text.length <= 4_096) {
+        const error = JSON.parse(text);
+        if (typeof error?.code === "string" && /^[A-Za-z0-9_]{1,100}$/.test(error.code)) code = error.code;
+        if (typeof error?.requestId === "string" && /^[a-f0-9-]{36}$/i.test(error.requestId)) requestId = error.requestId;
+      }
+    } catch { /* The status remains usable when a proxy returns a non-JSON error. */ }
+    throw new EthereumModuleAuthorizationError(response.status, code, requestId);
+  }
   const text = await response.text(); if (text.length > 524_288) throw new Error("The launch authorization is too large.");
   return parseEthereumModuleAuthorization(JSON.parse(text), input);
 }

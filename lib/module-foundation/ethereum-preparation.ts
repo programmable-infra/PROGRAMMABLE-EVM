@@ -7,7 +7,7 @@ import { requestEthereumModuleAuthorization } from "./ethereum-authorization";
 import { simulateFoundationSequence, type FoundationCheckpoint, type FoundationPreparedStep, type FoundationBalanceCheck, type readFoundationQuote } from "./client";
 import { assertFoundationV2Result, foundationV2PositionSpecs, foundationV2PositionCalls, verifyFoundationV2PositionData, type FoundationDeploymentBinding } from "./protocol";
 import { foundationPriceExpiry, parseFoundationStartPrice, type planFoundationStartPrice, type FoundationStartPrice } from "./start-price";
-import { assertFoundationNativeBalance } from "./native-funding";
+import { assertFoundationNativeBalance, assertFoundationNativeBudget } from "./native-funding";
 import { foundationPoolId } from "./pool-key";
 import type { FoundationAssetPinV1 } from "./assets";
 import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
@@ -23,7 +23,11 @@ export async function prepareFoundationEthereumLaunch(input: {
   const source = binding.ethereumGraph;
   if (!source || getAddress(binding.factory.address) !== getAddress(source.implementation.address)) throw new Error("Choose the current Ethereum launch source.");
   const p = structuredClone(input.parameters), path = ethFunding?.path ?? [], value = ethFunding?.maximumEth ?? 0n;
-  const graph = await buildFoundationEthereumGraph({ source, account, parameters: p, fundingPath: path, value, signal });
+  const [graph, access] = await Promise.all([
+    buildFoundationEthereumGraph({ source, account, parameters: p, fundingPath: path, value, signal }),
+    input.accessToken(),
+  ]);
+  if (!access) throw new Error("Connect your wallet to authorize this launch.");
   p.hookSalt = graph.parameters.hookSalt;
   const router = getAddress(ethereum.canonicalStamp.router.address), factory = getAddress(ethereum.canonicalStamp.graphFactory.address);
   const recordCall = { to: graph.engine, data: encodeFunctionData({ abi: foundationFactoryV3Abi, functionName: "launchOf", args: [graph.token] }) };
@@ -40,14 +44,20 @@ export async function prepareFoundationEthereumLaunch(input: {
     if (p.initialBuyMinimumTokenAmount === 0n) throw new Error("The initial buy is too small.");
   }
   signal?.throwIfAborted();
-  const access = await input.accessToken(); if (!access) throw new Error("Connect your wallet to authorize this launch.");
+  // The authority's signed estimate uses the real wallet balance. Report missing ETH here,
+  // before that estimate can become an opaque authorization-service failure.
+  await assertFoundationNativeBudget(client, account, value,
+    unsigned.results[0].gasUsed * 120n / 100n + 15_000n, input.checkpoint.blockNumber);
+  signal?.throwIfAborted();
   const authorization = await requestEthereumModuleAuthorization({ schemaVersion: "programmable.ethereum-module-authorization-request.v1", chainId: "1",
     launchWallet: account, releaseDigest: source.releaseDigest, parameters: encodeFoundationParameters(p), fundingPath: encodeFoundationFundingPath(path, 1), valueWei: String(value) }, access, signal);
   const transaction = { from: account, to: authorization.transaction.to, data: authorization.transaction.calldata, value };
-  const checked = await assertFoundationEthereumTransaction({ source, transaction, signal });
+  const [checked, block] = await Promise.all([
+    assertFoundationEthereumTransaction({ source, transaction, signal }),
+    client.getBlock({ blockNumber: BigInt(authorization.simulation.blockNumber) }),
+  ]);
   if (encodeFoundationParameters(checked.graph.parameters) !== encodeFoundationParameters(p) || checked.graph.token !== graph.token
     || checked.graph.hook !== graph.hook || checked.graph.engine !== graph.engine) throw new Error("The authorized launch settings changed.");
-  const block = await client.getBlock({ blockNumber: BigInt(authorization.simulation.blockNumber) });
   if (!block.hash || block.hash !== authorization.simulation.blockHash) throw new Error("The authorization checkpoint changed.");
   const checkpoint = { blockNumber: block.number, blockHash: block.hash, timestamp: block.timestamp };
   const step: FoundationPreparedStep = { kind: "launch", label: "Launch coin and pool", transaction, gasUsed: BigInt(authorization.simulation.gasEstimate),
