@@ -1,5 +1,6 @@
 import { foundationChainProfile } from "./module-foundation/chains";
 import type { RobinhoodLaunch } from "./robinhood-launches";
+import type { CanonicalTokenExploreEntry } from "./tokens";
 import { moduleDetailsForLaunch, type ModuleLaunchDetailsBinding, type PublicModuleDetails } from "./module-mode/public-details";
 
 export type LaunchPresentationSource = Pick<RobinhoodLaunch, "tokenAddress"> & Partial<Pick<RobinhoodLaunch,
@@ -8,6 +9,13 @@ export type LaunchPresentationSource = Pick<RobinhoodLaunch, "tokenAddress"> & P
     quoteSymbol?: string | null;
   };
 export type LaunchPairObservation = { poolId: string; quoteAsset?: { address: string; symbol: string | null } };
+
+/** Immutable launch identity for display while optional market and wallet reads load. */
+export function ethereumFoundationPresentation(entry: CanonicalTokenExploreEntry) {
+  return { tokenAddress: entry.tokenAddress, sourceKind: "module-foundation-v1" as const,
+    poolId: entry.poolId, quoteAsset: entry.quoteAssetAddress, quoteSymbol: entry.quoteAssetSymbol,
+    symbol: entry.symbol, creator: entry.creatorAddress };
+}
 
 const ADDRESS = /^0x[\da-f]{40}$/i;
 const HASH = /^0x[\da-f]{64}$/i;
