@@ -6,12 +6,13 @@ import {createPublicClient, custom, decodeAbiParameters, encodeAbiParameters, en
 import Privy,{InMemoryCache} from '@privy-io/js-sdk-core';
 import {RefreshSession} from '@privy-io/routes';
 import {foundationChainProfile} from '../../lib/module-foundation/chains.ts';
+import {foundationTransactionGasLimit} from '../../lib/module-foundation/gas.ts';
 import {foundationFactoryV2Abi, encodeFoundationParameters, encodeFoundationLaunchEntry} from '../../lib/module-foundation/abi.ts';
 import {buildFoundationEthereumGraph, assertFoundationEthereumTransaction,predictFoundationEthereumAccounts} from '../../lib/module-foundation/ethereum-graph-builder.ts';
 import {ETHEREUM_MODULE_SOURCE} from '../../lib/module-foundation/ethereum-release.ts';
 import {parseEthereumModuleAuthorization} from '../../lib/module-foundation/ethereum-authorization.ts';
 import {encodeFoundationFundingPath} from '../../lib/module-foundation/funding-path.ts';
-import {FAMILIES, ACCOUNT, BUY, FUNDING, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, nthPotRecovery, publicError, check, fail} from './metamask-core.mjs';
+import {FAMILIES, ACCOUNT, BUY, FUNDING, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, nthPotRecovery, boundedGasFees, publicError, check, fail} from './metamask-core.mjs';
 const origin='https://programmable.market';
 const cleanJson=value=>JSON.stringify(value,(_,v)=>typeof v==='bigint'?v.toString():v,2);
 const readJson=async file=>JSON.parse(await readFile(file,'utf8'));
@@ -83,7 +84,7 @@ export async function run([configFile],root){
    const auth=await authorization(request), tx=auth.transaction;
    await assertFoundationEthereumTransaction({source:ETHEREUM_MODULE_SOURCE,transaction:{from:tx.from,to:tx.to,data:tx.calldata,value:BigInt(tx.valueWei)}});
    Object.assign(item,{token:graph.token,hook:graph.hook,engine:graph.engine,poolKey:graph.poolKey,launchId:auth.launchId});
-   return {to:tx.to,data:tx.calldata,value:0n,expires:Number(p.deadline)};
+   return {to:tx.to,data:tx.calldata,value:0n,expires:Math.min(Number(p.deadline),Number(auth.deadline))};
   }
   const hash=await c.clients[0].readContract({address:c.binding.factory.address,abi:foundationFactoryV2Abi,functionName:'hookInitCodeHash',args:[ACCOUNT,predicted,p]});
   for(let i=0n;i<1000000n;i++){const salt=toHex(i,{size:32}),address=getCreate2Address({from:c.binding.hookDeployer.address,salt,bytecodeHash:hash});if((BigInt(address)&0x3fffn)===0x20ccn){p.hookSalt=salt;item.hook=address;break;}if(i%1024n===0n)await new Promise(r=>setImmediate(r));}
@@ -92,13 +93,17 @@ export async function run([configFile],root){
   return {to:c.binding.factory.address,data:encodeFoundationLaunchEntry(p,{functionName:'launch'}),value:0n,expires:Number(p.deadline)};
  }
  async function prepare(c,item,stage,tx,label,role='step',extra={}){
-  const p=c.clients[0];const [nonce,pending,gasEstimate,block,tip]=await Promise.all([p.getTransactionCount({address:ACCOUNT,blockTag:'latest'}),p.getTransactionCount({address:ACCOUNT,blockTag:'pending'}),p.estimateGas({account:ACCOUNT,to:tx.to,data:tx.data,value:tx.value??0n}),p.getBlock(),p.estimateMaxPriorityFeePerGas().catch(()=>1000000n)]);
+  const p=c.clients[0],value=BigInt(tx.value??0n);
+  const [nonce,pending,gasEstimate,block,tip]=await Promise.all([p.getTransactionCount({address:ACCOUNT,blockTag:'latest'}),p.getTransactionCount({address:ACCOUNT,blockTag:'pending'}),stage==='launch'&&item.launchDraft?.gasEstimate?BigInt(item.launchDraft.gasEstimate):p.estimateGas({account:ACCOUNT,to:tx.to,data:tx.data,value}),p.getBlock(),p.estimateMaxPriorityFeePerGas().catch(()=>1000000n)]);
   check(nonce===pending,'Eine andere Wallet-Transaktion ist noch offen. Bitte zuerst bestätigen lassen.');
-  const gas=gasEstimate*12n/10n+10000n,maxPriorityFeePerGas=tip>100000000n?100000000n:tip,maxFeePerGas=(block.baseFeePerGas??0n)*2n+maxPriorityFeePerGas;
-  check(maxFeePerGas<=2000000000n,'Gas ist momentan über 2 Gwei. Die Konsole wartet auf günstigere Gebühren.');
-  check(gas*maxFeePerGas<=5000000000000000n,'Geschätzte Maximalgebühr liegt über 0,005 ETH.');
-  check(await p.getBalance({address:ACCOUNT})>gas*maxFeePerGas+(tx.value??0n),'Die Test-Wallet hat für diesen Schritt zu wenig ETH.');
-  const request={from:ACCOUNT,to:tx.to,data:tx.data,value:toHex(tx.value??0n),chainId:toHex(c.chainId),nonce:toHex(nonce),gas:toHex(gas),maxFeePerGas:toHex(maxFeePerGas),maxPriorityFeePerGas:toHex(maxPriorityFeePerGas)};
+  const gas=foundationTransactionGasLimit(gasEstimate,c.chainId),fees=boundedGasFees(gas,block.baseFeePerGas??0n,tip);
+  if(stage==='launch'&&item.launchDraft)item.launchDraft.gasEstimate=String(gasEstimate);
+  state.lastGasQuote={chainId:c.chainId,family:item.family,stage,gasEstimate:String(gasEstimate),gasLimit:String(gas),baseFeePerGas:String(block.baseFeePerGas??0n),...Object.fromEntries(Object.entries(fees).map(([k,v])=>[k,typeof v==='bigint'?String(v):v])),at:new Date().toISOString()};
+  if(!fees.affordable){state.gasRetryAt=Date.now()+15000;await save();return display({status:'waiting',message:'Warte auf Netzgebühren innerhalb des Limits von 0,005 ETH',waitSeconds:15});}
+  delete state.gasRetryAt;
+  const {maxFeePerGas,maxPriorityFeePerGas}=fees;
+  check(await p.getBalance({address:ACCOUNT})>fees.maximumGasWei+value,'Die Test-Wallet hat für diesen Schritt zu wenig ETH.');
+  const request={from:ACCOUNT,to:tx.to,data:tx.data,value:toHex(value),chainId:toHex(c.chainId),nonce:toHex(nonce),gas:toHex(gas),maxFeePerGas:toHex(maxFeePerGas),maxPriorityFeePerGas:toHex(maxPriorityFeePerGas)};
   state.prepared={id:randomUUID(),chainId:c.chainId,family:item.family,stage,role,label,request,digest:digestRequest(request),preparedBlock:String(block.number),expires:tx.expires??Number(block.timestamp+300n),maximumGasWei:String(gas*maxFeePerGas),...extra};await save();return display();
  }
  async function approval(c,item,stage,token,amount){
@@ -173,7 +178,7 @@ export async function run([configFile],root){
     check(modules.every(m=>m.codeHash===item.selection.moduleCodeHash&&m.configurationHash===keccak256(item.selection.configuration)),'Modul-Bindung stimmt nicht');item.module=modules[0].instance;
     check((await Promise.all(c.clients.map(client=>client.getCode({address:item.module,blockNumber:receipt.blockNumber})))).every(code=>code&&keccak256(code)===item.selection.moduleCodeHash),'Modul-Code stimmt nicht');
     if(c.chainId===1){const id=await p.readContract({address:pre.request.to,abi:stampAbi,functionName:'launchIdByToken',args:[item.token],blockNumber:receipt.blockNumber});check(id===item.launchId,'Programmable-Stamp fehlt');}
-    item.checks.launch=true;item.launchTransaction=pre.hash;
+    item.checks.launch=true;item.launchTransaction=pre.hash;delete item.launchDraft;
    }else if(pre.output){
     const output=await bal(c,pre.output,receipt.blockNumber);check(output-BigInt(pre.outputBefore)>=BigInt(pre.minimumOutput),'Swap-Ausgabe liegt unter dem geprüften Minimum');
     if(pre.qualifyingBuysBefore!==undefined){
@@ -196,6 +201,7 @@ export async function run([configFile],root){
   item.transactions.push(entry);state.history.push(entry);state.prepared=null;await save();
  }
  async function next(){
+  if(!state.prepared&&state.gasRetryAt>Date.now())return display({status:'waiting',message:'Warte auf Netzgebühren innerhalb des Limits von 0,005 ETH',waitSeconds:Math.ceil((state.gasRetryAt-Date.now())/1000)});
   const active=current();if(active)cstate(active.c).clock=Number((await active.c.clients[0].getBlock()).timestamp);
   const prior=await reconcile();if(prior)return prior;
   if(state.retryNotBefore>Date.now())return display({status:'waiting',message:'Warte auf das Ethereum-Anfragefenster',waitSeconds:Math.ceil((state.retryNotBefore-Date.now())/1000)});
@@ -210,7 +216,10 @@ export async function run([configFile],root){
    }
    const stages=caseSteps(item.kind),stage=stages[item.position];
    if(!stage){item.completed=true;item.completedAt=new Date().toISOString();item.lifecycleApproval='pending independent final review';await save();continue;}
-   if(stage==='launch')return prepare(c,item,stage,await buildLaunch(c,item),'Test-Coin mit '+item.family+' erstellen');
+   if(stage==='launch'){
+    if(!item.launchDraft||item.launchDraft.tx.expires<Math.floor(Date.now()/1000)+30){item.launchDraft={tx:await buildLaunch(c,item)};await save();}
+    return prepare(c,item,stage,item.launchDraft.tx,'Test-Coin mit '+item.family+' erstellen');
+   }
    if(stage==='price-history'||stage==='cooldown'){
     const end=stage==='cooldown'?Number(await field(c,item,'pausedUntil')):item.firstBuyAt+305;
     const now=Number((await p.getBlock()).timestamp);cstate(c).clock=now;if(now<end){item.waitUntil=end;await save();if(current()?.item!==item)continue;return display({status:'waiting',message:stage==='cooldown'?'Die Verkaufspause des Moduls läuft':'Die Module bauen ihre Preisgeschichte auf',waitSeconds:end-now});}

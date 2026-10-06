@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {decodeAbiParameters,decodeFunctionData,parseAbiParameters} from 'viem';
-import {FAMILIES,ACCOUNT,BUY,FUNDING,configFor,caseSteps,swapData,routerAbi,assertEnvelope,digestRequest,simulationCheckpoint,isTransientBlockError,nthPotRecovery} from './metamask-core.mjs';
+import {FAMILIES,ACCOUNT,BUY,FUNDING,configFor,caseSteps,swapData,routerAbi,assertEnvelope,digestRequest,simulationCheckpoint,isTransientBlockError,nthPotRecovery,boundedGasFees,MAXIMUM_GAS_DEBIT} from './metamask-core.mjs';
 test('all eleven families have bounded configurations and complete sell paths',()=>{assert.equal(FAMILIES.length,11);FAMILIES.forEach((_,i)=>{assert.match(configFor(i,ACCOUNT),/^0x[0-9a-f]+$/);assert.equal(caseSteps(i)[0],'launch');assert.ok(caseSteps(i).includes('sell'));});assert.throws(()=>configFor(11,ACCOUNT));});
 test('funding, strategy size and approvals use small finite amounts',()=>{const v=decodeAbiParameters(parseAbiParameters('uint128,uint128,uint32,uint32,uint16,uint16'),configFor(1,ACCOUNT));assert.equal(v[1],100_000_000_000n);assert.equal(v[3],300);assert.equal(v[5],500);assert.ok(BUY*20n<=FUNDING);});
 test('swap payload enforces the quoted minimum and a deadline',()=>{const quote='0x0000000000000000000000000000000000000001',token='0x0000000000000000000000000000000000000002';const key={currency0:quote,currency1:token,fee:0,tickSpacing:60,hooks:ACCOUNT};const data=swapData(key,quote,token,10n,8n,1000n);const decoded=decodeFunctionData({abi:routerAbi,data});assert.equal(decoded.args[2],1000n);const [actions,inputs]=decodeAbiParameters(parseAbiParameters('bytes,bytes[]'),decoded.args[1][0]);assert.equal(actions,'0x060b0e');const [swap]=decodeAbiParameters(parseAbiParameters('((address,address,uint24,int24,address),bool,uint128,uint128,uint256,bytes)'),inputs[0]);assert.equal(swap[3],8n);assert.throws(()=>swapData(key,quote,token,10n,0n,1000n));});
@@ -28,4 +28,13 @@ test('two trades counted in one block get one bounded recovery, never a false pa
  assert.equal(nthPotRecovery({...sameBlock,qualifyingBuys:2n},0),'stop');
  assert.equal(nthPotRecovery({...sameBlock,everyN:3n},0),'stop');
  assert.equal(nthPotRecovery({...sameBlock,owed:3_000_000_000_000n,qualifyingBuys:2n},1),'payout');
+});
+test('gas buffer cannot increase the debit cap or create an underpriced request',()=>{
+ const within=boundedGasFees(12_000_000n,300_000_000n,1_000_000n);
+ assert.equal(within.affordable,true);assert.ok(within.maximumGasWei<=MAXIMUM_GAS_DEBIT);
+ assert.ok(within.maxFeePerGas<601_000_000n);assert.ok(within.maxFeePerGas>=301_000_000n);
+ const tooHigh=boundedGasFees(12_000_000n,490_000_000n,1_000_000n);
+ assert.equal(tooHigh.affordable,false);assert.ok(tooHigh.maximumGasWei<=MAXIMUM_GAS_DEBIT);
+ assert.equal(boundedGasFees(21_000n,2_100_000_000n,1n).affordable,false);
+ assert.throws(()=>boundedGasFees(0n,1n,1n));
 });

@@ -3,6 +3,17 @@ export const FAMILIES = ['buyback-burn','dip-buyback','lp-rewards','full-range-l
 export const ACCOUNT = getAddress('0x9e1339Eaed0EfF31Eda7D714A341Eb09a7e4513e');
 export const BUY = 10_000_000_000_000n;
 export const FUNDING = 250_000_000_000_000n;
+export const MAXIMUM_GAS_DEBIT = 5_000_000_000_000_000n;
+export function boundedGasFees(gas, baseFee, priority) {
+ if (gas <= 0n || baseFee < 0n || priority < 0n) throw Error('Invalid gas quote');
+ const maxPriorityFeePerGas = priority > 100_000_000n ? 100_000_000n : priority;
+ const budgetPrice = MAXIMUM_GAS_DEBIT / gas;
+ const priceCap = budgetPrice < 2_000_000_000n ? budgetPrice : 2_000_000_000n;
+ const suggested = baseFee * 2n + maxPriorityFeePerGas;
+ const maxFeePerGas = suggested < priceCap ? suggested : priceCap;
+ return { maxFeePerGas, maxPriorityFeePerGas, affordable: maxFeePerGas >= baseFee + maxPriorityFeePerGas,
+  maximumGasWei: gas * maxFeePerGas, currentGasWei: gas * (baseFee + maxPriorityFeePerGas) };
+}
 export const tokenAbi = parseAbi(['function approve(address,uint256) returns (bool)','function allowance(address,address) view returns (uint256)','function balanceOf(address) view returns (uint256)','function totalSupply() view returns (uint256)','function deposit() payable']);
 export const permitAbi = parseAbi(['function approve(address,address,uint160,uint48)','function allowance(address,address,address) view returns (uint160 amount,uint48 expiration,uint48 nonce)']);
 export const hostAbi = parseAbi([
