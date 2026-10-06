@@ -114,13 +114,14 @@ export function presentFoundationFieldsV1(schema: OpenConfigSchema, defaults: un
     };
     if (node.type === "uint") {
       const percent = node.unit === FOUNDATION_PERCENT_BPS_UNIT_V1;
+      const percentMaximum = node.max ?? "10000";
       const isAmount = node.unit === "programmable.quote-amount" || node.unit === "programmable.token-amount";
       const decimals = amountDecimals(node.unit, context, false);
       field.kind = percent || isAmount ? "decimal" : "integer";
-      if ((!isAmount || decimals !== undefined) && (typeof value === "string" || typeof value === "number")) field.defaultValue = percent ? foundationPercentFromBpsV1(value)
+      if ((!isAmount || decimals !== undefined) && (typeof value === "string" || typeof value === "number")) field.defaultValue = percent ? foundationPercentFromBpsV1(value, percentMaximum)
         : decimals !== undefined ? formatUnits(BigInt(value), decimals) : String(value);
       field.description = isAmount ? [node.help, `Enter an amount in ${node.unit === "programmable.quote-amount" ? "the selected quote token" : "your token"}${decimals === undefined ? "" : ` with up to ${decimals} decimal places`}.`].filter(Boolean).join(" ") : percent
-        ? [node.help, `Range: ${foundationPercentFromBpsV1(node.min ?? "0")}% to ${foundationPercentFromBpsV1(node.max ?? "10000")}%. Up to two decimal places.`].filter(Boolean).join(" ")
+        ? [node.help, `Range: ${foundationPercentFromBpsV1(node.min ?? "0", percentMaximum)}% to ${foundationPercentFromBpsV1(percentMaximum, percentMaximum)}%. Up to two decimal places.`].filter(Boolean).join(" ")
         : [node.help, node.unit ? `Unit: ${node.unit}.` : undefined,
           node.max !== undefined ? `Range: ${node.min ?? 0} to ${node.max}.` : node.min !== undefined ? `Minimum: ${node.min}.` : undefined].filter(Boolean).join(" ");
     } else if (node.type === "bool") {
@@ -162,7 +163,7 @@ export function decodeFoundationFieldsV1(schema: OpenConfigSchema, input: Founda
     }
     const key = pointer(path), supplied = hasOwn(raw, key) ? raw[key] : undefined;
     if (supplied === undefined) return value === undefined ? missing : nativeJson(value);
-    if (node.type === "uint" && node.unit === FOUNDATION_PERCENT_BPS_UNIT_V1) return foundationPercentToBpsV1(supplied);
+    if (node.type === "uint" && node.unit === FOUNDATION_PERCENT_BPS_UNIT_V1) return foundationPercentToBpsV1(supplied, node.max ?? "10000");
     if (node.type === "uint") {
       const decimals = amountDecimals(node.unit, context);
       if (decimals !== undefined) {
