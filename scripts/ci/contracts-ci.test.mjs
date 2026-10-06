@@ -23,7 +23,8 @@ test("Foundation source, tests, profile and UI select their normal protected ver
 
 test("the complete Foundation profile stays mandatory in CI and normal local verification", () => {
   assert.equal(scripts["contracts:foundation:verify"],
-    "node --test contracts/scripts/module-foundation/verify.test.mjs ops/economic-modules/engine.test.mjs ops/economic-modules/fork-rpc.test.mjs && bash contracts/scripts/module-foundation/verify.sh");
+    "node --test contracts/scripts/module-foundation/verify.test.mjs && npm run test:economic-modules && bash contracts/scripts/module-foundation/verify.sh");
+  assert.equal(scripts["test:economic-modules"], "node --test ops/economic-modules/*.test.mjs");
   assert.ok(scripts.verify.includes("npm run test:contract-release:ci"));
   assert.ok(scripts["test:contract-release:ci"].includes("npm run contracts:foundation:verify"));
   assert.equal(CONTRACT_CI_RELEASE.filter(command => command.join(" ") === "npm run contracts:foundation:verify").length, 1);

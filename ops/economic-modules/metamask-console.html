@@ -1,0 +1,104 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Programmable · Module bestätigen</title><style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,sans-serif;background:#090c10;color:#f1f5f2}*{box-sizing:border-box}body{margin:0;padding:40px 24px}main{max-width:920px;margin:auto}header{display:flex;justify-content:space-between;align-items:center;margin-bottom:36px}.brand{font-size:13px;letter-spacing:.14em;color:#9ce7be;text-transform:uppercase}.badge{background:#192c23;color:#9ce7be;padding:6px 12px;border-radius:20px;font-size:12px}h1{font-size:clamp(28px,5vw,44px);font-weight:600;letter-spacing:-.035em;line-height:1.1;margin:0 0 16px}p{color:#b5bdc6;margin:0 0 18px}section{background:#131920;border-radius:20px;padding:28px;margin:20px 0}h2{font-size:24px;margin:10px 0 16px;font-weight:550}button{font:inherit;cursor:pointer;border:0;border-radius:12px;background:#a3efc5;color:#0c1b13;padding:14px 24px;font-weight:600}button:disabled{cursor:default;opacity:.45}.secondary{background:#26323f;color:#e2e7ed;margin-left:10px}.facts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:24px 0}.facts div{min-width:0}.facts small{display:block;color:#85929f;font-size:12px}.facts code{font-size:12px;overflow-wrap:anywhere}.facts strong{font-weight:500}#error{color:#ffb6a6;white-space:pre-wrap}.progress{height:5px;border-radius:8px;background:#27313b;overflow:hidden;margin-bottom:20px}.progress i{display:block;height:100%;background:#a3efc5;transition:width .35s}#list{display:grid;grid-template-columns:1fr 1fr;gap:0 24px}article{padding:12px 0;display:flex;align-items:center;gap:10px;font-size:13px}article span{color:#80909e;font-size:11px;margin-left:auto}article i{height:6px;width:6px;border-radius:10px;background:#48535e}article.done i{background:#a3efc5}article.current{color:#a3efc5}footer{font-size:12px;color:#89939e;margin-top:24px}.amount{font-variant-numeric:tabular-nums}details{margin-top:20px;font-size:13px;color:#98a6b4}summary{cursor:pointer}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;max-height:220px;overflow:auto}a{color:#a3efc5}@media(max-width:600px){body{padding:22px 16px}section{padding:22px}#list,.facts{grid-template-columns:1fr}.badge{display:none}}
+</style><main><header><span class="brand">Programmable</span><span class="badge">Persönliche Test-Konsole</span></header><h1>Module bestätigen</h1><p>Einmal starten. Danach geht es automatisch von einer MetaMask-Bestätigung zur nächsten. Du kannst jederzeit pausieren; dein Fortschritt bleibt gespeichert.</p><section><small id="chain">Ethereum & Robinhood</small><h2 id="title">Bereit für die Test-Wallet</h2><div class="progress"><i id="bar" style="width:0%"></i></div><p id="status" role="status">Die elf neuen Module werden auf beiden Chains getestet.</p><p id="gasnotice" hidden></p><p id="approvalnotice" hidden></p><div class="facts"><div><small>Test-Wallet</small><code id="wallet">0x9e1339Eaed0EfF31Eda7D714A341Eb09a7e4513e</code></div><div><small>Fortschritt</small><strong id="progress">0 / 22 Modultests</strong></div><div><small>Nächster Betrag</small><strong id="value" class="amount">—</strong></div><div><small>Maximale Netzwerkgebühr für den nächsten Schritt</small><strong id="fee" class="amount">—</strong></div></div><p id="error" role="alert"></p><button id="start">MetaMask verbinden & starten</button><button id="pause" class="secondary" disabled>Pause</button><details><summary>Details des nächsten Schritts</summary><pre id="details">Noch keine Transaktion vorbereitet</pre></details></section><div id="list"></div><footer>Pro Chain werden höchstens 0,00025 ETH als WETH für Test-Swaps vorbereitet, zusätzlich fallen Netzwerkgebühren an. Jeder Auftrag wird von dir in MetaMask bestätigt. Stoppen ist jederzeit möglich. Diese Konsole schaltet weder den öffentlichen Katalog noch den automatischen Gelddienst frei.</footer></main>
+<script>
+const $=id=>document.getElementById(id);const fragment=location.hash.slice(1);if(fragment)sessionStorage.setItem('moduleConsoleSession',fragment);history.replaceState(null,'',location.pathname);const session=sessionStorage.getItem('moduleConsoleSession');let state=null,running=false,provider=null,stopped=false;const providers=[];window.addEventListener('eip6963:announceProvider',e=>providers.push(e.detail));window.dispatchEvent(new Event('eip6963:requestProvider'));const delay=ms=>new Promise(r=>setTimeout(r,ms));const eth=x=>(Number(BigInt(x))/1e18).toLocaleString('de-DE',{maximumFractionDigits:9})+' ETH';
+const runKey='moduleConsoleRunIntent', walletKey='moduleConsoleWalletPending';
+function rememberRun(active){if(active)sessionStorage.setItem(runKey,session);else sessionStorage.removeItem(runKey);}
+function controls(){
+ $('start').disabled=running;
+ $('start').textContent=running?'Läuft automatisch':state?.status==='complete'?'Abgeschlossen':state?.transactions?'Fortsetzen':'MetaMask verbinden & starten';
+ $('start').disabled=running||state?.status==='complete';
+ $('pause').disabled=!running;
+}
+async function api(path,body){
+ for(let attempt=0;;attempt++){
+  try{
+   let r;
+   try{r=await fetch(path,{method:body?'POST':'GET',headers:{'x-console-session':session,'content-type':'application/json'},...(body?{body:JSON.stringify(body)}:{})});}
+   catch(cause){throw Object.assign(Error('Die lokale Verbindung wird wiederhergestellt.'),{retryable:true,cause});}
+   if([502,503,504].includes(r.status))throw Object.assign(Error('Die lokale Verbindung wird wiederhergestellt.'),{retryable:true});
+   const data=await r.json();
+   if(!r.ok)throw Object.assign(Error(data.error||'Anfrage fehlgeschlagen'),{retryable:data.retryable===true,code:data.code});
+   return data;
+  }catch(error){
+   if(!error.retryable||attempt>=3)throw error;
+   $('status').textContent='Verbindung wird wiederhergestellt. Der Ablauf geht automatisch weiter.';
+   await delay(1000*2**attempt);
+  }
+ }
+}
+function render(s){state=s;$('chain').textContent=s.chainId===1?'Ethereum Mainnet':'Robinhood Mainnet';$('title').textContent=s.prepared?.label||s.family||'Tests abgeschlossen';$('progress').textContent=s.completed+' / '+s.total+' Modultests · '+s.transactions+' bestätigte Transaktionen';$('bar').style.width=(s.completed/s.total*100)+'%';$('status').textContent=s.message||(s.status==='review'?'In MetaMask prüfen und bestätigen':s.status==='pending'?'Transaktion wird bestätigt':'Nächster Schritt wird vorbereitet');$('gasnotice').hidden=!s.gasQuote;$('gasnotice').textContent=s.gasQuote?'Aktuell '+eth(s.gasQuote.currentGasWei)+' inklusive Gasreserve. Dein Limit: '+eth(s.gasQuote.limitWei)+'. MetaMask öffnet sich erst, wenn die Gebühren in dieses Limit passen.':'';const approvalId=s.prepared?.gasApprovalId??s.gasQuote?.approvalId;const approvedBudget=s.prepared?.gasBudgetWei??s.gasQuote?.limitWei;$('approvalnotice').hidden=!approvalId;$('approvalnotice').textContent=approvalId?'Einmalige Freigabe: maximal '+eth(approvedBudget)+' Netzwerkgebühr für diesen Testlaunch. Danach gilt wieder das Limit von 0,005 ETH.':'';$('fee').textContent=s.prepared?eth(s.prepared.maximumGasWei):'—';$('value').textContent=s.prepared?eth(s.prepared.request.value):'—';$('details').textContent=s.prepared?JSON.stringify(s.prepared.request,null,2):'Noch keine Transaktion vorbereitet';$('list').replaceChildren(...s.cases.map(x=>{const e=document.createElement('article');e.className=x.completed?'done':x.family===s.family&&x.chainId===s.chainId?'current':'';const dot=document.createElement('i'),name=document.createTextNode(x.family),chain=document.createElement('span');chain.textContent=(x.chainId===1?'ETH':'RH')+(x.completed?' ✓':'');e.append(dot,name,chain);return e;}));}
+async function requireWallet(chainId){const accounts=await provider.request({method:'eth_accounts'});if(accounts[0]?.toLowerCase()!==state.account.toLowerCase())throw Error('Bitte in MetaMask die Test-Wallet '+state.account+' auswählen.');let current=await provider.request({method:'eth_chainId'});const desired='0x'+chainId.toString(16);if(BigInt(current)!==BigInt(chainId)){try{await provider.request({method:'wallet_switchEthereumChain',params:[{chainId:desired}]});}catch(e){if(e.code!==4902||chainId!==4663)throw e;await provider.request({method:'wallet_addEthereumChain',params:[{chainId:desired,chainName:'Robinhood Mainnet',nativeCurrency:{name:'Ether',symbol:'ETH',decimals:18},rpcUrls:['https://rpc.mainnet.chain.robinhood.com'],blockExplorerUrls:['https://robinhoodchain.blockscout.com']}]});}for(let i=0;i<10;i++){if(BigInt(await provider.request({method:'eth_chainId'}))===BigInt(chainId))return;await delay(150);}throw Error('Der Netzwerkwechsel ist noch nicht bestätigt.');}}
+async function run(automatic=false){
+ if(running)return;
+ running=true;stopped=false;controls();$('error').textContent='';
+ try{
+  await navigator.locks.request('module-console:'+session,{ifAvailable:true},async lock=>{
+   if(!lock){rememberRun(false);$('status').textContent='Der Ablauf läuft bereits in einem anderen Fenster.';return;}
+   provider=providers.find(p=>p.info?.rdns==='io.metamask')?.provider||window.ethereum?.providers?.find(p=>p.isMetaMask)||window.ethereum;
+   if(!provider)throw Error('MetaMask ist in diesem Chrome-Profil nicht verfügbar.');
+   const accounts=await provider.request({method:automatic?'eth_accounts':'eth_requestAccounts'});
+   if(accounts[0]?.toLowerCase()!==state.account.toLowerCase())throw Error('Bitte in MetaMask die Test-Wallet '+state.account+' auswählen.');
+   const saved=JSON.parse(localStorage.getItem('moduleConsolePending')||'null');
+   if(saved){await api('/submitted',saved);localStorage.removeItem('moduleConsolePending');sessionStorage.removeItem(walletKey);}
+   while(!stopped){
+    const s=await api('/next',{});render(s);
+    if(stopped)break;
+    if(s.status==='complete'){rememberRun(false);break;}
+    if(s.status==='review'){
+     await requireWallet(s.chainId);
+     let checked;
+     try{checked=await api('/revalidate',{id:s.prepared.id});}
+     catch(error){if(error.code==='PREPARATION_EXPIRED')continue;throw error;}
+     if(stopped)break;
+     $('status').textContent='Bitte in MetaMask bestätigen. Danach geht es automatisch weiter.';
+     // A reload while MetaMask is open must never automatically send the request again.
+     sessionStorage.setItem(walletKey,session);
+     let hash;
+     try{hash=await provider.request({method:'eth_sendTransaction',params:[checked.request]});}
+     catch(error){if(error.code===4001)sessionStorage.removeItem(walletKey);throw error;}
+     const submitted={id:s.prepared.id,hash};
+     localStorage.setItem('moduleConsolePending',JSON.stringify(submitted));
+     sessionStorage.removeItem(walletKey);
+     render(await api('/submitted',submitted));
+     localStorage.removeItem('moduleConsolePending');
+    }else{
+     let seconds=Math.min(s.waitSeconds||5,15);
+     while(seconds-->0&&!stopped){
+      $('status').textContent=(s.message||'Warte auf Netzwerkbestätigung')+' · geht automatisch weiter';
+      await delay(1000);
+     }
+    }
+   }
+  });
+ }catch(error){
+  rememberRun(false);
+  try{render(await api('/state'));}catch{}
+  $('error').textContent=error.code===4001?'In MetaMask abgelehnt. Der Fortschritt ist gespeichert.':error.message||String(error);
+ }finally{
+  running=false;controls();
+  if(stopped)$('status').textContent='Pausiert. Dein Fortschritt ist gespeichert.';
+ }
+}
+async function start(event){
+ if(!event.isTrusted||running)return;
+ rememberRun(true);
+ // A manual restart is explicit; automatic page recovery never repeats an unknown wallet request.
+ sessionStorage.removeItem(walletKey);
+ return run(false);
+}
+$('start').onclick=start;
+$('pause').onclick=()=>{stopped=true;rememberRun(false);$('status').textContent='Pause nach der aktuellen Wallet-Anfrage';};
+api('/state').then(s=>{
+ render(s);controls();
+ if(sessionStorage.getItem(runKey)!==session||s.status==='complete')return;
+ if(sessionStorage.getItem(walletKey)===session&&!localStorage.getItem('moduleConsolePending')&&s.status!=='pending'){
+  rememberRun(false);
+  $('status').textContent='Bitte zuerst die offene Anfrage in MetaMask prüfen. Danach kannst du hier fortsetzen.';
+  return;
+ }
+ sessionStorage.removeItem(walletKey);
+ return run(true);
+}).catch(error=>{$('error').textContent=error.message;});
+</script></html>
