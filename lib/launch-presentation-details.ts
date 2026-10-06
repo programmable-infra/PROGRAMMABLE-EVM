@@ -10,10 +10,23 @@ export type LaunchPresentationSource = Pick<RobinhoodLaunch, "tokenAddress"> & P
   };
 export type LaunchPairObservation = { poolId: string; quoteAsset?: { address: string; symbol: string | null } };
 
+/** Quote identity also exists in the saved pool proof, even without market metadata. */
+export function ethereumPairPresentation(entry: CanonicalTokenExploreEntry) {
+  let quoteAsset = entry.quoteAssetAddress ?? undefined;
+  const proof = entry.launchStampProvenance;
+  if (!quoteAsset && proof?.chainId === 1 && same(proof.poolId, entry.poolId)
+    && same(proof.tokenProof.tokenAddress, entry.tokenAddress)) {
+    const { currency0, currency1 } = proof.poolKey;
+    if (!same(currency0, currency1)) quoteAsset = same(currency0, entry.tokenAddress) ? currency1
+      : same(currency1, entry.tokenAddress) ? currency0 : undefined;
+  }
+  return { quoteAsset, quoteSymbol: entry.quoteAssetSymbol ?? undefined };
+}
+
 /** Immutable launch identity for display while optional market and wallet reads load. */
 export function ethereumFoundationPresentation(entry: CanonicalTokenExploreEntry) {
   return { tokenAddress: entry.tokenAddress, sourceKind: "module-foundation-v1" as const,
-    poolId: entry.poolId, quoteAsset: entry.quoteAssetAddress, quoteSymbol: entry.quoteAssetSymbol,
+    poolId: entry.poolId, ...ethereumPairPresentation(entry),
     symbol: entry.symbol, creator: entry.creatorAddress };
 }
 

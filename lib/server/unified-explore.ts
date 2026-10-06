@@ -1,4 +1,5 @@
 import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
+import { ethereumPairPresentation } from "@/lib/launch-presentation-details";
 import "server-only";
 
 import { readRobinhoodExploreCatalog } from "./robinhood-index/read";
@@ -50,7 +51,7 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
     blockNumber: entry.launchBlockNumber, launchedAt: entry.launchedAt, name: entry.name, symbol: entry.symbol,
     decimals: entry.tokenDecimals ?? null, provenance: entry.launchCategoryProvenance,
     poolId: entry.poolId,
-    quoteAsset: entry.quoteAssetAddress ?? undefined, quoteSymbol: entry.quoteAssetSymbol ?? undefined,
+    ...ethereumPairPresentation(entry),
   }));
   const markets = new Map<string, RobinhoodCoinMarket>([
     ...[...rhMarkets].map(([address, market]) => [`4663:${address}`, market] as const),

@@ -45,6 +45,7 @@ export async function createModuleStudioServer() {
           onUploadImage={async ({image})=>({url:'https://k2uoipt9wchjtz3h.public.blob.vercel-storage.com/token-images/'+'aa'.repeat(32)+'.webp',sha256:image.sha256})}
           onWarmLaunch={warm} onPrepareLaunch={async draft=>{launchEvents.coldPreparations++;return warm(draft,new AbortController().signal);}}
           onConfirmLaunch={async review=>{launchEvents.walletRequests++;launchEvents.walletRequestedAt=performance.now();launchEvents.walletContext=review.contextKey;
+            if(new URLSearchParams(location.search).has('holdWallet')) await new Promise(resolve=>{window.rejectFixtureWallet=resolve;});
             throw Object.assign(new Error('Fixture wallet rejected. No transaction was sent.'),{walletRequestAttempted:false});}}/>
       </>;
     }

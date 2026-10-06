@@ -12,6 +12,7 @@ vi.mock("@/lib/server/ethereum-explore", () => ({ readEthereumUnifiedExploreCata
 vi.mock("@/lib/server/robinhood-presentation", () => ({ readRobinhoodMarkets: sources.rhMarkets, readRobinhoodPresentations: sources.presentations }));
 vi.mock("@/lib/server/codex-market", () => ({ readCodexMarkets: sources.ethMarkets }));
 import { readUnifiedLaunches } from "@/lib/server/unified-explore";
+import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 
 const address = `0x${"11".repeat(20)}`, other = `0x${"22".repeat(20)}`;
 const pool = `0x${"aa".repeat(32)}`;
@@ -35,6 +36,13 @@ beforeEach(() => {
 });
 
 describe("Unified verified source adapter", () => {
+  it("keeps the Ethereum pool proof's quote when optional quote metadata and markets are absent", async () => {
+    sources.eth.mockResolvedValue({ status: "ready", updatedAt: null, entries: [customGraphExploreEntry], sourceEvidence: {} });
+    sources.ethMarkets.mockResolvedValue(new Map());
+    expect((await readUnifiedLaunches()).items.find(row => row.chainId === 1)).toMatchObject({
+      poolId: customGraphExploreEntry.poolId, quoteAsset: "0x0000000000000000000000000000000000000000",
+    });
+  });
   it("includes receipt-confirmed launches before the historical index without requesting their market data", async () => {
     const fresh = { ...rh, tokenAddress: other, name: "Fresh", symbol: "FRESH", quoteAsset: address, quoteSymbol: "PAIR",
       transactionHash: pool, blockNumber: "123", launchedAt: "2026-10-04T10:00:00Z" };
