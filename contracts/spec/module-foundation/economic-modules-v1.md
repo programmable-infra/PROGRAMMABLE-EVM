@@ -44,7 +44,7 @@ All asset amounts in the contract ABI are raw token units. The UI converts amoun
 
 ## Execution service
 
-`ops/economic-modules/run.mjs` runs one bounded pass on one chain. The deployment service invokes it at most once per minute per journal. It checks at most eight targets per pass, rotates fairly, submits at most one transaction and keeps only one unconfirmed transaction per chain/account. A larger installation needs separately assigned worker shards with separate signing accounts and non-overlapping target ownership.
+`ops/economic-modules/run.mjs` runs one bounded pass on one chain. The deployment service invokes it at most once per minute per journal. It checks at most eight targets per pass, rotates fairly, submits at most one transaction and keeps only one unconfirmed transaction per chain/account. A larger installation needs separately assigned worker groups with separate signing accounts and non-overlapping target ownership.
 
 The configuration contains `chainId` (1 or 4663), `rpcEnv`, `keyEnv`, `simulationAccount`, `confirmations` (at least 12 on Ethereum, 64 on Robinhood), `maxFeePerGasWei` as a decimal string, and `targets`. Each target contains its reviewed `family`, deployed `host`, `module`, zero-based `index`, `runtimeHash`, `configurationHash` and decimal-string `deployedBlock`. Populate these from admitted deployment evidence. Never put a private key or credential-bearing RPC URL in the configuration. The corresponding environment variables belong to the execution service's secret store.
 
