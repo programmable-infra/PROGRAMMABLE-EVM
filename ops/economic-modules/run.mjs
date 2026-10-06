@@ -1,9 +1,10 @@
 import { mkdir, open, readFile, rename, rm } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { createPublicClient, createWalletClient, encodeAbiParameters, encodeFunctionData, getAddress, http, isHash, keccak256, parseAbi, parseAbiItem, stringToHex, toFunctionSelector } from "viem";
+import { createPublicClient, createWalletClient, encodeAbiParameters, encodeFunctionData, getAddress, isHash, keccak256, parseAbi, parseAbiItem, stringToHex, toFunctionSelector } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { runEconomicPass } from "./engine.mjs";
+import { economicHttp } from "./rpc.mjs";
 
 const families = new Map([
   ...["buyback-burn", "dip-buyback", "lp-rewards", "full-range-lp"].map(id => [id, "strategy"]),
@@ -132,7 +133,7 @@ async function main() {
   const broadcast = flag === "--broadcast";
   const account = broadcast ? privateKeyToAccount(process.env[config.keyEnv] ?? "") : getAddress(config.simulationAccount);
   const chain = { id: config.chainId, name: `Execution ${config.chainId}`, nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 }, rpcUrls: { default: { http: [rpc] } } };
-  const transport = http(rpc, { retryCount: 0, timeout: 15000 });
+  const transport = economicHttp(rpc);
   const client = createPublicClient({ chain, transport });
   if (await client.getChainId() !== config.chainId) throw new Error("RPC chain mismatch");
   const wallet = createWalletClient({ chain, transport, account });
