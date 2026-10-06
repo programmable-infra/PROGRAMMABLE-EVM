@@ -65,6 +65,7 @@ test("a delayed event confirming the verified network does not cancel signing", 
   await page.getByRole("button", { name: "Hold fresh validation" }).click();
   await page.getByRole("button", { name: "Launch Ethereum fixture" }).click();
   await expect(page.getByLabel("Module validation count")).toHaveText("1");
+  await page.getByRole("button", { name: "Refresh SDK methods without changing provider" }).click();
   await page.getByRole("button", { name: "MetaMask selects Ethereum", exact: true }).click();
   await page.getByRole("button", { name: "Finish fresh validation" }).click();
   await signing(page);

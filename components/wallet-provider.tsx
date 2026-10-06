@@ -1577,6 +1577,7 @@ function PrivyWalletBridge({
   // Network verification pins the underlying provider separately from these wrappers.
   const walletIdentityGenerationRef = useRef(0);
   const walletNetworkGenerationRef = useRef(0);
+  const observedWalletNetworkRef = useRef<string | null>(null);
   const walletRequestSessionRef = useRef({
     authenticated: activeAuthenticated && ready && walletsReady && !disconnecting,
     privyUserId: user?.id ?? null,
@@ -1664,8 +1665,12 @@ function PrivyWalletBridge({
       chainRevision += 1;
       const current = walletRequestSessionRef.current;
       if (!current.account || !current.walletCapability) return;
+      // SDK labels can lag behind provider events. Count observed changes only.
+      if (observedWalletNetworkRef.current !== chainId) {
+        observedWalletNetworkRef.current = chainId;
+        walletNetworkGenerationRef.current += 1;
+      }
       if (current.chainId === chainId) return;
-      walletNetworkGenerationRef.current += 1;
       current.chainId = chainId;
       if (!networkSwitchPendingRef.current) walletSessionGenerationRef.current += 1;
       setInjectedNetwork({ userId: owner, chainId });
@@ -2616,6 +2621,7 @@ function PrivyWalletBridge({
               // That confirmation is not a second network change.
               const walletAtVerification = walletRequestSessionRef.current.walletCapability;
               walletRequestSessionRef.current.chainId = targetChainHex;
+              observedWalletNetworkRef.current = targetChainHex;
               if (walletAtVerification) setVerifiedWalletNetwork({
                 userId: sessionSubject, account, chainId: targetChainHex,
                 walletSnapshot: walletAtVerification,
