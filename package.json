@@ -237,7 +237,7 @@
     "modules:cli:check": "node scripts/build-module-cli.mjs",
     "modules:cli:test": "node --test scripts/test/module-cli-distribution.test.mjs",
     "modules:starter:test": "bash contracts/test/module-mode/starter/run-tests.sh -vv && node --test packages/classic-modules/examples/native-program/tools/package.test.mjs && node packages/classic-modules/examples/native-program/tools/check-sdk.mjs && forge test --root packages/classic-modules/examples/engine-program --offline -vv && node packages/classic-modules/examples/engine-program/tools/check-build.mjs && node --test packages/classic-modules/examples/engine-program/tools/package.test.mjs && node packages/classic-modules/examples/engine-program/tools/prepare.mjs --fixture && node packages/classic-modules/examples/engine-program/tools/check-sdk.mjs",
-    "contracts:foundation:verify": "node --test contracts/scripts/module-foundation/verify.test.mjs ops/economic-modules/engine.test.mjs && bash contracts/scripts/module-foundation/verify.sh"
+    "contracts:foundation:verify": "node --test contracts/scripts/module-foundation/verify.test.mjs ops/economic-modules/engine.test.mjs ops/economic-modules/fork-rpc.test.mjs && bash contracts/scripts/module-foundation/verify.sh"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.4",
