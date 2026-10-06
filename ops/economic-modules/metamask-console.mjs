@@ -11,12 +11,13 @@ import {buildFoundationEthereumGraph, assertFoundationEthereumTransaction,predic
 import {ETHEREUM_MODULE_SOURCE} from '../../lib/module-foundation/ethereum-release.ts';
 import {parseEthereumModuleAuthorization} from '../../lib/module-foundation/ethereum-authorization.ts';
 import {encodeFoundationFundingPath} from '../../lib/module-foundation/funding-path.ts';
-import {FAMILIES, ACCOUNT, BUY, FUNDING, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, publicError, check, fail} from './metamask-core.mjs';
+import {FAMILIES, ACCOUNT, BUY, FUNDING, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, nthPotRecovery, publicError, check, fail} from './metamask-core.mjs';
 const origin='https://programmable.market';
 const cleanJson=value=>JSON.stringify(value,(_,v)=>typeof v==='bigint'?v.toString():v,2);
 const readJson=async file=>JSON.parse(await readFile(file,'utf8'));
 async function durable(file,value){const temp=file+'.tmp';const f=await open(temp,'w',0o600);try{await f.writeFile(cleanJson(value)+'\n');await f.sync();}finally{await f.close();}await rename(temp,file);}
 const stampAbi=parseAbi(['function launchIdByToken(address) view returns (bytes32)']);
+const blockReaderAbi=parseAbi(['function getBlockNumber() view returns (uint256)']);
 export async function run([configFile],root){
  check(configFile,'Konfiguration fehlt');
  const cfg=await readJson(configFile), dir=cfg.output; await mkdir(dir,{recursive:true,mode:0o700});
@@ -51,7 +52,7 @@ export async function run([configFile],root){
  const bal=(c,token,blockNumber)=>c.clients[0].readContract({address:token,abi:tokenAbi,functionName:'balanceOf',args:[ACCOUNT],...(blockNumber?{blockNumber}:{})});
  const field=(c,item,name,args=[],blockNumber)=>c.clients[0].readContract({address:item.module,abi:moduleAbi,functionName:name,args,...(blockNumber?{blockNumber}:{})});
  async function verifyPins(c,item){
-  const entries=[...Object.values(c.profile.infrastructure),c.profile.wrappedEth];
+  const entries=[...Object.values(c.profile.infrastructure),c.profile.wrappedEth,c.profile.multicall3];
   if(item?.selection) entries.push({address:item.selection.factory,runtimeCodeHash:item.selection.factoryCodeHash});
   entries.push(c.chainId===1?ETHEREUM_MODULE_SOURCE.implementation:c.binding.factory);
   for(const pin of entries){const code=await Promise.all(c.clients.map(p=>p.getCode({address:pin.address})));check(code.every(b=>b&&keccak256(b)===pin.runtimeCodeHash),'Contract-Code stimmt nicht mit der geprüften Version überein');}
@@ -108,11 +109,17 @@ export async function run([configFile],root){
   if(permitted<amount||expiration<Math.floor(Date.now()/1000)+300)return prepare(c,item,stage,{to:permit,data:encodeFunctionData({abi:permitAbi,functionName:'approve',args:[token,router,amount,Math.floor(Date.now()/1000)+86400]})},'Begrenzte Freigabe für den Swap-Router','approval');
   return null;
  }
- async function swap(c,item,stage,target,buy,amount){
+ async function evmBlockNumber(c,blockNumber){
+  const pin=c.profile.multicall3;
+  if(!c.blockReaderChecked){const codes=await Promise.all(c.clients.map(client=>client.getCode({address:pin.address,blockNumber})));check(codes.every(code=>code&&keccak256(code)===pin.runtimeCodeHash),'Der Blockzähler entspricht nicht der geprüften Version.');c.blockReaderChecked=true;}
+  const blocks=await Promise.all(c.clients.map(client=>client.readContract({address:pin.address,abi:blockReaderAbi,functionName:'getBlockNumber',blockNumber})));
+  check(blocks[0]===blocks[1],'RPCs bestätigen verschiedene Ausführungsblöcke.');return blocks[0];
+ }
+ async function swap(c,item,stage,target,buy,amount,role='step'){
   const quote=c.profile.wrappedEth.address,input=buy?quote:target.token,output=buy?target.token:quote;
   const approved=await approval(c,item,stage,input,amount);if(approved)return approved;
   const waitForBlock=()=>{c.simulationRetries=(c.simulationRetries??0)+1;if(c.simulationRetries>6){c.simulationRetries=0;fail('Der RPC liefert noch keinen gemeinsamen Block. Bitte später fortsetzen; alle Bestätigungen bleiben gespeichert.');}return display({status:'waiting',message:'Warte, bis beide RPCs den letzten Schritt bereitstellen',waitSeconds:Math.min(2**c.simulationRetries,15)});};
-  const p=c.clients[0];let block,quoteSimulation,deadline;
+  const p=c.clients[0];let block,quoteSimulation,deadline,qualifyingBuysBefore;
   try{
    const heads=await Promise.all(c.clients.map(client=>client.getBlockNumber({cacheTime:0})));
    const lastReceipt=state.history.filter(tx=>tx.chainId===c.chainId).reduce((last,tx)=>BigInt(tx.blockNumber)>last?BigInt(tx.blockNumber):last,0n);
@@ -120,6 +127,11 @@ export async function run([configFile],root){
    if(blockNumber===null)return waitForBlock();
    const blocks=await Promise.all(c.clients.map(client=>client.getBlock({blockNumber})));
    check(blocks[0].hash===blocks[1].hash,'RPCs bestätigen verschiedene Blöcke.');block=blocks[0];deadline=block.timestamp+300n;
+   if(item.kind===5&&buy&&target===item){
+    const [evmBlock,lastQualifying,count]=await Promise.all([evmBlockNumber(c,blockNumber),field(c,item,'lastQualifyingBlock',[],blockNumber),field(c,item,'qualifyingBuys',[],blockNumber)]);
+    if(evmBlock<=lastQualifying)return display({status:'waiting',message:'Der nächste Kauf zählt erst im nächsten Ausführungsblock',waitSeconds:6});
+    qualifyingBuysBefore=String(count);
+   }
    const readBalance={to:output,data:encodeFunctionData({abi:tokenAbi,functionName:'balanceOf',args:[ACCOUNT]})};
    quoteSimulation=await p.simulateCalls({account:ACCOUNT,blockNumber,calls:[readBalance,{to:c.profile.infrastructure.universalRouter.address,data:swapData(target.poolKey,input,output,amount,1n,deadline),value:0n},readBalance]});
   }catch(error){if(isTransientBlockError(error))return waitForBlock();throw error;}
@@ -129,7 +141,8 @@ export async function run([configFile],root){
   const minOut=(afterQuote-beforeQuote)*9700n/10000n;check(minOut>0n,'Der Test-Swap würde keine Token liefern.');
   const data=swapData(target.poolKey,input,output,amount,minOut,deadline);
   const before=await bal(c,output);
-  return prepare(c,item,stage,{to:c.profile.infrastructure.universalRouter.address,data,expires:Number(deadline)},buy?'Testkauf · 0,00001 ETH':'Test-Token verkaufen','step',{output,minimumOutput:String(minOut),outputBefore:String(before),tradeToken:target.token,buy,inputAmount:String(amount),simulationBlock:String(block.number),simulationBlockHash:block.hash});
+  const label=role==='pot-qualifying-buy'?'Fehlenden qualifizierten Kauf ergänzen · 0,00001 ETH':buy?'Testkauf · 0,00001 ETH':'Test-Token verkaufen';
+  return prepare(c,item,stage,{to:c.profile.infrastructure.universalRouter.address,data,expires:Number(deadline)},label,role,{output,minimumOutput:String(minOut),outputBefore:String(before),tradeToken:target.token,buy,inputAmount:String(amount),simulationBlock:String(block.number),simulationBlockHash:block.hash,...(qualifyingBuysBefore!==undefined?{qualifyingBuysBefore}:{})});
  }
  function display(extra={}){
   const cur=state.prepared?{c:chains.get(state.prepared.chainId),item:cstate(chains.get(state.prepared.chainId)).cases.find(x=>x.family===state.prepared.family)}:current();return {account:ACCOUNT,simulationOnly:cfg.simulationOnly===true,chainId:cur?.c.chainId??1,family:cur?.item.family??null,completed:Object.values(state.chains).flatMap(c=>c.cases).filter(i=>i.completed).length,total:Object.values(state.chains).flatMap(c=>c.cases).length,transactions:state.history.length,status:state.prepared?.hash?'pending':state.prepared?'review':cur?'ready':'complete',prepared:state.prepared?{id:state.prepared.id,label:state.prepared.label,request:state.prepared.request,maximumGasWei:state.prepared.maximumGasWei,hash:state.prepared.hash}:null,cases:Object.entries(state.chains).flatMap(([chain,c])=>c.cases.map(i=>({chainId:Number(chain),family:i.family,completed:i.completed,position:i.position,steps:caseSteps(i.kind).length}))),...extra};
@@ -152,7 +165,7 @@ export async function run([configFile],root){
   for(const result of results){assertEnvelope(result.tx,pre.request);check(result.receipt.status==='success','Transaktion ist fehlgeschlagen. Sie wird nicht automatisch erneut gesendet.');}
   check(results[0].receipt.blockHash===results[1].receipt.blockHash,'RPCs bestätigen verschiedene Blöcke.');
   const receipt=results[0].receipt,item=cstate(c).cases.find(i=>i.family===pre.family);
-  if(pre.role==='step'){
+  if(pre.role==='step'||pre.role==='pot-qualifying-buy'){
    if(pre.stage==='launch'){
     const launches=await Promise.all(c.clients.map(client=>client.readContract({address:item.engine,abi:foundationFactoryV2Abi,functionName:'launchOf',args:[item.token],blockNumber:receipt.blockNumber})));
     check(launches.every(r=>r.hook.toLowerCase()===item.hook.toLowerCase()&&r.basePositionId>0n&&r.creatorQuotePrincipal===0n&&r.initialBuyTokenAmount===0n),'Launch-Ergebnis stimmt nicht');
@@ -163,7 +176,11 @@ export async function run([configFile],root){
     item.checks.launch=true;item.launchTransaction=pre.hash;
    }else if(pre.output){
     const output=await bal(c,pre.output,receipt.blockNumber);check(output-BigInt(pre.outputBefore)>=BigInt(pre.minimumOutput),'Swap-Ausgabe liegt unter dem geprüften Minimum');
-    item.checks[pre.stage]=true;
+    if(pre.qualifyingBuysBefore!==undefined){
+     const counts=await Promise.all(c.clients.map(client=>client.readContract({address:item.module,abi:moduleAbi,functionName:'qualifyingBuys',blockNumber:receipt.blockNumber})));
+     check(counts.every(count=>count===BigInt(pre.qualifyingBuysBefore)+1n),'Der Testkauf wurde nicht als neuer qualifizierter Kauf gezählt.');
+    }
+    item.checks[pre.role==='pot-qualifying-buy'?'pot-qualifying-buy':pre.stage]=true;
     if(pre.stage==='reference-buy')item.referenceAmount=String(output-BigInt(pre.outputBefore));
     if(pre.stage==='buy'){const block=await p.getBlock({blockNumber:receipt.blockNumber});item.firstBuyAt=Number(block.timestamp);}
    }else if(pre.stage==='execute'){
@@ -172,7 +189,8 @@ export async function run([configFile],root){
     if(item.kind===3)check(await field(c,item,'lockedLiquidity',[],receipt.blockNumber)>0n,'Keine zusätzliche Liquidität entstanden');
     item.checks.execute=true;
    }else if(pre.stage.startsWith('payout')){check(await field(c,item,'totalPaid',[],receipt.blockNumber)>BigInt(pre.paidBefore),'Keine Auszahlung erfolgt');check(await field(c,item,'owed',[ACCOUNT],receipt.blockNumber)===0n,'Auszahlung hat offene Schuld nicht entfernt');item.checks[pre.stage]=true;}
-   item.position++;
+   if(pre.role==='pot-qualifying-buy')item.potRecoveryBuys=(item.potRecoveryBuys??0)+1;
+   else item.position++;
   }
   const entry={chainId:c.chainId,family:item.family,stage:pre.stage,role:pre.role,hash:pre.hash,blockNumber:String(receipt.blockNumber),blockHash:receipt.blockHash,gasUsed:String(receipt.gasUsed)};
   item.transactions.push(entry);state.history.push(entry);state.prepared=null;await save();
@@ -210,7 +228,22 @@ export async function run([configFile],root){
    if(stage==='buy'||stage==='buy-again')return swap(c,item,stage,item,true,BUY);
    if(stage==='sell'||stage==='sell-half'){const amount=await bal(c,item.token);check(amount>0n,'Keine Test-Token zum Verkauf');return swap(c,item,stage,item,false,stage==='sell-half'?amount/2n:amount);}
    if(stage==='execute'){const used=await field(c,item,'totalQuoteUsed');return prepare(c,item,stage,{to:item.hook,data:encodeFunctionData({abi:hostAbi,functionName:'executeModuleAction',args:[0n,'0x61461954']})},'Aufgelaufene Gebühren im Modul ausführen','step',{usedBefore:String(used)});}
-   if(stage.startsWith('payout')){const owed=await field(c,item,'owed',[ACCOUNT]);if(owed===0n&&stage==='payout-after-sale'){item.position++;item.checks[stage]='nothing owed';await save();continue;}check(owed>0n,'Das Modul hat noch keine Auszahlung vorgemerkt');const action='0x'+keccak256(toHex('pay(address[])')).slice(2,10)+encodeAbiParameters(parseAbiParameters('address[]'),[[ACCOUNT]]).slice(2);return prepare(c,item,stage,{to:item.hook,data:encodeFunctionData({abi:hostAbi,functionName:'executeModuleAction',args:[0n,action]})},'Vorgemerkte Belohnung an die Test-Wallet auszahlen','step',{paidBefore:String(await field(c,item,'totalPaid'))});}
+   if(stage.startsWith('payout')){
+    const owed=await field(c,item,'owed',[ACCOUNT]);
+    if(item.kind===5&&owed===0n){
+     const blockNumber=BigInt(item.transactions.at(-1).blockNumber);
+     const snapshots=await Promise.all(c.clients.map(async client=>{const read=(name,args=[])=>client.readContract({address:item.module,abi:moduleAbi,functionName:name,args,blockNumber});const [debt,count,n]=await Promise.all([read('owed',[ACCOUNT]),read('qualifyingBuys'),read('everyN')]);return {owed:debt,qualifyingBuys:count,everyN:BigInt(n)};}));
+     check(cleanJson(snapshots[0])===cleanJson(snapshots[1]),'Die RPCs bestätigen unterschiedliche Prämienstände.');
+     const decision=nthPotRecovery(snapshots[0],item.potRecoveryBuys??0);
+     if(decision==='qualifying-buy')return swap(c,item,stage,item,true,BUY,'pot-qualifying-buy');
+     check(decision==='payout','Die Prämienbedingung ist noch nicht erfüllt. Der Test wird nicht als bestanden markiert.');
+     return display({status:'waiting',message:'Warte auf den aktuellen Prämienstand',waitSeconds:3});
+    }
+    if(owed===0n&&stage==='payout-after-sale'){item.position++;item.checks[stage]='nothing owed';await save();continue;}
+    check(owed>0n,'Das Modul hat noch keine Auszahlung vorgemerkt');
+    const action='0x'+keccak256(toHex('pay(address[])')).slice(2,10)+encodeAbiParameters(parseAbiParameters('address[]'),[[ACCOUNT]]).slice(2);
+    return prepare(c,item,stage,{to:item.hook,data:encodeFunctionData({abi:hostAbi,functionName:'executeModuleAction',args:[0n,action]})},'Vorgemerkte Belohnung an die Test-Wallet auszahlen','step',{paidBefore:String(await field(c,item,'totalPaid'))});
+   }
    fail('Unbekannter Test-Schritt');
   }
   return display({status:'waiting',message:'Nächster Schritt wird vorbereitet',waitSeconds:1});

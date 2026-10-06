@@ -11,7 +11,7 @@ export const hostAbi = parseAbi([
  'function moduleAt(uint256) view returns (Module)','function moduleCount() view returns (uint256)','function executeModuleAction(uint256,bytes)',
  'function poolKey() view returns ((address currency0,address currency1,uint24 fee,int24 tickSpacing,address hooks))',
 ]);
-export const moduleAbi = parseAbi(['function executableBudget() view returns (uint256)','function totalQuoteUsed() view returns (uint256)','function totalBurned() view returns (uint256)','function lockedLiquidity() view returns (uint128)','function totalPaid() view returns (uint256)','function owed(address) view returns (uint256)','function pausedUntil() view returns (uint256)','function qualifyingBuys() view returns (uint256)','function unlocked() view returns (bool)','function unlockReached() view returns (bool)','function currentCap() view returns (uint256)','function king() view returns (address)','function crownThreshold() view returns (uint256)']);
+export const moduleAbi = parseAbi(['function executableBudget() view returns (uint256)','function totalQuoteUsed() view returns (uint256)','function totalBurned() view returns (uint256)','function lockedLiquidity() view returns (uint128)','function totalPaid() view returns (uint256)','function owed(address) view returns (uint256)','function pausedUntil() view returns (uint256)','function qualifyingBuys() view returns (uint256)','function lastQualifyingBlock() view returns (uint256)','function everyN() view returns (uint32)','function unlocked() view returns (bool)','function unlockReached() view returns (bool)','function currentCap() view returns (uint256)','function king() view returns (address)','function crownThreshold() view returns (uint256)']);
 export const routerAbi = parseAbi(['function execute(bytes,bytes[],uint256) payable']);
 export function configFor(kind, reference) {
  if (!Number.isInteger(kind) || kind<0 || kind>=FAMILIES.length) throw Error('Unknown module');
@@ -59,6 +59,13 @@ export function isTransientBlockError(error) {
   if (cause.name === 'BlockNotFoundError' || /header not found|unknown block|block not found/i.test(cause.rpcMessage ?? '')) return true;
  }
  return false;
+}
+export function nthPotRecovery({owed, qualifyingBuys, everyN}, recoveryBuys) {
+ if (owed > 0n) return 'payout';
+ // The two-buy test may have submitted both trades in one EVM block. Repair it once,
+ // without replaying the launch or silently treating the missing payout as success.
+ if (everyN === 2n && qualifyingBuys === 1n && recoveryBuys === 0) return 'qualifying-buy';
+ return 'stop';
 }
 export function publicError(error) {
  return typeof error?.safeMessage==='string'?error.safeMessage:'Vorbereitung angehalten. Die bereits bestätigten Schritte bleiben gespeichert.';

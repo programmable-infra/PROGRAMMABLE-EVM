@@ -1,6 +1,6 @@
 import {test} from 'node:test';import assert from 'node:assert/strict';
 import {decodeAbiParameters,decodeFunctionData,parseAbiParameters} from 'viem';
-import {FAMILIES,ACCOUNT,BUY,FUNDING,configFor,caseSteps,swapData,routerAbi,assertEnvelope,digestRequest,simulationCheckpoint,isTransientBlockError} from './metamask-core.mjs';
+import {FAMILIES,ACCOUNT,BUY,FUNDING,configFor,caseSteps,swapData,routerAbi,assertEnvelope,digestRequest,simulationCheckpoint,isTransientBlockError,nthPotRecovery} from './metamask-core.mjs';
 test('all eleven families have bounded configurations and complete sell paths',()=>{assert.equal(FAMILIES.length,11);FAMILIES.forEach((_,i)=>{assert.match(configFor(i,ACCOUNT),/^0x[0-9a-f]+$/);assert.equal(caseSteps(i)[0],'launch');assert.ok(caseSteps(i).includes('sell'));});assert.throws(()=>configFor(11,ACCOUNT));});
 test('funding, strategy size and approvals use small finite amounts',()=>{const v=decodeAbiParameters(parseAbiParameters('uint128,uint128,uint32,uint32,uint16,uint16'),configFor(1,ACCOUNT));assert.equal(v[1],100_000_000_000n);assert.equal(v[3],300);assert.equal(v[5],500);assert.ok(BUY*20n<=FUNDING);});
 test('swap payload enforces the quoted minimum and a deadline',()=>{const quote='0x0000000000000000000000000000000000000001',token='0x0000000000000000000000000000000000000002';const key={currency0:quote,currency1:token,fee:0,tickSpacing:60,hooks:ACCOUNT};const data=swapData(key,quote,token,10n,8n,1000n);const decoded=decodeFunctionData({abi:routerAbi,data});assert.equal(decoded.args[2],1000n);const [actions,inputs]=decodeAbiParameters(parseAbiParameters('bytes,bytes[]'),decoded.args[1][0]);assert.equal(actions,'0x060b0e');const [swap]=decodeAbiParameters(parseAbiParameters('((address,address,uint24,int24,address),bool,uint128,uint128,uint256,bytes)'),inputs[0]);assert.equal(swap[3],8n);assert.throws(()=>swapData(key,quote,token,10n,0n,1000n));});
@@ -20,4 +20,12 @@ test('only missing-block errors receive a short retry, not contract reverts',()=
  assert.equal(isTransientBlockError({name:'BlockNotFoundError'}),true);
  assert.equal(isTransientBlockError({rpcMessage:'execution reverted',data:'0x1234'}),false);
  const circular={};circular.cause=circular;assert.equal(isTransientBlockError(circular),false);
+});
+test('two trades counted in one block get one bounded recovery, never a false payout pass',()=>{
+ const sameBlock={owed:0n,qualifyingBuys:1n,everyN:2n};
+ assert.equal(nthPotRecovery(sameBlock,0),'qualifying-buy');
+ assert.equal(nthPotRecovery(sameBlock,1),'stop');
+ assert.equal(nthPotRecovery({...sameBlock,qualifyingBuys:2n},0),'stop');
+ assert.equal(nthPotRecovery({...sameBlock,everyN:3n},0),'stop');
+ assert.equal(nthPotRecovery({...sameBlock,owed:3_000_000_000_000n,qualifyingBuys:2n},1),'payout');
 });
