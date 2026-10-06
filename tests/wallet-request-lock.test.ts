@@ -140,12 +140,12 @@ describe("production wallet request lock", () => {
     const refreshedAuthority = entrypoint.indexOf("await assertAuthority();", validation);
     expect(authority).toBeGreaterThan(lock); expect(validation).toBeGreaterThan(authority);
     expect(refreshedAuthority).toBeGreaterThan(validation); expect(entrypoint.indexOf('method: "eth_sendTransaction"')).toBeGreaterThan(refreshedAuthority);
-    expect(entrypoint).toContain("walletSessionGenerationRef.current !== expectedGeneration");
-    expect(entrypoint).toContain("current.walletCapability?.getEthereumProvider !== boundWallet.getEthereumProvider");
-    expect(entrypoint).toContain("current.walletCapability?.switchChain !== boundWallet.switchChain");
+    expect(entrypoint).toContain("walletIdentityGenerationRef.current !== expectedGeneration");
+    expect(entrypoint).toContain("walletNetworkGenerationRef.current !== verifiedNetworkGeneration");
+    expect(entrypoint).toContain("candidate !== pinnedProvider");
     expect(entrypoint).toContain("walletRequestAttempted: false");
     expect(entrypoint.indexOf("await getWalletProviderOnChain({")).toBeGreaterThan(lock);
-    expect(entrypoint).not.toContain("switchChain(");
+    expect(entrypoint).not.toContain("await boundWallet.switchChain(");
   });
 
   it("gates every production transaction and permit entrypoint before wallet I/O", () => {
@@ -227,7 +227,7 @@ describe("production wallet request lock", () => {
       "const sendPredictionV2Transaction = useCallback",
     );
     const end = provider.indexOf(
-      "const signPredictionPermit = useCallback",
+      "const sendModuleModeTransaction = useCallback",
       start,
     );
     const entrypoint = provider.slice(start, end);

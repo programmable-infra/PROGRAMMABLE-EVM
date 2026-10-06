@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { build } from "esbuild";
 
-export async function createWalletSessionServer() {
+export async function createWalletSessionServer({ moduleSigning = false } = {}) {
   const root = process.cwd();
   const runtime = resolve(root, "tests/browser/fixtures/wallet-session-runtime.tsx");
   const bundled = await build({
@@ -20,6 +20,8 @@ export async function createWalletSessionServer() {
         import {TokenRouteChainSync} from './components/token-route-chain-sync';
         import {RobinhoodLaunchesView} from './components/robinhood-launches-view';
         import {FixtureControls} from './tests/browser/fixtures/wallet-session-runtime';
+        import {ModuleSigningControls, enableModuleSigningFixture} from './tests/browser/fixtures/module-signing-runtime';
+        ${moduleSigning ? "enableModuleSigningFixture();" : ""}
         import './app/globals.css';
         import './app/interface.css';
         import './app/programmable-experience.css';
@@ -63,6 +65,7 @@ import './app/surfaces.css';
             <button onClick={() => switchNetwork('4663')}>Request Robinhood wallet network</button>
             <button onClick={() => void value.disconnect({showDialogOnFailure:false})}>Sign out of app</button>
             <FixtureControls/>
+            ${moduleSigning ? "<ModuleSigningControls/>" : ""}
             {location.pathname === '/launch/modules' ? <ModuleModeBuilder launchAction={{label:'Continue module fixture',
               description:'Local UI callback only. No transaction is prepared or sent.',
               onContinue:async () => setModuleContinuations(previous => previous + 1)}}/> : null}
@@ -83,6 +86,9 @@ import './app/surfaces.css';
     },
     external: ["/brand/*", "/fonts/*"],
     plugins: [{ name: "wallet-session-boundaries", setup(plugin) {
+      if (moduleSigning) plugin.onResolve({ filter: /^@\/(lib\/module-foundation\/wallet|components\/module-mode-wallet-state)$/ }, args =>
+        args.importer === resolve(root, "components/wallet-provider.tsx")
+          ? { path: resolve(root, "tests/browser/fixtures/module-signing-runtime.tsx") } : undefined);
       plugin.onResolve({ filter: /^react$/ }, (args) => args.importer === resolve(root, "components/view-chain.tsx")
         ? { path: "view-chain-react", namespace: "view-chain-react" } : undefined);
       plugin.onLoad({ filter: /.*/, namespace: "view-chain-react" }, () => ({
