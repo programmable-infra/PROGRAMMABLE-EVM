@@ -8,6 +8,7 @@ import { FOUNDATION_OWNER_PUBLICATION_V1, foundationOwnerDigestV1, foundationOwn
 import { verifyFoundationOwnerPublicationV1 } from "@/lib/module-foundation/owner-verification";
 import { verifyFoundationOwnerRuntimeV1 } from "@/lib/module-foundation/owner-runtime";
 import { bindFoundationCatalogV1, FOUNDATION_CATALOG_SCHEMA_V1 } from "@/lib/module-foundation/catalog";
+import { verifySharedActivation } from "@/ops/module-owner-publication/shared";
 
 const account = privateKeyToAccount(`0x${"11".repeat(32)}`), hash = (value: string) => keccak256(toHex(value));
 async function fixture(chainId: 1 | 4663 = 4663) {
@@ -27,6 +28,28 @@ async function fixture(chainId: 1 | 4663 = 4663) {
   return { ...contents, publicationDigest, signature: await account.signMessage({ message: foundationOwnerSigningMessageV1(publicationDigest) }) };
 }
 describe("direct owner module publication", () => {
+  it("admits a newly signed module on both live hosts without editing the seeded host release", async () => {
+    const publications = await Promise.all([fixture(1), fixture(4663)]);
+    const readLive = vi.fn(async (url: string | URL | Request) => Response.json({
+      available: true, chainId: Number(new URL(String(url)).searchParams.get("chainId")), binding: { releaseDigest: hash("host") },
+    }));
+    await expect(verifySharedActivation(publications, [account.address.toLowerCase()], readLive)).resolves.toBeUndefined();
+    expect(readLive).toHaveBeenCalledTimes(2);
+    await expect(verifySharedActivation(publications, [], readLive)).rejects.toThrow();
+  });
+  it("keeps partial, mixed-source and stale-host releases inactive", async () => {
+    const publications = await Promise.all([fixture(1), fixture(4663)]);
+    const inactive = vi.fn(async () => Response.json({ available: false }));
+    await expect(verifySharedActivation(publications.slice(0, 1), [account.address.toLowerCase()], inactive)).rejects.toThrow("Both networks");
+    await expect(verifySharedActivation([publications[0], { ...publications[1], manifest: { ...publications[1].manifest, requestDigest: hash("different") } }],
+      [account.address.toLowerCase()], inactive)).rejects.toThrow("identical source");
+    expect(inactive).not.toHaveBeenCalled();
+    await expect(verifySharedActivation(publications, [account.address.toLowerCase()], inactive)).rejects.toThrow("live target host");
+    const stale = vi.fn(async (url: string | URL | Request) => Response.json({
+      available: true, chainId: Number(new URL(String(url)).searchParams.get("chainId")), binding: { releaseDigest: hash("previous-host") },
+    }));
+    await expect(verifySharedActivation(publications, [account.address.toLowerCase()], stale)).rejects.toThrow("live target host");
+  });
   it.each([1, 4663] as const)("makes signed source selectable through owner authority, without a contributor submission or DB review on chain %i", async chainId => {
     const p = await verifyFoundationOwnerPublicationV1(await fixture(chainId), [account.address.toLowerCase()]);
     const review = foundationOwnerReferenceV1(p), document = { schemaVersion: FOUNDATION_CATALOG_SCHEMA_V1, entries: [{ manifest: p.manifest, review, release: p.release }] };

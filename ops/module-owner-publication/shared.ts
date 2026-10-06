@@ -1,11 +1,29 @@
-import ethereumRelease from "@/contracts/deployments/ethereum-module-release-v1.json";
+import publishers from "@/config/module-foundation/owner-publishers.json";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createPublicClient, http } from "viem";
 import { foundationChainProfile } from "@/lib/module-foundation/chains";
 import { verifyFoundationOwnerRuntimeV1 } from "@/lib/module-foundation/owner-runtime";
+import { verifyFoundationOwnerPublicationV1 } from "@/lib/module-foundation/owner-verification";
 import type { FoundationOwnerPublicationV1 } from "@/lib/module-foundation/owner-publication";
 import { run as stageTarget, publishCatalogBatch } from "./main";
+
+/** The signed owner catalog admits child modules; the protocol release binds the host. */
+export async function verifySharedActivation(publications: FoundationOwnerPublicationV1[],
+  allowedPublishers: readonly string[] = publishers.wallets, readLive: typeof fetch = fetch) {
+  if (publications.length !== 2 || publications.map(p => p.release.chainId).sort((a, b) => a - b).join() !== "1,4663"
+    || publications.some(p => p.manifest.packageId !== publications[0].manifest.packageId
+      || p.manifest.requestDigest !== publications[0].manifest.requestDigest)) throw Error("Both networks must publish the identical source package.");
+  await Promise.all(publications.map(async publication => {
+    await verifyFoundationOwnerPublicationV1(publication, allowedPublishers);
+    const response = await readLive(`https://programmable.market/api/module-foundation?chainId=${publication.release.chainId}`,
+      { cache: "no-store", signal: AbortSignal.timeout(60_000), redirect: "error" });
+    if (!response.ok) throw Error("The target host is not live.");
+    const current = await response.json();
+    if (!current.available || current.chainId !== publication.release.chainId
+      || current.binding?.releaseDigest !== publication.protocolReleaseDigest) throw Error("The live target host differs from the staged module binding.");
+  }));
+}
 
 /** One job, resumable per-chain journals, one atomic catalog compare-and-swap. */
 export async function run(args: string[], repositoryRoot: string) {
@@ -29,26 +47,17 @@ export async function run(args: string[], repositoryRoot: string) {
     try { await writeFile(targetJob, encoded, { flag: "wx", mode: 0o600 }); }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "EEXIST" || await readFile(targetJob, "utf8") !== encoded) throw Error("The resumed publication target changed."); }
     await stageTarget(["--job", targetJob, "--wallet-file", flags.get("--wallet-file")!, "--storage-file", flags.get("--storage-file")!, "--output", targetDirectory], repositoryRoot);
-    const publication = JSON.parse(await readFile(path.join(targetDirectory, "publication.json"), "utf8")) as FoundationOwnerPublicationV1;
+    const publication = await verifyFoundationOwnerPublicationV1(JSON.parse(await readFile(path.join(targetDirectory, "publication.json"), "utf8")), publishers.wallets);
+    if (publication.release.chainId !== target.chainId) throw Error("The staged module network differs.");
     const rpc = target.rpcEnvironment ? process.env[target.rpcEnvironment] : foundationChainProfile(target.chainId).publicRpcUrls[0];
     if (!rpc) throw Error("The target RPC is missing.");
     await verifyFoundationOwnerRuntimeV1(publication, createPublicClient({ chain: foundationChainProfile(target.chainId).chain, transport: http(rpc, { retryCount: 0, timeout: 30_000 }) }));
     publications.push(publication);
   }
   if (job.activate !== true) return;
-  const ethereum = publications.find(publication => publication.release.chainId === 1)!;
-  if (ethereum.protocolReleaseDigest !== ethereumRelease.releaseDigest || !ethereumRelease.payload.modules.some(module =>
-    module.factory.toLowerCase() === ethereum.release.factory.toLowerCase()
-    && module.factoryCodeHash === ethereum.release.factoryCodeHash && module.moduleCodeHash === ethereum.release.moduleCodeHash
-    && module.descriptorHash === ethereum.release.descriptorHash)) throw Error("The Ethereum host release must admit this module before joint publication.");
-  // Staging can precede a host rollout. Activation must use the live host on both networks.
-  await Promise.all(publications.map(async publication => {
-    const response = await fetch(`https://programmable.market/api/module-foundation?chainId=${publication.release.chainId}`,
-      { cache: "no-store", signal: AbortSignal.timeout(60_000), redirect: "error" });
-    if (!response.ok) throw Error("The target host is not live.");
-    const current = await response.json();
-    if (!current.available || current.binding?.releaseDigest !== publication.protocolReleaseDigest) throw Error("The live target host differs from the staged module binding.");
-  }));
+  // The initial Ethereum release's seeded modules are not a permanent child-module allowlist.
+  // Owner signatures and verified per-chain deployments admit new modules to the same live host.
+  await verifySharedActivation(publications);
   const storage = JSON.parse(await readFile(flags.get("--storage-file")!, "utf8"));
   await publishCatalogBatch(publications, storage.token, (name, value) => writeFile(path.join(output, name), JSON.stringify(value, null, 2), { flag: "wx", mode: 0o600 }));
 }
