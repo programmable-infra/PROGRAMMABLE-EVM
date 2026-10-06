@@ -663,7 +663,8 @@ async function networkResults(page: Page) {
 }
 
 async function expectNetworkResults(page: Page, results: (boolean | string)[]) {
-  await expect.poll(() => networkResults(page)).toEqual(results);
+  // A non-responsive network readback settles after five seconds.
+  await expect.poll(() => networkResults(page), { timeout: 10_000 }).toEqual(results);
 }
 
 async function beginDelayedNetworkSwitch(page: Page) {
