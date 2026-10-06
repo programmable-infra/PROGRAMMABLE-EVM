@@ -12,7 +12,8 @@ import {buildFoundationEthereumGraph, assertFoundationEthereumTransaction,predic
 import {ETHEREUM_MODULE_SOURCE} from '../../lib/module-foundation/ethereum-release.ts';
 import {parseEthereumModuleAuthorization} from '../../lib/module-foundation/ethereum-authorization.ts';
 import {encodeFoundationFundingPath} from '../../lib/module-foundation/funding-path.ts';
-import {FAMILIES, ACCOUNT, BUY, FUNDING, MAXIMUM_GAS_DEBIT, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, assertEnvelope, digestRequest, simulationCheckpoint, isTransientBlockError, nthPotRecovery, boundedGasFees, launchGasBudget, publicError, check, fail} from './metamask-core.mjs';
+import {FAMILIES, ACCOUNT, BUY, FUNDING, MAXIMUM_GAS_DEBIT, tokenAbi, permitAbi, hostAbi, moduleAbi, configFor, caseSteps, swapData, digestRequest, simulationCheckpoint, isTransientBlockError, nthPotRecovery, boundedGasFees, launchGasBudget, publicError, check, fail} from './metamask-core.mjs';
+import {assertWalletEnvelope,verifyWalletReceipt} from './metamask-receipt.mjs';
 const origin='https://programmable.market';
 const cleanJson=value=>JSON.stringify(value,(_,v)=>typeof v==='bigint'?v.toString():v,2);
 const readJson=async file=>JSON.parse(await readFile(file,'utf8'));
@@ -162,7 +163,7 @@ export async function run([configFile],root){
    const nonce=await p.getTransactionCount({address:ACCOUNT,blockTag:'latest'}),pending=await p.getTransactionCount({address:ACCOUNT,blockTag:'pending'});
    if(nonce>Number(BigInt(pre.request.nonce))){
     const head=await p.getBlockNumber();check(head-BigInt(pre.preparedBlock)<128n,'Die Transaktion muss anhand ihres Hashes wiederhergestellt werden.');
-    for(let b=BigInt(pre.preparedBlock);b<=head;b++){const block=await p.getBlock({blockNumber:b,includeTransactions:true});const found=block.transactions.find(t=>t.from.toLowerCase()===ACCOUNT.toLowerCase()&&t.nonce===Number(BigInt(pre.request.nonce)));if(found){assertEnvelope(found,pre.request);pre.hash=found.hash;await save();break;}}
+    for(let b=BigInt(pre.preparedBlock);b<=head;b++){const block=await p.getBlock({blockNumber:b,includeTransactions:true});const found=block.transactions.find(t=>t.from.toLowerCase()===ACCOUNT.toLowerCase()&&t.nonce===Number(BigInt(pre.request.nonce)));if(found){assertWalletEnvelope(found,pre.request);pre.hash=found.hash;await save();break;}}
     check(pre.hash,'Die gesendete Transaktion konnte noch nicht wiedergefunden werden.');
    }else if(pending>Number(BigInt(pre.request.nonce)))return display({status:'waiting',message:'MetaMask-Transaktion ist noch im Netzwerk. Bitte nicht erneut senden.',waitSeconds:5});
    else if(pre.expires<Math.floor(Date.now()/1000)+20){state.prepared=null;await save();return;}
@@ -170,7 +171,9 @@ export async function run([configFile],root){
   }
   const results=await Promise.all(c.clients.map(async client=>{try{return {tx:await client.getTransaction({hash:pre.hash}),receipt:await client.getTransactionReceipt({hash:pre.hash})};}catch(e){if(/NotFound/.test(e.name))return null;throw e;}}));
   if(results.some(x=>!x))return display({status:'pending',message:'Warte auf Bestätigung im Netzwerk',waitSeconds:c.chainId===1?8:3});
-  for(const result of results){assertEnvelope(result.tx,pre.request);check(result.receipt.status==='success','Transaktion ist fehlgeschlagen. Sie wird nicht automatisch erneut gesendet.');}
+  for(const result of results)check(result.receipt.status==='success','Transaktion ist fehlgeschlagen. Sie wird nicht automatisch erneut gesendet.');
+  const walletEnvelopes=await Promise.all(results.map((result,i)=>verifyWalletReceipt(c.clients[i],result.tx,pre.request,result.receipt)));
+  check(walletEnvelopes.every(kind=>kind===walletEnvelopes[0]),'RPCs bestätigen verschiedene Wallet-Aufrufe.');
   check(results[0].receipt.blockHash===results[1].receipt.blockHash,'RPCs bestätigen verschiedene Blöcke.');
   const receipt=results[0].receipt,item=cstate(c).cases.find(i=>i.family===pre.family);
   if(pre.role==='step'||pre.role==='pot-qualifying-buy'){
@@ -200,7 +203,7 @@ export async function run([configFile],root){
    if(pre.role==='pot-qualifying-buy')item.potRecoveryBuys=(item.potRecoveryBuys??0)+1;
    else item.position++;
   }
-  const entry={requestId:pre.id,chainId:c.chainId,family:item.family,salt:item.salt,stage:pre.stage,role:pre.role,hash:pre.hash,blockNumber:String(receipt.blockNumber),blockHash:receipt.blockHash,gasUsed:String(receipt.gasUsed),gasApprovalId:pre.gasApprovalId??null,gasBudgetWei:pre.gasBudgetWei??String(MAXIMUM_GAS_DEBIT)};
+  const entry={requestId:pre.id,walletEnvelope:walletEnvelopes[0],chainId:c.chainId,family:item.family,salt:item.salt,stage:pre.stage,role:pre.role,hash:pre.hash,blockNumber:String(receipt.blockNumber),blockHash:receipt.blockHash,gasUsed:String(receipt.gasUsed),gasApprovalId:pre.gasApprovalId??null,gasBudgetWei:pre.gasBudgetWei??String(MAXIMUM_GAS_DEBIT)};
   if(pre.gasApprovalId){state.gasApprovalsUsed??={};state.gasApprovalsUsed[pre.gasApprovalId]={hash:pre.hash,chainId:c.chainId,salt:item.salt};}
   item.transactions.push(entry);state.history.push(entry);state.prepared=null;await save();
  }
