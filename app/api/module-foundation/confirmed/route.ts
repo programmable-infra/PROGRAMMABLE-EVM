@@ -1,6 +1,6 @@
 import { getAddress } from "viem";
 import { confirmFoundationLaunch, type ConfirmedLaunchRequest } from "@/lib/server/module-foundation/confirmed-launch";
-import { saveRecentFoundationLaunch } from "@/lib/server/module-foundation/recent-launch-store";
+import { findRecentFoundationLaunch, saveRecentFoundationLaunch } from "@/lib/server/module-foundation/recent-launch-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +9,14 @@ const requests = new Map<string, { expires: number; value: Promise<void> }>();
 let windowStarted = 0, count = 0, active = 0;
 const response = (status: number) => Response.json({ status: status === 200 ? "confirmed" : "pending" },
   { status, headers: { "cache-control": "no-store" } });
+
+async function record(input: ConfirmedLaunchRequest) {
+  // Survives server restarts and page reloads. The stored receipt's block is
+  // rechecked, but a repeated hint need not repeat every pool/metadata read.
+  const existing = await findRecentFoundationLaunch(input.chainId, input.token).catch(() => null);
+  if (existing?.row.transactionHash.toLowerCase() === input.transactionHash) return;
+  await saveRecentFoundationLaunch(await confirmFoundationLaunch(input));
+}
 
 export async function POST(request: Request) {
   if (request.headers.get("origin") && request.headers.get("origin") !== new URL(request.url).origin) return response(403);
@@ -37,7 +45,7 @@ export async function POST(request: Request) {
     if (Date.now() - windowStarted >= 60_000) { windowStarted = Date.now(); count = 0; }
     if (active >= 4 || count >= 20) return response(429);
     count++; active++;
-    const value = confirmFoundationLaunch(input).then(saveRecentFoundationLaunch).finally(() => { active--; });
+    const value = record(input).finally(() => { active--; });
     saved = { expires: Date.now() + 60 * 60_000, value };
     if (requests.size >= 128) requests.delete(requests.keys().next().value!);
     requests.set(key, saved);
