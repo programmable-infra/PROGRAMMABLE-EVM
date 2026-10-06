@@ -6,7 +6,7 @@ import path from "node:path";
 import { createPublicClient } from "viem";
 import { foundationChainProfile } from "@/lib/module-foundation/chains";
 import { nativeCanonicalJson } from "@/lib/module-mode/native-catalog";
-import { discoverEconomicTargets, type DiscoveryPosition, type EconomicTarget } from "./discovery";
+import { discoverEconomicTargets, ECONOMIC_DISCOVERY_MAX_BLOCKS, type DiscoveryPosition, type EconomicTarget } from "./discovery";
 import { validateExecutionConfig } from "./run.mjs";
 import { economicHttp } from "./rpc.mjs";
 
@@ -67,8 +67,9 @@ export async function run(args: string[], root: string, options: { signal?: Abor
     while (!caughtUp() && pages < 32 && Date.now() < deadline) {
       options.signal?.throwIfAborted();
       const position = BigInt(state.position.block);
+      const end = position + ECONOMIC_DISCOVERY_MAX_BLOCKS - 1n;
       const page = await discoverEconomicTargets({ clients, binding, admissions: config.discovery.admissions, position: state.position,
-        toBlock: position + 999n < head ? position + 999n : head, maxLaunches: 1 });
+        toBlock: end < head ? end : head, maxLaunches: 1 });
       if (BigInt(page.position.block) < position || (BigInt(page.position.block) === position && page.position.logIndex <= state.position.logIndex)) {
         throw Error("Discovery did not advance its checkpoint.");
       }

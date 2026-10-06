@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }));
 vi.mock("node:child_process", () => ({ execFile: Object.assign(() => {}, { [Symbol.for("nodejs.util.promisify.custom")]: mocks.execute }) }));
 vi.mock("viem", async importOriginal => ({ ...await importOriginal<typeof import("viem")>(), createPublicClient: () => mocks.client }));
-vi.mock("../ops/economic-modules/discovery", () => ({ discoverEconomicTargets: mocks.discover }));
+vi.mock("../ops/economic-modules/discovery", () => ({ discoverEconomicTargets: mocks.discover, ECONOMIC_DISCOVERY_MAX_BLOCKS: 5000n }));
 import { run } from "../ops/economic-modules/service.js";
 
 let directory: string, configFile: string;
@@ -19,7 +19,7 @@ beforeEach(async () => {
   vi.stubEnv("SERVICE_TEST_RPC", "https://primary.example");
   vi.stubEnv("SERVICE_TEST_SECONDARY_RPC", "https://secondary.example");
   mocks.execute.mockResolvedValue({ stdout: JSON.stringify({ broadcast: false, checked: 0 }) });
-  mocks.client.getBlockNumber.mockResolvedValue(100_000n);
+  mocks.client.getBlockNumber.mockResolvedValue(1_000_000n);
   mocks.discover.mockImplementation(async ({ toBlock }) => ({
     targets: [], processed: 0, position: { block: String(toBlock), logIndex: Number.MAX_SAFE_INTEGER },
   }));
@@ -40,11 +40,11 @@ describe("economic service preview discovery", () => {
     for (const [name, value] of Object.entries(live)) await writeFile(path.join(directory, name), value);
     const first = await run([configFile, directory], "/unused-root");
     const second = await run([configFile, directory], "/unused-root");
-    expect(first.discoveryBlock).toBe("32068");
-    expect(first).toMatchObject({ caughtUp: false, pages: 32, confirmedHead: "99936", lagBlocks: "67868" });
-    expect(second.discoveryBlock).toBe("64036");
-    expect(mocks.discover.mock.calls[32][0].position).toEqual({ block: "32068", logIndex: Number.MAX_SAFE_INTEGER });
-    expect(JSON.parse(await readFile(path.join(directory, "preview-health.json"), "utf8")).discoveryBlock).toBe("64036");
+    expect(first.discoveryBlock).toBe("160068");
+    expect(first).toMatchObject({ caughtUp: false, pages: 32, confirmedHead: "999936", lagBlocks: "839868" });
+    expect(second.discoveryBlock).toBe("320036");
+    expect(mocks.discover.mock.calls[32][0].position).toEqual({ block: "160068", logIndex: Number.MAX_SAFE_INTEGER });
+    expect(JSON.parse(await readFile(path.join(directory, "preview-health.json"), "utf8")).discoveryBlock).toBe("320036");
     for (const [name, value] of Object.entries(live)) expect(await readFile(path.join(directory, name), "utf8")).toBe(value);
     for (const [, args] of mocks.execute.mock.calls) {
       expect(args).not.toContain("--broadcast");
@@ -57,9 +57,9 @@ describe("economic service preview discovery", () => {
   it("retains the preview checkpoint on execution failure and releases its lock", async () => {
     mocks.execute.mockImplementationOnce(() => { throw new Error("provider unavailable"); });
     await expect(run([configFile, directory], "/unused-root")).rejects.toThrow("provider unavailable");
-    expect(JSON.parse(await readFile(path.join(directory, "preview-registry.json"), "utf8")).position.block).toBe("32068");
+    expect(JSON.parse(await readFile(path.join(directory, "preview-registry.json"), "utf8")).position.block).toBe("160068");
     const recovered = await run([configFile, directory], "/unused-root");
-    expect(recovered.discoveryBlock).toBe("64036");
+    expect(recovered.discoveryBlock).toBe("320036");
     await expect(readFile(path.join(directory, "execution-journal.json"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

@@ -2,7 +2,7 @@ import { decodeEventLog, getAbiItem, getAddress, keccak256, parseAbi, stringToHe
 import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import { foundationFactoryV2Abi, foundationFactoryV3Abi } from "@/lib/module-foundation/abi";
 import { foundationActionRuntimeAbiV1 } from "@/lib/module-foundation/action-runtime";
-import { discoverFoundationLaunch } from "@/lib/module-foundation/discovery";
+import { discoverFoundationLaunch, FOUNDATION_DISCOVERY_MAX_BLOCKS } from "@/lib/module-foundation/discovery";
 import { hashFoundationModuleDescriptorV1 } from "@/lib/module-foundation/manifest";
 import { foundationBindingChainId } from "@/lib/module-foundation/chains";
 import type { FoundationDeploymentBinding } from "@/lib/module-foundation/protocol";
@@ -17,6 +17,7 @@ const launchedV2 = getAbiItem({ abi: foundationFactoryV2Abi, name: "FoundationLa
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const json = (value: unknown) => JSON.stringify(value, (_, item) => typeof item === "bigint" ? item.toString() : item);
 export const ECONOMIC_AUTOMATIC_FAMILIES = ["buyback-burn", "dip-buyback", "lp-rewards", "full-range-lp", "buyer-rewards", "nth-buy-pot", "king-of-the-hill"] as const;
+export const ECONOMIC_DISCOVERY_MAX_BLOCKS = FOUNDATION_DISCOVERY_MAX_BLOCKS;
 export interface AutomaticModuleAdmission {
   family: typeof ECONOMIC_AUTOMATIC_FAMILIES[number]; factory: Address; factoryCodeHash: Hex; moduleCodeHash: Hex; descriptorHash: Hex;
 }
@@ -80,7 +81,7 @@ export async function discoverEconomicTargets(input: {
   const { clients, binding, admissions, position, toBlock } = input;
   const maxLaunches = input.maxLaunches ?? 8;
   const chainId = foundationBindingChainId(binding), fromBlock = BigInt(position.block);
-  if (!["v2", "v3"].includes(binding.factoryVersion ?? "") || fromBlock < binding.startBlock || toBlock < fromBlock || toBlock - fromBlock >= 1000n
+  if (!["v2", "v3"].includes(binding.factoryVersion ?? "") || fromBlock < binding.startBlock || toBlock < fromBlock || toBlock - fromBlock >= ECONOMIC_DISCOVERY_MAX_BLOCKS
     || !Number.isSafeInteger(position.logIndex) || position.logIndex < -1 || admissions.length > 128
     || !Number.isInteger(maxLaunches) || maxLaunches < 1 || maxLaunches > 8
     || admissions.some(item => !ECONOMIC_AUTOMATIC_FAMILIES.includes(item.family))) throw Error("Invalid discovery window or admission.");

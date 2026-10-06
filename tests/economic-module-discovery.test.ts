@@ -7,7 +7,7 @@ import { ETHEREUM_MODULE_BINDING } from "@/lib/module-foundation/ethereum-releas
 import ethereum from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import type { FoundationDeploymentBinding } from "@/lib/module-foundation/protocol";
 import { FOUNDATION_LP_CUSTODY_DEAD_ID } from "@/lib/module-foundation/constants";
-vi.mock("@/lib/module-foundation/discovery", () => ({ discoverFoundationLaunch: vi.fn() }));
+vi.mock("@/lib/module-foundation/discovery", () => ({ discoverFoundationLaunch: vi.fn(), FOUNDATION_DISCOVERY_MAX_BLOCKS: 5000n }));
 vi.mock("@/contracts/spec/module-foundation/chain-1.v1.json", async importOriginal => {
   const original = await importOriginal<{ default: typeof ethereum }>();
   const { keccak256 } = await import("viem");
@@ -87,6 +87,16 @@ describe("automatic economic module registration", () => {
     const second = await discoverEconomicTargets({ ...f.input, maxLaunches: 1, position: first.position });
     expect(second.processed).toBe(1);
     expect(second.position.block).toBe("200");
+  });
+  it("covers sparse history in bounded 5,000-block windows with the same provider agreement", async () => {
+    const f = setup();
+    f.client.getLogs.mockResolvedValue([]);
+    const input = { ...f.input, toBlock: f.start + 4999n };
+    expect((await discoverEconomicTargets(input)).position.block).toBe("5099");
+    expect(f.client.getLogs).toHaveBeenCalledTimes(2);
+    await expect(discoverEconomicTargets({ ...input, toBlock: f.start + 5000n })).rejects.toThrow("Invalid discovery window");
+    const disputed = { ...f.client, getLogs: async () => [f.event] } as unknown as PublicClient;
+    await expect(discoverEconomicTargets({ ...input, clients: [f.input.clients[0], disputed] })).rejects.toThrow("disagree");
   });
   it("requires a canonical Ethereum component stamp before using the per-launch engine", async () => {
     const f = setup(1);
