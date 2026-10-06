@@ -76,13 +76,15 @@ const cachedMarkets = unstable_cache(async (identities: readonly Identity[], cha
     const fdvUsd = total !== null && total > 0 ? total : null;
     const change = marketNumber(row.change24, true);
     const pool = liquidity.get(identities.find(token => token.tokenAddress === address)!.poolId);
+    const quoteAddress = pool?.tokens.includes(address) ? pool.tokens.find(token => token !== address) : undefined;
     entries.push([address, { source: "codex", priceUsd, marketCapUsd, fdvUsd,
+      ...(quoteAddress ? { quoteAsset: { address: quoteAddress, symbol: null } } : {}),
       valuationKind: marketCapUsd !== null ? "market-cap" : "fdv", liquidityUsd: pool?.tokens.includes(address) ? pool.usd : null,
       volume24hUsd: marketNumber(row.volume24), change24hPercent: change === null ? null : change * 100,
       observedAt, sourceUrl: "https://www.codex.io/" }]);
   }
   return entries;
-}, ["codex-token-markets-v3"], { revalidate: 30 });
+}, ["codex-token-markets-v4"], { revalidate: 30 });
 
 /** Only enrich identities supplied by the verified launch catalog. No provider token becomes a launch. */
 export async function readCodexMarkets(tokens: readonly Identity[], chainId = 4663): Promise<Map<string, RobinhoodCoinMarket>> {

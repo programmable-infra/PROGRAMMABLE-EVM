@@ -44,6 +44,7 @@ describe("Codex server market adapter", () => {
     vi.stubGlobal("fetch", fetcher);
     const markets = await readCodexMarkets([{ tokenAddress: address, poolId }]);
     expect(markets.get(address)).toMatchObject({ poolId, source: "codex", marketCapUsd: 500000, fdvUsd: 1000000, liquidityUsd: 172345, volume24hUsd: 0, change24hPercent: -5 });
+    expect(markets.get(address)?.quoteAsset).toEqual({ address: pool().token0, symbol: null });
     const request = fetcher.mock.calls[0][1];
     expect(JSON.parse(request.body).variables.tokens).toEqual([`${address}:4663`]);
     expect(JSON.parse(request.body).variables.pairs).toEqual([`${poolId}:4663`]);
