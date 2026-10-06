@@ -28,3 +28,19 @@ node ops/economic-modules/verify-release-forks.mjs RELEASE_DIRECTORY NEW_RESULT_
 The release directory supplies the owner publications and `host-binding-1.json` / `host-binding-4663.json`. The runner pins a finalized block agreed by both providers and verifies factory runtime hashes before running the economic, zero-funding and Ethereum stamp suites. Robinhood uses the actual V2 launch factory from the binding. Local balances, trades and time advances remain inside Forge; the runner never broadcasts transactions or needs a signing key. A missing or skipped suite is not a successful result.
 
 Use `--candidate` as the last argument when verifying a local fee-strategy correction before replacement deployment. That mode builds the four fee factories locally and records their new runtime hashes; the other economic factories still come from the published release. Candidate success does not change the old deployed bytecode. The generated report explicitly distinguishes candidate code from published code and records that Ethereum authorization is stubbed on the fork.
+
+## Checking the real Ethereum authorization on a local fork
+
+With Node 24, Anvil, the installed dependencies and two independent Ethereum RPCs, run:
+
+```sh
+node ops/economic-modules/verify-authorized-fork.mjs RELEASE_DIRECTORY NEW_RESULT_DIRECTORY SESSION_JSON REFERENCE_TOKEN
+```
+
+The RPC variables are `FOUNDATION_ETHEREUM_RPC_URL` and `FOUNDATION_ETHEREUM_SECONDARY_RPC_URL`. `SESSION_JSON` is a private, current website session containing `walletAddress`, `token` and optionally `identityToken`. It is not a signing key. Renew an expired website session before running; the probe stops on authentication errors instead of repeating requests. `REFERENCE_TOKEN` is an existing stamped Ethereum module token with a WETH pair, used to configure the linked-pool modules. An optional final argument selects comma-separated family names.
+
+This probe asks the production website for a real zero-funding launch authorization once per case. It verifies the returned bytes against the installed graph builder, matches the authorization block and deployed runtime hashes on both RPC providers, then executes the exact request on its own local Anvil process. It does not stub the permit signature or replace the published engine. It checks the canonical stamp, attached module, zero initial funding and rejection of a repeated permit. The independent modules also exercise buys and sells; buyback, liquidity donation and full-range LP exercise a fee action. Linked-pool admission is checked here, while their reference-price behavior and the other detailed module conditions remain covered by the separate contract suite.
+
+All transactions and balance/time changes stay inside the disposable fork. A read-only RPC bridge prevents Anvil from forwarding transactions to mainnet, counts upstream reads and stops at its request budget. The probe does not read a private signing key, publish a token, update Explore, activate a module or enable a worker. Output records timings and the exact verified cases without session tokens or reusable permit payloads. Keep the result directory private. These results supplement the contract suite; they do not establish real mainnet mining or financial execution.
+
+The local fork is checked before requesting authorization. An HTTP 429 records `Retry-After` and the remaining families, then stops without retries. After that time, use a new result directory and select only those remaining families. Do not rotate wallets or API credentials to obtain more capacity.

@@ -237,7 +237,7 @@
     "modules:cli:check": "node scripts/build-module-cli.mjs",
     "modules:cli:test": "node --test scripts/test/module-cli-distribution.test.mjs",
     "modules:starter:test": "bash contracts/test/module-mode/starter/run-tests.sh -vv && node --test packages/classic-modules/examples/native-program/tools/package.test.mjs && node packages/classic-modules/examples/native-program/tools/check-sdk.mjs && forge test --root packages/classic-modules/examples/engine-program --offline -vv && node packages/classic-modules/examples/engine-program/tools/check-build.mjs && node --test packages/classic-modules/examples/engine-program/tools/package.test.mjs && node packages/classic-modules/examples/engine-program/tools/prepare.mjs --fixture && node packages/classic-modules/examples/engine-program/tools/check-sdk.mjs",
-    "contracts:foundation:verify": "node --test contracts/scripts/module-foundation/verify.test.mjs ops/economic-modules/engine.test.mjs && bash contracts/scripts/module-foundation/verify.sh"
+    "contracts:foundation:verify": "node --test contracts/scripts/module-foundation/verify.test.mjs ops/economic-modules/engine.test.mjs ops/economic-modules/fork-rpc.test.mjs && bash contracts/scripts/module-foundation/verify.sh"
   },
   "dependencies": {
     "@electric-sql/pglite": "0.5.4",
@@ -265,7 +265,7 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "server-only": "0.0.1",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "viem": "2.55.5"
   },
   "devDependencies": {
@@ -309,7 +309,7 @@
     "hono": "4.13.7",
     "postcss": "8.5.23",
     "serialize-javascript": "7.0.7",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "tmp": "0.2.7",
     "undici": "8.10.2",
     "uuid": "11.1.1",
