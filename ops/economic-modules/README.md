@@ -2,7 +2,9 @@
 
 The contracts enforce fee ownership, payout backing and execution conditions. Automatic execution additionally requires a funded, monitored service. A deployment or catalog entry alone does not provide that service.
 
-`service.mjs CONFIG STATE_DIRECTORY` performs a read-only preview. Add `--broadcast` only for the released, funded service. Use a separate state directory and signing account for each chain. The included systemd service and timer run one pass per minute, waiting for the previous pass to finish. They are templates and are not installed or enabled by the source package.
+`service.mjs CONFIG STATE_DIRECTORY` performs a preview without signing or broadcasting. Its discovery cursor, execution cursor and health are stored in separate `preview-*` files, so later passes cover later launches and targets without modifying live journals. The underlying `run.mjs` command remains read-only without a flag; `--preview-state` explicitly saves only a preview journal and rejects live or pending transaction journals. Add `--broadcast` only for the released, funded service. Use a separate state directory and signing account for each chain. The included systemd service and timer run one pass per minute, waiting for the previous pass to finish. They are templates and are not installed or enabled by the source package.
+
+The container entrypoint is built from `worker.ts`. Both preview and execution keep running one non-overlapping pass per minute. Its `/health` endpoint reports the last completed pass and returns an error after a failed pass or when the result is more than five minutes old. A successful preview does not enable financial execution. Before replacing an existing worker configuration, reconcile its admissions against the exact verified publications and preserve any live registry or transaction journal.
 
 The configuration has two fields:
 
@@ -25,7 +27,7 @@ Set `FOUNDATION_ETHEREUM_RPC_URL`, `FOUNDATION_ETHEREUM_SECONDARY_RPC_URL`, `FOU
 node ops/economic-modules/verify-release-forks.mjs RELEASE_DIRECTORY NEW_RESULT_DIRECTORY
 ```
 
-The release directory supplies the owner publications and `host-binding-1.json` / `host-binding-4663.json`. The runner pins a finalized block agreed by both providers and verifies factory runtime hashes before running the economic, zero-funding and Ethereum stamp suites. Robinhood uses the actual V2 launch factory from the binding. Local balances, trades and time advances remain inside Forge; the runner never broadcasts transactions or needs a signing key. A missing or skipped suite is not a successful result.
+The release directory supplies the owner publications and `host-binding-1.json` / `host-binding-4663.json`. The runner pins a finalized block agreed by both providers and verifies factory runtime hashes before running the economic, zero-funding and Ethereum stamp suites. The normal-valuation cases use the published timing, percentage and counter defaults with explicit amount settings, in both token sort orders. A deterministic $3,000 quote fixture produces approximately $5,000 starting valuation; it does not claim a current market price. Those cases exercise distinct actors, negative conditions and exact reward recipients. Robinhood uses the actual V2 launch factory from the binding. Local balances, trades and time advances remain inside Forge; the runner never broadcasts transactions or needs a signing key. A missing or skipped suite is not a successful result.
 
 Use `--candidate` as the last argument when verifying a local fee-strategy correction before replacement deployment. That mode builds the four fee factories locally and records their new runtime hashes; the other economic factories still come from the published release. Candidate success does not change the old deployed bytecode. The generated report explicitly distinguishes candidate code from published code and records that Ethereum authorization is stubbed on the fork.
 
