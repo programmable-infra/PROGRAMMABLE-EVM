@@ -81,10 +81,10 @@ for (const n of networks) {
     if (candidate && kind < 4) {
       const names = ["BuybackBurnFactoryV1", "DipBuybackFactoryV1", "LPRewardsFactoryV1", "FullRangeLPFactoryV1"];
       const artifact = JSON.parse(await fs.readFile(path.join(repo, "contracts/out/module-foundation/EconomicModuleFactoriesV1.sol", names[kind] + ".json"), "utf8"));
-      const module = JSON.parse(await fs.readFile(path.join(repo, "contracts/out/module-foundation/FeeStrategyV1.sol/FeeStrategyV1.json"), "utf8"));
+      const moduleArtifact = JSON.parse(await fs.readFile(path.join(repo, "contracts/out/module-foundation/FeeStrategyV1.sol/FeeStrategyV1.json"), "utf8"));
       Object.assign(chain[`m${kind}`], { localCandidate: true, publishedFactoryCodeHash: r.factoryCodeHash,
         publishedModuleCodeHash: r.moduleCodeHash, factoryCodeHash: keccak256(artifact.deployedBytecode.object),
-        moduleCodeHash: keccak256(module.deployedBytecode.object) });
+        moduleCodeHash: keccak256(moduleArtifact.deployedBytecode.object) });
     }
   }
   manifest.chains[`c${n.id}`] = chain;
