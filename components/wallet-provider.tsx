@@ -68,7 +68,7 @@ import {
 import { parseLocalProfile } from "@/lib/profile/local-profile";
 import { robinhoodChain } from "@/lib/chains";
 import { normalizeWalletChainId, walletChainIdsEqual } from "@/lib/wallet-chain-id";
-import { getWalletProviderOnChain } from "@/lib/wallet-network";
+import { getWalletProviderOnChain, readWalletProviderValue } from "@/lib/wallet-network";
 import {
   assertMainTokenMigrationTransaction,
   type MainTokenMigrationPermitSignature,
@@ -1609,6 +1609,9 @@ function PrivyWalletBridge({
   }, [connectedWallet, connectedWalletAddress, connectedWalletChainId, injectedNetwork, user?.id, verifiedWalletNetwork]);
   const walletLinked = Boolean(connectedWallet && ownedWalletAddresses.has(connectedWallet.address.toLowerCase()));
   const walletSessionGenerationRef = useRef(0);
+  // SDK method wrappers can change without changing the authenticated account.
+  // Network verification pins the underlying provider separately from these wrappers.
+  const walletIdentityGenerationRef = useRef(0);
   const walletRequestSessionRef = useRef({
     authenticated: activeAuthenticated && ready && walletsReady && !disconnecting,
     privyUserId: user?.id ?? null,
@@ -1625,9 +1628,11 @@ function PrivyWalletBridge({
       chainId: wallet?.chainId ?? null,
       walletCapability: connectedWallet ?? null,
     };
-    if (previous.authenticated !== current.authenticated
+    const identityChanged = previous.authenticated !== current.authenticated
       || previous.privyUserId !== current.privyUserId
-      || previous.account?.toLowerCase() !== current.account?.toLowerCase()
+      || previous.account?.toLowerCase() !== current.account?.toLowerCase();
+    if (identityChanged) walletIdentityGenerationRef.current += 1;
+    if (identityChanged
       || previous.walletCapability?.getEthereumProvider !== current.walletCapability?.getEthereumProvider
       || previous.walletCapability?.switchChain !== current.walletCapability?.switchChain) {
       walletSessionGenerationRef.current += 1;
@@ -1636,6 +1641,7 @@ function PrivyWalletBridge({
   }, [activeAuthenticated, connectedWallet, disconnecting, ready, user?.id, wallet?.account, wallet?.chainId, walletsReady]);
   useLayoutEffect(() => () => {
     walletSessionGenerationRef.current += 1;
+    walletIdentityGenerationRef.current += 1;
     walletRequestSessionRef.current = {
       authenticated: false,
       privyUserId: null,
@@ -1674,6 +1680,7 @@ function PrivyWalletBridge({
       const current = walletRequestSessionRef.current;
       if (address?.toLowerCase() === current.account?.toLowerCase()) return;
       walletSessionGenerationRef.current += 1;
+      walletIdentityGenerationRef.current += 1;
       current.authenticated = false;
       setVerifiedWalletNetwork(null);
       // An empty provider account list must also clear an old SDK wallet.
@@ -2131,6 +2138,7 @@ function PrivyWalletBridge({
     showDialogOnFailure?: boolean;
   }) => {
     walletSessionGenerationRef.current += 1;
+    walletIdentityGenerationRef.current += 1;
     walletRequestSessionRef.current.authenticated = false;
     applicantRefreshUserGate.invalidate();
     settleWalletLoginAttempt();
@@ -2267,17 +2275,15 @@ function PrivyWalletBridge({
     if (!connectedWallet || !wallet || !ownerUserId) return false;
     const expectedAccount = wallet.account.toLowerCase();
     const expectedUser = ownerUserId;
-    const expectedGeneration = walletSessionGenerationRef.current;
+    const expectedGeneration = walletIdentityGenerationRef.current;
     const isCurrentSession = () => {
       const current = walletRequestSessionRef.current;
-      return walletSessionGenerationRef.current === expectedGeneration
+      return walletIdentityGenerationRef.current === expectedGeneration
         && current.authenticated
         && current.privyUserId === expectedUser
         && current.account?.toLowerCase() === expectedAccount
-        // Privy replaces the public wallet wrapper when its chain changes.
-        // Connection methods remain stable until the underlying wallet changes.
-        && current.walletCapability?.getEthereumProvider === connectedWallet.getEthereumProvider
-        && current.walletCapability?.switchChain === connectedWallet.switchChain;
+        && current.walletCapability?.walletClientType === connectedWallet.walletClientType
+        && current.walletCapability?.connectorType === connectedWallet.connectorType;
     };
     if (!isCurrentSession()) return false;
     const target = getWalletNetwork(expectedChainId);
@@ -2295,15 +2301,43 @@ function PrivyWalletBridge({
 
     const request = (async () => {
       try {
-        const provider = await getWalletProviderOnChain({
-          wallet: connectedWallet, chainId: target.chain.id, networkName: target.name,
-          assertCurrentSession: () => {
-            if (!isCurrentSession()) throw new Error("The wallet session changed. Reconnect and try again.");
+        const assertCurrentSession = () => {
+          if (!isCurrentSession()) throw new Error("The wallet session changed. Reconnect and try again.");
+        };
+        const embedded = connectedWallet.walletClientType === "privy" || connectedWallet.walletClientType === "privy-v2";
+        let pinnedProvider: Awaited<ReturnType<typeof connectedWallet.getEthereumProvider>> | undefined;
+        const currentWallet = {
+          chainId: connectedWallet.chainId,
+          getEthereumProvider: async () => {
+            assertCurrentSession();
+            const provider = await walletRequestSessionRef.current.walletCapability!.getEthereumProvider();
+            assertCurrentSession();
+            if (!embedded && pinnedProvider && provider !== pinnedProvider) {
+              throw new Error("The wallet connection changed. Try again.");
+            }
+            pinnedProvider = provider;
+            return provider;
           },
+          switchChain: (chainId: number) => {
+            assertCurrentSession();
+            return walletRequestSessionRef.current.walletCapability!.switchChain(chainId);
+          },
+        };
+        const provider = await getWalletProviderOnChain({
+          wallet: currentWallet, chainId: target.chain.id, networkName: target.name, assertCurrentSession,
         });
         if (!isCurrentSession()) return false;
-        if (connectedWallet.walletClientType !== "privy" && connectedWallet.walletClientType !== "privy-v2") {
-          const accounts = await provider.request({ method: "eth_accounts" });
+        // Reacquire after an SDK refresh and prove that the current connection
+        // still owns this account. Matching address strings alone are not enough.
+        const currentProvider = await readWalletProviderValue(() => currentWallet.getEthereumProvider());
+        const [chainId, accounts] = await Promise.all([
+          readWalletProviderValue(() => currentProvider.request({ method: "eth_chainId" })),
+          embedded ? undefined : readWalletProviderValue(() => currentProvider.request({ method: "eth_accounts" })),
+        ]);
+        assertCurrentSession();
+        if (!walletChainIdsEqual(chainId, target.chain.id)) throw new Error("The wallet network changed. Try again.");
+        if (!embedded) {
+          if (currentProvider !== provider) throw new Error("The wallet connection changed. Try again.");
           if (!isCurrentSession()) return false;
           if (!Array.isArray(accounts) || typeof accounts[0] !== "string"
             || accounts[0].toLowerCase() !== expectedAccount) {
@@ -2323,9 +2357,9 @@ function PrivyWalletBridge({
         }
         return true;
       } catch (cause) {
-        if (isCurrentSession()) {
-          const rejected = typeof cause === "object" && cause !== null
-            && "code" in cause && cause.code === 4001;
+        if (isCurrentSession()
+          && walletRequestSessionRef.current.walletCapability?.getEthereumProvider === connectedWallet.getEthereumProvider) {
+          const rejected = errorIsExplicitWalletRejection(cause);
           setError(rejected ? "Network change cancelled." : `Unable to switch to ${target.name}. Try again.`);
         }
         return false;

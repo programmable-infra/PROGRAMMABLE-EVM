@@ -23,7 +23,7 @@ describe("Module Mode wallet boundary", () => {
   });
 
   it("reports a refused network change and preserves thrown wallet errors", async () => {
-    await expect(switchModuleModeNetwork(async () => false)).rejects.toThrow("network change was not completed");
+    await expect(switchModuleModeNetwork(async () => false)).rejects.toThrow("wallet connection could not be confirmed");
     const rejected = new Error("Network change cancelled.");
     await expect(switchModuleModeNetwork(async () => { throw rejected; })).rejects.toBe(rejected);
     expect(moduleModeWalletStep({ ...connected, chainId: "0x1" })).toBe("switch");

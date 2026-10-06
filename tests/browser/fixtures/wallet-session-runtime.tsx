@@ -42,6 +42,7 @@ type FixtureState = {
   refreshedUser: FixtureUser | null;
   delayedUserRefresh: boolean;
   publishNetworkChanges: boolean;
+  rebuildNetworkMethods: boolean;
   delayedLogoutReadback: boolean;
   clipboardMode: "native" | "denied" | "delayed";
   waitingClipboardWrites: number;
@@ -123,7 +124,10 @@ function wallet(address: string, linked = true, connectedAt = 1, initialChain = 
       // object changes, while connection methods survive the object spread.
       if (state.publishNetworkChanges) {
         update({ wallets: state.wallets.map((candidate) => candidate.getEthereumProvider === getEthereumProvider
-          ? { ...candidate, chainId: networkChain } : candidate) });
+          ? { ...candidate, chainId: networkChain, ...(state.rebuildNetworkMethods ? {
+            getEthereumProvider: async () => provider,
+            switchChain: async (nextChain: number) => candidate.switchChain(nextChain),
+          } : {}) } : candidate) });
       }
       await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
     },
@@ -145,6 +149,7 @@ let state: FixtureState = {
   providerAccountOverride: null, providerChainOverride: null, providerLocked: false,
   refreshedUser: null, delayedUserRefresh: false,
   publishNetworkChanges: true,
+  rebuildNetworkMethods: false,
   delayedLogoutReadback: false,
   clipboardMode: "native", waitingClipboardWrites: 0,
 };
@@ -419,6 +424,7 @@ export function FixtureControls() {
     <button onClick={() => update({ user: alphaBoth, wallets: [wallet(accountA), wallet(accountB)], providerAccountOverride: accountB })}>Restore linked session with MetaMask B</button>
     <button onClick={() => update({ providerChainOverride: "0x1237" })}>Return the wrong provider network</button>
     <button onClick={() => update({ providerChainOverride: "0x1" })}>Simulate stale Robinhood cache</button>
+    <button onClick={() => update({ rebuildNetworkMethods: true })}>Rebuild SDK methods on network update</button>
     <button onClick={() => update({ providerChainOverride: "0x1237", publishNetworkChanges: false })}>Keep the SDK network label stale</button>
     <label>Provider chain format <select aria-label="Provider chain format" defaultValue="hex" onChange={(event) => {
       const formats: Record<string, string | number | null> = { hex: null, decimal: "1", number: 1, padded: "0x0001", caip: "eip155:1" };

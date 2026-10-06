@@ -663,7 +663,8 @@ async function networkResults(page: Page) {
 }
 
 async function expectNetworkResults(page: Page, results: (boolean | string)[]) {
-  await expect.poll(() => networkResults(page)).toEqual(results);
+  // A non-responsive network readback settles after five seconds.
+  await expect.poll(() => networkResults(page), { timeout: 10_000 }).toEqual(results);
 }
 
 async function beginDelayedNetworkSwitch(page: Page) {
@@ -686,6 +687,18 @@ test("a normal network update can replace the SDK wrapper while preserving its c
   expect(methods.filter((method) => method === "switchChain")).toHaveLength(1);
   expect(methods).toEqual(expect.arrayContaining(["eth_chainId", "eth_accounts"]));
   expect(methods).not.toContain("forbidden-wallet-operation");
+});
+
+test("network verification survives rebuilt SDK methods for the same provider and account", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Rebuild SDK methods on network update", exact: true }).click();
+  await page.getByRole("button", { name: "Request Ethereum wallet network", exact: true }).click();
+  await expectNetworkResults(page, [true]);
+  await expect(page.getByLabel("Selected wallet network", { exact: true })).toHaveText("0x1");
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  await expect(page.getByLabel("Network switch busy", { exact: true })).toHaveText("false");
+  expect((await calls(page)).filter(call => call.method === "switchChain")).toHaveLength(1);
+  expect((await calls(page)).some(call => call.method === "forbidden-wallet-operation")).toBe(false);
 });
 
 for (const format of ["decimal", "number", "padded", "caip"]) {

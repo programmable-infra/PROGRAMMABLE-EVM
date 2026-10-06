@@ -1,4 +1,5 @@
 import { normalizeWalletChainId, parseWalletChainId, walletChainIdsEqual } from "@/lib/wallet-chain-id";
+import { errorIsExplicitWalletRejection } from "@/lib/wallet-request-lock";
 
 export type WalletNetworkProvider = {
   request: (input:
@@ -7,7 +8,7 @@ export type WalletNetworkProvider = {
   ) => Promise<unknown>;
 };
 
-const NETWORK_READBACK_TIMEOUT_MS = 2_000;
+const NETWORK_READBACK_TIMEOUT_MS = 5_000;
 const NETWORK_READBACK_INTERVAL_MS = 200;
 
 function beforeDeadline<T>(request: () => Promise<T>, deadline: number, failure: () => Error): Promise<T> {
@@ -25,6 +26,12 @@ function beforeDeadline<T>(request: () => Promise<T>, deadline: number, failure:
     return Promise.reject(error);
   }
   return Promise.race([response, expired]).finally(() => clearTimeout(timeout!));
+}
+
+/** Passive reads must settle even when an extension stops answering. Never wrap a signing prompt. */
+export function readWalletProviderValue<T>(request: () => Promise<T>): Promise<T> {
+  return beforeDeadline(request, Date.now() + NETWORK_READBACK_TIMEOUT_MS,
+    () => new Error("Your wallet is not responding. Open it and try again."));
 }
 
 export async function getWalletProviderOnChain<TProvider extends WalletNetworkProvider>(input: Readonly<{
@@ -45,19 +52,30 @@ export async function getWalletProviderOnChain<TProvider extends WalletNetworkPr
   try {
     assertCurrentSession();
     if (chainId === null || chainHex === null) throw new Error("The requested wallet network is invalid");
-    const provider = await wallet.getEthereumProvider();
+    const initialDeadline = Date.now() + NETWORK_READBACK_TIMEOUT_MS;
+    const unresponsive = () => new Error("Your wallet is not responding. Open it and try again.");
+    const provider = await beforeDeadline(() => wallet.getEthereumProvider(), initialDeadline, unresponsive);
     assertCurrentSession();
-    const currentChainId = await provider.request({ method: "eth_chainId" });
+    const currentChainId = await beforeDeadline(() => provider.request({ method: "eth_chainId" }), initialDeadline, unresponsive);
     assertCurrentSession();
     // The provider owns the active network. A stale SDK label must not cause
     // another switch prompt (or invalidate a switch that already completed).
     if (walletChainIdsEqual(currentChainId, chainId)) return provider;
 
-    if (walletChainIdsEqual(wallet.chainId, chainId)) {
-      // An SDK cache can already show the target and skip its own switch request.
-      await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
-    } else {
-      await wallet.switchChain(chainId);
+    let switchError: unknown;
+    try {
+      if (walletChainIdsEqual(wallet.chainId, chainId)) {
+        // An SDK cache can already show the target and skip its own switch request.
+        await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: chainHex }] });
+      } else {
+        await wallet.switchChain(chainId);
+      }
+    } catch (error) {
+      assertCurrentSession();
+      // A rejected user action stays rejected. Other SDK failures can arrive
+      // after the provider already completed the switch, so verify the result.
+      if (errorIsExplicitWalletRejection(error)) throw error;
+      switchError = error;
     }
     assertCurrentSession();
 
@@ -73,7 +91,7 @@ export async function getWalletProviderOnChain<TProvider extends WalletNetworkPr
       await new Promise<void>((resolve) => setTimeout(resolve, Math.min(NETWORK_READBACK_INTERVAL_MS, Math.max(0, deadline - Date.now()))));
       assertCurrentSession();
     }
-    throw wrongNetwork();
+    throw switchError ?? wrongNetwork();
   } catch (error) {
     assertCurrentSession();
     throw error;
