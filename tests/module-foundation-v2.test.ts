@@ -26,6 +26,22 @@ const simulate = (f: ReturnType<typeof foundationV2Fixture>) => {
 };
 
 describe("versioned Foundation factory source binding", () => {
+  it("reads independent factory settings together after verifying runtime code", async () => {
+    const f = foundationV2Fixture();
+    const original = f.methods.readContract.getMockImplementation()!;
+    let releaseVersion!: () => void;
+    const versionPending = new Promise<void>(resolve => { releaseVersion = resolve; });
+    f.methods.readContract.mockImplementation(async input => {
+      if (input.functionName === "VERSION_ID") await versionPending;
+      return original(input);
+    });
+    const pending = assertFoundationInfrastructure(f.client, f.binding);
+    try {
+      await vi.waitFor(() => expect(f.methods.readContract.mock.calls.some(([input]) => input.functionName === "LP_RECIPIENT")).toBe(true));
+      expect(f.methods.readContract.mock.calls.some(([input]) => input.functionName === "poolManager")).toBe(true);
+      expect(f.methods.getCode).toHaveBeenCalledTimes(8);
+    } finally { releaseVersion(); await pending; }
+  });
   it("matches every SDK ABI item against the frozen actual Solidity compiler output", () => {
     const bytes = readFileSync(new URL("./fixtures/foundation-factory-v2.abi.json", import.meta.url));
     // Foundation contracts commit 297ac74cb3ce125f04ffe2decd877d9af6e04ba6; local compiled ABI, not a deployed runtime receipt.

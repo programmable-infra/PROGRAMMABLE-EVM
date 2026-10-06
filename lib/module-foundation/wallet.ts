@@ -88,8 +88,13 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
     const needsCatalog = sequence.kind === "module-action" || (sequence.kind === "launch" && sequence.parameters.modules.length > 0)
       || (sequence.kind === "trade" && Boolean(sequence.moduleReview?.selections.length));
     // The session shares only this in-flight authority/catalog read, never a settled approval.
-    const [current, catalog] = await Promise.all([binding.resolveAuthority(), needsCatalog ? binding.resolveCatalog?.() : undefined]);
     const original = sequence.binding;
+    // Reading the already reviewed runtime can overlap the current admission lookup.
+    // Nothing can proceed until both succeed and the current release matches below.
+    const [current, catalog, infrastructure] = await Promise.all([
+      binding.resolveAuthority(), needsCatalog ? binding.resolveCatalog?.() : undefined,
+      sequence.kind === "module-action" ? undefined : assertFoundationInfrastructure(binding.client, original),
+    ]);
     if (foundationBindingChainId(current) !== foundationBindingChainId(original) || current.releaseDigest !== original.releaseDigest || current.sourceCommit !== original.sourceCommit || current.startBlock !== original.startBlock
       || foundationFactoryVersion(current) !== foundationFactoryVersion(original) || current.lpCustodyId !== original.lpCustodyId
       || getAddress(current.factory.address) !== getAddress(original.factory.address)
@@ -104,13 +109,8 @@ export async function revalidateFoundationWalletStep(value: FoundationWalletPrep
       binding.state = "ready";
       return transaction;
     }
-    const [, infrastructure] = await Promise.all([
-      sequence.kind === "launch" && current.ethereumGraph
-        ? assertFoundationEthereumTransaction({ source: current.ethereumGraph, transaction: sequence.steps.at(-1)!.transaction })
-        : undefined,
-      assertFoundationInfrastructure(binding.client, current),
-    ]);
-    let checkpoint = infrastructure;
+    if (sequence.kind === "launch" && current.ethereumGraph) await assertFoundationEthereumTransaction({ source: current.ethereumGraph, transaction: sequence.steps.at(-1)!.transaction });
+    let checkpoint = infrastructure!;
     if (sequence.kind === "launch" && sequence.parameters.modules.length > 0) {
       if (!binding.resolveCatalog) throw new Error("The current module admissions cannot be checked. Review again.");
       // Re-decode and exactly re-encode against today's admissions; a stable host release does not freeze module approval.

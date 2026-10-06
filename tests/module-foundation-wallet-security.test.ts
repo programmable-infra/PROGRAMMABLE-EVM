@@ -175,6 +175,23 @@ describe("foundation V2 final wallet revalidation dispatch", () => {
 });
 
 describe("foundation private wallet preparation", () => {
+  it("overlaps fresh release and runtime reads without submitting before both finish", async () => {
+    const f = fixture();
+    const authority = deferred<FoundationDeploymentBinding>();
+    f.resolveAuthority.mockReturnValue(authority.promise);
+    const signed = vi.fn();
+    const pending = submitFoundationWalletStep(f.bind(), async value => {
+      await revalidateFoundationWalletStep(value, account);
+      signed();
+      return transactionHash;
+    });
+    try {
+      await vi.waitFor(() => expect(sdk.infrastructure).toHaveBeenCalled());
+      expect(signed).not.toHaveBeenCalled();
+      expect(f.estimateGas).not.toHaveBeenCalled();
+    } finally { authority.resolve(f.release); await pending; }
+    expect(signed).toHaveBeenCalledTimes(1);
+  });
   it("estimates gas alongside simulation but waits for both before releasing wallet bytes", async () => {
     const f = fixture(), simulationStarted = deferred<void>(), finishSimulation = deferred<object>();
     const gasStarted = deferred<void>(), finishGas = deferred<bigint>();

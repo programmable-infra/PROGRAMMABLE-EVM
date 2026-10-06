@@ -30,7 +30,8 @@ const profiles: Readonly<Record<FoundationChainId, FoundationChainProfile>> = Ob
   1: Object.freeze({ chainId: 1, chain: mainnet, name: "Ethereum", explorer: "https://etherscan.io",
     infrastructure: ethereumInfrastructure, wrappedEth: pin(ethereum.contracts.wrappedEth), multicall3: pin(ethereum.contracts.multicall3),
     preparationLag: 2n, launchConfirmations: 64,
-    publicRpcUrls: Object.freeze(["https://mainnet.gateway.tenderly.co", "https://ethereum-rpc.publicnode.com"]) }),
+    // The public Tenderly gateway rejects some full launch simulations at its request limit.
+    publicRpcUrls: Object.freeze(["https://ethereum-rpc.publicnode.com", "https://mainnet.gateway.tenderly.co"]) }),
 });
 
 /** An absent chain belongs only to existing Robinhood bindings. Unknown networks never fall back. */
