@@ -688,6 +688,18 @@ test("a normal network update can replace the SDK wrapper while preserving its c
   expect(methods).not.toContain("forbidden-wallet-operation");
 });
 
+test("network verification survives rebuilt SDK methods for the same provider and account", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Rebuild SDK methods on network update", exact: true }).click();
+  await page.getByRole("button", { name: "Request Ethereum wallet network", exact: true }).click();
+  await expectNetworkResults(page, [true]);
+  await expect(page.getByLabel("Selected wallet network", { exact: true })).toHaveText("0x1");
+  await expect(page.getByLabel("Selected account", { exact: true })).toHaveText(accountA);
+  await expect(page.getByLabel("Network switch busy", { exact: true })).toHaveText("false");
+  expect((await calls(page)).filter(call => call.method === "switchChain")).toHaveLength(1);
+  expect((await calls(page)).some(call => call.method === "forbidden-wallet-operation")).toBe(false);
+});
+
 for (const format of ["decimal", "number", "padded", "caip"]) {
   test(`network switching accepts the provider's ${format} chain ID without changing wallet ownership`, async ({ page }) => {
     await open(page);

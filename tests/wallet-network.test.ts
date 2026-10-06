@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { getWalletProviderOnChain, type WalletNetworkProvider } from "@/lib/wallet-network";
+import { getWalletProviderOnChain, readWalletProviderValue, type WalletNetworkProvider } from "@/lib/wallet-network";
 
 const target = { chainId: 4663, networkName: "Robinhood Chain" };
 type Request = Parameters<WalletNetworkProvider["request"]>[0];
@@ -33,6 +33,37 @@ function fixture(cachedChainId = "eip155:1") {
 afterEach(() => vi.useRealTimers());
 
 describe("wallet provider network recovery", () => {
+  it("accepts the actual target network when the SDK reports a failed switch after completing it", async () => {
+    const state = fixture();
+    state.wallet.switchChain.mockImplementation(async () => {
+      state.setProviderChain("0x1237");
+      throw new Error("Network change was not completed");
+    });
+    await expect(getWalletProviderOnChain({ ...target, ...state })).resolves.toBe(state.provider);
+    expect(state.wallet.switchChain).toHaveBeenCalledOnce();
+  });
+
+  it.each(["provider", "chain"])("bounds an unresponsive initial %s read without opening a switch prompt", async (phase) => {
+    vi.useFakeTimers();
+    const state = fixture();
+    if (phase === "provider") state.wallet.getEthereumProvider.mockImplementation(() => new Promise(() => {}));
+    else state.provider.request.mockImplementation(() => new Promise(() => {}));
+    const failure = expect(getWalletProviderOnChain({ ...target, ...state })).rejects.toThrow("wallet is not responding");
+    await vi.advanceTimersByTimeAsync(5_000);
+    await failure;
+    expect(state.wallet.switchChain).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("bounds the final account read so a failed connection can be retried", async () => {
+    vi.useFakeTimers();
+    const failure = expect(readWalletProviderValue(() => new Promise(() => {}))).rejects.toThrow("wallet is not responding");
+    await vi.advanceTimersByTimeAsync(5_000);
+    await failure;
+    await expect(readWalletProviderValue(async () => ["account"])).resolves.toEqual(["account"]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("returns without a prompt when the provider and SDK already agree on the target", async () => {
     const state = fixture("eip155:4663");
     state.setProviderChain(4663);
@@ -114,7 +145,7 @@ describe("wallet provider network recovery", () => {
     const state = fixture();
     state.wallet.switchChain.mockImplementation(async () => state.setProviderChain(chain));
     const failure = expect(getWalletProviderOnChain({ ...target, ...state })).rejects.toThrow("The wallet is not connected to Robinhood Chain");
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(5_000);
     await failure;
     expect(state.wallet.switchChain).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
@@ -125,7 +156,7 @@ describe("wallet provider network recovery", () => {
     const state = fixture();
     state.provider.request.mockResolvedValueOnce("0x1").mockImplementation(() => new Promise(() => {}));
     const failure = expect(getWalletProviderOnChain({ ...target, ...state })).rejects.toThrow("The wallet is not connected to Robinhood Chain");
-    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.advanceTimersByTimeAsync(5_000);
     await failure;
     expect(vi.getTimerCount()).toBe(0);
   });

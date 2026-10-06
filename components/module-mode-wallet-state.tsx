@@ -76,7 +76,7 @@ export function moduleModeWalletStep(wallet: ModuleModeWalletSnapshot, targetCha
 /** The wallet context accepts decimal network IDs; its EIP-1193 state uses hex. */
 export async function switchModuleModeNetwork(switchNetwork: (chainId: string) => Promise<boolean>, targetChainId: FoundationChainId = 4663): Promise<void> {
   if (!await switchNetwork(String(foundationChainProfile(targetChainId).chainId))) {
-    throw new Error(`The network change was not completed. Switch your wallet to ${foundationChainProfile(targetChainId).name} and try again.`);
+    throw new Error("Your wallet connection could not be confirmed. Open your wallet and try again.");
   }
 }
 
