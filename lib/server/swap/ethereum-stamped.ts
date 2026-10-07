@@ -10,6 +10,11 @@ import { agreedTradeRpcV1, bytesV1, quantityV1, readAgreedTradeTraceV1, readTrad
 import { ETHEREUM_STAMPED_SWAP_PROTOCOL as protocol, ETHEREUM_PERMIT2_APPROVAL_GRACE_SECONDS, EthereumStampedSwapError, ethereumStampedApprovalTransaction, ethereumStampedPreparationDigest, ethereumStampedProbeTransaction, ethereumStampedRuntimeBindings, ethereumStampedRuntimeDigest, ethereumStampedSwapRoute, ethereumStampedSwapTransaction, parseEthereumStampedSwapRequest, type EthereumStampedSwapPreparation, type EthereumSwapRuntimeBinding } from "@/lib/swap/ethereum-stamped";
 import type { PreparedTradeTransaction } from "@/lib/prepared-transaction";
 import { EthereumRpcBudget, EthereumRpcBudgetBusy, EthereumRpcProviderRateLimit, ethereumRpcRateLimited } from "./ethereum-rpc-budget";
+import { readEthereumFeeClassificationV1 } from "@/lib/server/custom-launch/ethereum-routing-fee-policy-v1";
+import { ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, ETHEREUM_ROUTING_FEE_POLICY_V1 } from "@/lib/custom-launch/ethereum-routing-fee-policy-v1";
+import { ethereumNative30Market, ethereumRouteRequiresFee, type EthereumSwapFeeV1 } from "@/lib/swap/ethereum-stamped";
+import { ethereumNative30RequiredAddressesV1, proveEthereumNative30RuntimeV1, type EthereumNative30RuntimeProofV1 } from "@/lib/custom-launch/ethereum-native30-runtime-v1";
+import { proveEthereumNative30TradeAccrualV1 } from "@/lib/server/custom-launch/ethereum-native30-trade-v1";
 
 const takeAbi = parseAbi(["function take(address currency,address to,uint256 amount)"]);
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
@@ -70,11 +75,12 @@ export interface EthereumSwapDependencies {
   readSnapshot?: () => Promise<RouterCustomIdentitySnapshotV1>;
   rpcs?: readonly [TradeRpcV1, TradeRpcV1];
   now?: () => bigint;
+  readFeeClassification?: typeof readEthereumFeeClassificationV1;
 }
 
 export async function prepareEthereumStampedSwap(value: unknown, dependencies: EthereumSwapDependencies = {}): Promise<EthereumStampedSwapPreparation> {
   const request = parseEthereumStampedSwapRequest(value);
-  if (dependencies.rpcs || dependencies.readSnapshot || dependencies.now) return prepare(request, dependencies);
+  if (dependencies.rpcs || dependencies.readSnapshot || dependencies.now || dependencies.readFeeClassification) return prepare(request, dependencies);
   const key = canonicalBrowserSha256V2("programmable.ethereum-swap-inflight.v1", request);
   const existing = activePreparations.get(key);
   if (existing) return existing;
@@ -87,7 +93,9 @@ export async function prepareEthereumStampedSwap(value: unknown, dependencies: E
 async function prepare(request: ReturnType<typeof parseEthereumStampedSwapRequest>, dependencies: EthereumSwapDependencies): Promise<EthereumStampedSwapPreparation> {
   const snapshot = await (dependencies.readSnapshot ?? (() => readFinalizedRouterCustomIdentitySnapshotCoreV1({ signal: AbortSignal.timeout(10_000) })))();
   const entries = snapshot.entries.filter(entry => same(entry.tokenAddress, request.token));
-  const route = entries.length === 1 ? ethereumStampedSwapRoute(entries[0]!) : null;
+  const classification = entries.length === 1
+    ? await (dependencies.readFeeClassification ?? readEthereumFeeClassificationV1)(entries[0]!).catch(() => unavailable("ETHEREUM_FEE_POLICY_PENDING")) : undefined;
+  const route = entries.length === 1 ? ethereumStampedSwapRoute(entries[0]!, classification) : null;
   // A saved finalized identity may survive an index refresh failure. It grants
   // no execution authority: recheck its canonical launch block and stamp, then
   // simulate the actual transaction against fresh independent RPC state.
@@ -115,10 +123,27 @@ async function prepare(request: ReturnType<typeof parseEthereumStampedSwapReques
     return BigInt(raw);
   };
   const runtimeBindings = [...ethereumStampedRuntimeBindings(route)];
+  const runtimeCodes: Record<string, Hex> = {};
   await Promise.all(runtimeBindings.map(async expected => {
     const code = bytesV1(await rpc("eth_getCode", [expected.address, reference], bytesV1));
     if (code === "0x" || !same(keccak256(code), expected.runtimeCodeHash)) return unavailable("ETHEREUM_LAUNCH_RUNTIME_CHANGED");
+    runtimeCodes[expected.address.toLowerCase()] = code;
   }));
+  let native30Proof: EthereumNative30RuntimeProofV1 | undefined;
+  if (ethereumRouteRequiresFee(route)) {
+    const market = ethereumNative30Market(route);
+    const required = ethereumNative30RequiredAddressesV1(market, runtimeCodes[market.hooks.toLowerCase()] ?? "0x");
+    if (required) {
+      for (const address of required) if (!runtimeCodes[address.toLowerCase()]) {
+        const code = bytesV1(await rpc("eth_getCode", [address, reference], bytesV1));
+        if (code === "0x") return unavailable("ETHEREUM_POOL_FEE_RUNTIME_PENDING");
+        runtimeCodes[address.toLowerCase()] = code;
+        runtimeBindings.push({ address, runtimeCodeHash: keccak256(code) });
+      }
+      native30Proof = proveEthereumNative30RuntimeV1(market, runtimeCodes) ?? undefined;
+      if (!native30Proof) return unavailable("ETHEREUM_POOL_FEE_RUNTIME_PENDING");
+    }
+  }
   const router = getAddress(stamp.routerAddress);
   const [proofData, poolData, recordData, decimalsData] = await Promise.all([
     call(router, encodeFunctionData({ abi: launchStampRouterReadAbi, functionName: "stampProof", args: [request.token] })),
@@ -153,6 +178,17 @@ async function prepare(request: ReturnType<typeof parseEthereumStampedSwapReques
     else if (permit[0] < BigInt(request.amountIn) || BigInt(permit[1]) <= BigInt(request.deadline)) transaction = ethereumStampedApprovalTransaction(request, "permit2-to-router");
   } else if (BigInt(nativeBalance) <= BigInt(request.amountIn)) throw new EthereumStampedSwapError("Keep some ETH in your wallet for gas.", "ETHEREUM_NATIVE_BALANCE", 400);
 
+  const requiresFee = ethereumRouteRequiresFee(route);
+  const recipient = getAddress(ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient);
+  const recipientBefore = requiresFee && !native30Proof
+    ? same(request.owner, recipient) ? nativeBalance : await rpc("eth_getBalance", [recipient, reference], value => quantityV1(value).toString()) : "0";
+  const routerNativeBefore = requiresFee
+    ? await rpc("eth_getBalance", [getAddress(protocol.router.address), reference], value => quantityV1(value).toString()) : "0";
+  let fee: EthereumSwapFeeV1 | undefined = requiresFee ? {
+    policyHash: ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, mode: native30Proof ? "pool_enforced_native30" : "programmable_routed",
+    rateBps: 30, routedRateBps: native30Proof ? 0 : 30, recipient,
+    grossNativeAmount: "0", platformFeeAmount: "0", netNativeAmount: "0", native30Proof: native30Proof ?? null, accrual: null,
+  } : undefined;
   const reached = new Set(runtimeBindings.map(binding => binding.address.toLowerCase()));
   const simulations: { trace: TradeTraceV1; posts: Record<string, Record<string, unknown>>[]; gasUsed: bigint; settlementDigest: `sha256:${string}` }[] = [];
   const simulate = async (tx: PreparedTradeTransaction) => {
@@ -177,22 +213,71 @@ async function prepare(request: ReturnType<typeof parseEthereumStampedSwapReques
     const post = simulation.posts[0]!, owner = request.owner.toLowerCase();
     const nativeAfter = post[owner]?.balance === undefined ? BigInt(nativeBalance) : quantityV1(post[owner]!.balance);
     const [tokenBefore, tokenAfter] = await Promise.all([tokenUint("balanceOf", [request.owner]), tokenUint("balanceOf", [request.owner], post)]);
-    const inputDecrease = request.side === "buy" ? BigInt(nativeBalance) - nativeAfter : tokenBefore - tokenAfter;
-    const outputIncrease = request.side === "buy" ? tokenAfter - tokenBefore : nativeAfter - BigInt(nativeBalance);
+    // SWEEP returns pre-existing router dust as well as this transaction's
+    // refund. Dust is neither paid input nor quoted swap output.
+    const inputDecrease = request.side === "buy" ? BigInt(nativeBalance) - nativeAfter + BigInt(routerNativeBefore) : tokenBefore - tokenAfter;
+    const outputIncrease = request.side === "buy" ? tokenAfter - tokenBefore : nativeAfter - BigInt(nativeBalance) - BigInt(routerNativeBefore);
+    if (requiresFee) {
+      const remaining = post[protocol.router.address.toLowerCase()]?.balance;
+      if ((remaining === undefined ? BigInt(routerNativeBefore) : quantityV1(remaining)) !== 0n) return unavailable("ETHEREUM_REFUND_UNPROVEN");
+    }
     const takes = successfulTradeFramesV1(simulation.trace).filter(frame => frame.type === "CALL" && frame.to && same(frame.to, protocol.poolManager.address) && same(frame.from, protocol.router.address)).flatMap(frame => {
       try { const decoded = decodeFunctionData({ abi: takeAbi, data: frame.input });
         return same(decoded.args[0], request.side === "buy" ? request.token : NATIVE) ? [{ recipient: decoded.args[1], amount: decoded.args[2] }] : []; } catch { return []; }
     });
-    if (inputDecrease < 0n || inputDecrease > BigInt(request.amountIn) || outputIncrease <= 0n || takes.length !== 1
-      || !same(takes[0]!.recipient, request.owner) || takes[0]!.amount !== outputIncrease) return unavailable("ETHEREUM_SWAP_SETTLEMENT_UNPROVEN");
-    return outputIncrease;
+    const charge = requiresFee && !native30Proof;
+    let traderOutput = outputIncrease;
+    let grossNative = request.side === "buy" ? BigInt(request.amountIn) : outputIncrease;
+    let platform = 0n;
+    if (charge && request.side === "sell") {
+      // V4Router skips a zero-value TAKE_PORTION. Tiny positive outputs may
+      // therefore contain only the trader's take, with a rounded fee of zero.
+      const zeroFeeTake = takes.length === 1 && same(takes[0]!.recipient, request.owner)
+        && takes[0]!.amount > 0n && takes[0]!.amount * 30n / 10_000n === 0n;
+      if (!zeroFeeTake && (takes.length !== 2 || !same(takes[0]!.recipient, recipient) || !same(takes[1]!.recipient, request.owner))) {
+        return unavailable("ETHEREUM_FEE_TRANSFER_UNPROVEN");
+      }
+      traderOutput = takes[zeroFeeTake ? 0 : 1]!.amount;
+      const paidFee = zeroFeeTake ? 0n : takes[0]!.amount;
+      grossNative = paidFee + traderOutput;
+      platform = grossNative * 30n / 10_000n;
+      if (paidFee !== platform || outputIncrease !== traderOutput + (same(request.owner, recipient) ? platform : 0n)) {
+        return unavailable("ETHEREUM_FEE_TRANSFER_UNPROVEN");
+      }
+    } else if (takes.length !== 1 || !same(takes[0]!.recipient, request.owner) || takes[0]!.amount !== outputIncrease) {
+      return unavailable("ETHEREUM_SWAP_SETTLEMENT_UNPROVEN");
+    }
+    if (charge && request.side === "buy") {
+      platform = grossNative * 30n / 10_000n;
+      const payments = successfulTradeFramesV1(simulation.trace).filter(frame => frame.type === "CALL"
+        && frame.to && same(frame.to, recipient) && same(frame.from, protocol.router.address)
+        && frame.input === "0x" && BigInt(frame.value) > 0n);
+      if (platform > 0n && (payments.length !== 1 || BigInt(payments[0]!.value) !== platform)) return unavailable("ETHEREUM_FEE_TRANSFER_UNPROVEN");
+    }
+    if (inputDecrease < 0n || inputDecrease > BigInt(request.amountIn) || traderOutput <= 0n) return unavailable("ETHEREUM_SWAP_SETTLEMENT_UNPROVEN");
+    if (charge && !same(request.owner, recipient)) {
+      const recipientAfter = post[recipient.toLowerCase()]?.balance === undefined ? BigInt(recipientBefore)
+        : quantityV1(post[recipient.toLowerCase()]!.balance);
+      if (recipientAfter - BigInt(recipientBefore) < platform) return unavailable("ETHEREUM_FEE_BALANCE_UNPROVEN");
+    }
+    let accrual: Record<string, unknown> | null = null;
+    if (native30Proof) {
+      accrual = await proveEthereumNative30TradeAccrualV1({ proof: native30Proof,
+        request: { zeroForOne: request.side === "buy", amountIn: request.amountIn, hookData: "0x" },
+        router: getAddress(protocol.router.address), trace: simulation.trace, post, call });
+      grossNative = BigInt(accrual.grossNativeAmount as string);
+      platform = BigInt(accrual.platformAccruedIncrease as string);
+    }
+    if (fee) fee = { ...fee, grossNativeAmount: grossNative.toString(), platformFeeAmount: platform.toString(),
+      netNativeAmount: (grossNative - platform).toString(), accrual };
+    return traderOutput;
   };
   let amountOut = 0n;
   if (!transaction) {
     // Quote the actual wallet's transaction, including arbitrary hook fees and
     // transfer effects. A Quoter's different caller is not routing authority.
-    amountOut = await readSettlement(await simulate(ethereumStampedProbeTransaction(route, request)));
-    transaction = ethereumStampedSwapTransaction(route, request, amountOut);
+    amountOut = await readSettlement(await simulate(ethereumStampedProbeTransaction(route, request, native30Proof)));
+    transaction = ethereumStampedSwapTransaction(route, request, amountOut, native30Proof);
   }
   const finalSimulation = await simulate(transaction);
   if (transaction.kind === "swap") {
@@ -224,6 +309,7 @@ async function prepare(request: ReturnType<typeof parseEthereumStampedSwapReques
     schemaVersion: "programmable.ethereum-stamped-swap-preparation.v1", status: transaction.kind === "swap" ? "ready" : "approval-required", request,
     quote: { amountOut: amountOut.toString(), amountOutMinimum: (amountOut * (10_000n - BigInt(request.slippageBps)) / 10_000n).toString(), blockNumber: block.number, blockHash: block.hash, blockTimestamp: block.timestamp, validUntil: validUntil.toString() },
     transaction: { ...transaction, gasLimit: gasLimit.toString() },
+    ...(fee ? { fee } : {}),
     evidence: { kind: "independent-rpc-simulation", runtimeBindings, runtimeBindingHash: ethereumStampedRuntimeDigest(runtimeBindings),
       executionDigest: canonicalBrowserSha256V2("programmable.ethereum-swap-execution.v1", simulations.map(item => ({ trace: item.trace, settlementDigest: item.settlementDigest }))) },
   };

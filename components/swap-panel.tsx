@@ -317,6 +317,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
           </output>
         </div>
         {review?.minimumOutput != null ? <p className={styles.minimum}>Minimum {displaySwapAmount(review.minimumOutput, outputDecimals)} {outputSymbol}</p> : null}
+        {review?.platformFee ? <p className={styles.minimum}>Platform fee {formatUnits(review.platformFee.amount, 18)} ETH ({review.platformFee.rateBps / 100}%){review.platformFee.includedInPool ? " · included in pool" : ""}</p> : null}
         <div className={styles.settingsRow}>
           <button type="button" className={styles.settingsToggle} onClick={() => setSettingsOpen(!settingsOpen)} aria-expanded={settingsOpen} aria-controls={`${id}-slippage`} disabled={locked}>
             <Settings2 size={15} aria-hidden="true" />{slippageBps / 100}% slippage
