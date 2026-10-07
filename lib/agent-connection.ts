@@ -110,6 +110,8 @@ export function buildAgentInstructions(input?: { scopes?: readonly string[]; wal
     input?.wallet ? `The controller wallet selected for this connection is ${input.wallet}. Verify it against the launch request before preparing wallet actions.` : "Use the controller wallet selected by the user for the launch request.",
     input?.intent ? `Requested workflow: ${input.intent.trim()}${/[.!?]$/.test(input.intent.trim()) ? "" : "."}` : "Build the custom hook for the user's idea and prepare its launch on the selected chain.",
     "Read live capabilities before a write, preserve exact request bytes and idempotency keys on retries, and distinguish submission, review, deployment and public availability. Wallet signing remains a separate action.",
+    "For API health use https://api.programmable.market/readyz and the selected chain's capabilities/readiness. The legacy website /api/ops/health response does not describe current Custom Launch API availability.",
+    "For Robinhood plans request Programmable-Launch-Response-Version: 1.2, honor Retry-After on 429/503 and follow the server's continuation. An expired plan needs the documented replan_required flow and a fresh deadline; never reuse an expired wallet permit.",
   ].join("\n\n");
 }
 
