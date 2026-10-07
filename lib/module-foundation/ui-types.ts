@@ -57,6 +57,8 @@ export interface FoundationModuleDescriptor {
   capabilities: readonly string[];
   fields: readonly FoundationConfigurationField[];
   available: boolean;
+  /** Explicit product availability for new launches, separate from catalog verification. */
+  comingSoon?: boolean;
   unavailableReason?: string;
   /** Descriptor IDs whose simultaneous selection is disallowed by conformance. */
   conflictsWith?: readonly string[];
@@ -241,7 +243,11 @@ export function foundationSelectionErrors(selections: readonly FoundationModuleS
   if (ids.size !== selections.length) issues.push("Each module can be selected once.");
   for (const selection of selections) {
     const descriptor = catalog.find(entry => entry.id === selection.id && entry.version === selection.version && entry.digest === selection.digest);
-    if (!descriptor?.available) { issues.push("A selected module changed or is unavailable. Remove it and select a current version."); continue; }
+    if (!descriptor?.available) {
+      issues.push(descriptor?.comingSoon ? `${descriptor.name} is coming soon. Remove it to launch your coin.`
+        : "A selected module changed or is unavailable. Remove it and select a current version.");
+      continue;
+    }
     for (const required of descriptor.requires ?? []) if (!ids.has(required)) issues.push(`${descriptor.name} requires ${catalog.find(entry => entry.id === required)?.name ?? required}.`);
     for (const conflict of descriptor.conflictsWith ?? []) if (ids.has(conflict)) issues.push(`${descriptor.name} cannot be combined with ${catalog.find(entry => entry.id === conflict)?.name ?? conflict}.`);
     for (const field of descriptor.fields) {

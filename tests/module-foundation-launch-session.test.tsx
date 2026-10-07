@@ -16,7 +16,8 @@ import { uploadModuleModeImage } from "@/components/module-mode-wallet-state";
 const account = "0x1000000000000000000000000000000000000000";
 const hash = `0x${"11".repeat(32)}` as const;
 const image = { url: "https://assets.example.com/coin.webp", sha256: hash };
-const draft = { name: "Next coin", symbol: "NEXT", image } as FoundationLaunchDraft;
+const draft: FoundationLaunchDraft = { name: "Next coin", symbol: "NEXT", description: "", image,
+  socialLinks: {}, quoteAsset: account, creatorFeeBps: 0, initialBuy: "0", additionalLiquidity: "0", modules: [] };
 const previousId = "11111111-1111-4111-8111-111111111111";
 const acknowledgeResult = vi.fn(), assertCurrent = vi.fn(), resolveAuthority = vi.fn();
 
@@ -41,6 +42,13 @@ describe("starting a new coin after a saved result", () => {
   it("allows a new draft and does not acknowledge or submit anything on render", () => {
     expect(fixture.builder!.submissionBlocked).toBeUndefined();
     expect(fixture.builder!.onWarmLaunch).toBeDefined();
+    expect(acknowledgeResult).not.toHaveBeenCalled();
+    expect(resolveAuthority).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unavailable module before acknowledging the saved result or preparing a launch", async () => {
+    await expect(fixture.builder!.onPrepareLaunch({ ...draft,
+      modules: [{ id: "unavailable-module", version: "1.0.0", digest: hash, configuration: {} }] })).rejects.toThrow("unavailable");
     expect(acknowledgeResult).not.toHaveBeenCalled();
     expect(resolveAuthority).not.toHaveBeenCalled();
   });
