@@ -5,8 +5,11 @@ import { AGENT_KEY_SCHEMA, AGENT_SCOPES, buildAgentConnection, buildAgentInstruc
 import { apiKeyRotationVersion, apiKeyMutationPath, parseApiKeyMutationResult } from "../components/developer-api-keys";
 
 describe("module discovery and agent connections", () => {
-  it("advertises Robinhood launches without a public module submission workflow", () => {
-    expect(PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunch).not.toHaveProperty("ethereum");
+  it("advertises both Custom launch chains without a public module submission workflow", () => {
+    expect(PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunch.ethereum).toMatchObject({ chainId: 1, capabilities: "https://api.programmable.market/v3/capabilities", preflight: "https://api.programmable.market/v3/custom-launches/preflight" });
+    expect(buildAgentInstructions()).toContain("Ethereum Mainnet (1)");
+    expect(buildAgentInstructions()).toContain("selected chain");
+    expect(buildAgentInstructions()).not.toContain("prepare its launch on Robinhood");
     expect(PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunch.robinhood.chainId).toBe(4663);
     expect(PROGRAMMABLE_AGENT_ENTRY.workflows).not.toHaveProperty("moduleContribution");
     expect(buildAgentInstructions()).not.toContain("submit-module");

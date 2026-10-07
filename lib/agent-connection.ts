@@ -15,6 +15,7 @@ export const PROGRAMMABLE_AGENT_ENTRY = Object.freeze({
   docsIndexUrl: "https://programmable.market/llms.txt",
   docsFullUrl: "https://programmable.market/llms-full.txt",
   primaryRobinhoodCreateWorkflow: "customLaunchPlan",
+  primaryEthereumCreateWorkflow: "customLaunch",
   website: {
     launch: "https://programmable.market/launch",
     moduleMode: "https://programmable.market/launch/modules",
@@ -50,6 +51,18 @@ export const PROGRAMMABLE_AGENT_ENTRY = Object.freeze({
     customLaunch: {
       scopes: ["custom-launch:create", "custom-launch:read"],
       guide: "https://programmable.market/developer-reference/custom-launch",
+      ethereum: {
+        chainId: 1,
+        recommendedForNewProjects: true,
+        capabilities: "https://api.programmable.market/v3/capabilities",
+        preflight: "https://api.programmable.market/v3/custom-launches/preflight",
+        create: "https://api.programmable.market/v3/custom-launches",
+        status: "https://api.programmable.market/v3/custom-launches/{launchId}",
+        guide: "https://programmable.market/developer-reference/ethereum-custom-hook",
+        openApi: "https://programmable.market/openapi/custom-launch-v3.json",
+        finalizedMetadata: "https://api.programmable.market/v3/finalized-custom-launches",
+        profileAndFeePolicy: "Read the active profile and fee policy from live capabilities before packing.",
+      },
       robinhood: { chainId: 4663, recommendedForNewProjects: false, capabilities: "https://api.programmable.market/v4/chains/4663/capabilities", readiness: "https://api.programmable.market/v4/chains/4663/readiness", openApi: "https://programmable.market/openapi/custom-launch-v4.json" },
     },
     multiRoleProject: {
@@ -89,13 +102,13 @@ export const PROGRAMMABLE_AGENT_ENTRY = Object.freeze({
 
 export function buildAgentInstructions(input?: { scopes?: readonly string[]; wallet?: string; intent?: string }) {
   return [
-    "Use this Programmable API key to build custom hooks and read launch status on Robinhood Chain (4663).",
-    `Read ${PROGRAMMABLE_AGENT_GUIDE_URL} and ${PROGRAMMABLE_AGENT_DISCOVERY_URL}, then use the current Robinhood Custom Launch Plan contract and capabilities.`,
+    "Use this Programmable API key to build custom hooks and read launch status on Ethereum Mainnet (1) or Robinhood Chain (4663). Keep the user's selected chain; if it is missing, ask before building.",
+    `Read ${PROGRAMMABLE_AGENT_GUIDE_URL} and ${PROGRAMMABLE_AGENT_DISCOVERY_URL}. Ethereum uses workflows.customLaunch.ethereum and /v3/capabilities; Robinhood uses workflows.customLaunchPlan and /v4/chains/4663/custom-launch-capabilities. Read the selected chain's current profile, packer and fee policy before preparing a request.`,
     "Read the API key from PROGRAMMABLE_API_KEY in the environment or your secret store. Send it only in the Authorization header to https://api.programmable.market. Never print the key or put it in a URL, logs or committed files.",
     input?.scopes ? `This connection was issued with: ${input.scopes.join(", ")}. Check current API authorization on each operation; documentation does not add permissions to a key.` : "Use the key's actual permissions. Read-only keys cannot create launch requests.",
-    "Launch history can include requests from other keys and linked wallets in the same account. The key is not isolated to one project; its saved chain restrictions still apply.",
+    "Launch history can include requests from other keys and linked wallets in the same account. The key is not isolated to one project; its saved chain restrictions still apply. Verify authorization for the selected chain; do not switch chains to work around a denied request.",
     input?.wallet ? `The controller wallet selected for this connection is ${input.wallet}. Verify it against the launch request before preparing wallet actions.` : "Use the controller wallet selected by the user for the launch request.",
-    input?.intent ? `Requested workflow: ${input.intent.trim()}${/[.!?]$/.test(input.intent.trim()) ? "" : "."}` : "Build the custom hook for the user's idea and prepare its launch on Robinhood.",
+    input?.intent ? `Requested workflow: ${input.intent.trim()}${/[.!?]$/.test(input.intent.trim()) ? "" : "."}` : "Build the custom hook for the user's idea and prepare its launch on the selected chain.",
     "Read live capabilities before a write, preserve exact request bytes and idempotency keys on retries, and distinguish submission, review, deployment and public availability. Wallet signing remains a separate action.",
   ].join("\n\n");
 }
