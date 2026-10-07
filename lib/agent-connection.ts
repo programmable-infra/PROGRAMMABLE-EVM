@@ -82,6 +82,17 @@ export const PROGRAMMABLE_AGENT_ENTRY = Object.freeze({
       website: "https://programmable.market/launch/modules",
       transactionAuthority: "connected-wallet",
     },
+    foundationModuleLaunch: {
+      chainIds: [1, 4663],
+      availability: {
+        ethereum: "https://programmable.market/api/module-foundation?chainId=1",
+        robinhood: "https://programmable.market/api/module-foundation?chainId=4663",
+      },
+      website: "https://programmable.market/launch/modules",
+      indexingGuide: "https://programmable.market/docs/developers/foundation-indexing",
+      sourceIdentity: "Use the selected chain's active catalog and exact launch receipt. The token address identifies the coin; module names do not determine indexing.",
+      transactionAuthority: "connected-wallet",
+    },
     moduleIndexing: {
       chainId: 4663,
       authenticationRequired: false,
@@ -112,6 +123,7 @@ export function buildAgentInstructions(input?: { scopes?: readonly string[]; wal
     "Read live capabilities before a write, preserve exact request bytes and idempotency keys on retries, and distinguish submission, review, deployment and public availability. Wallet signing remains a separate action.",
     "For API health use https://api.programmable.market/readyz and the selected chain's capabilities/readiness. The legacy website /api/ops/health response does not describe current Custom Launch API availability.",
     "For Robinhood plans request Programmable-Launch-Response-Version: 1.2, honor Retry-After on 429/503 and follow the server's continuation. An expired plan needs the documented replan_required flow and a fresh deadline; never reuse an expired wallet permit.",
+    "For a Robinhood hook and pool using an existing token, include that token as an exact-source component with a useExisting action and current runtime evidence. Set publication.primaryComponentId to that token component and publication.primaryMarketId to its pool. This retains the existing token address as the public coin identity; the stamp identifies the verified launch and does not imply the token was newly deployed.",
   ].join("\n\n");
 }
 
