@@ -1,3 +1,6 @@
+import { parseSwapTokenDescriptor } from "@/lib/swap/client";
+import { ETHEREUM_MODULE_SOURCE } from "@/lib/module-foundation/ethereum-release";
+import ethereumModuleSpec from "@/contracts/spec/module-foundation/chain-1.v1.json";
 import { describe, expect, it, vi } from "vitest";
 import { brotliDecompressSync } from "node:zlib";
 import { getAddress } from "viem";
@@ -42,6 +45,41 @@ function nativeFixture(v2 = false) {
 }
 
 describe("swap source resolution", () => {
+  it.each(["v1", "v2", "v3"])("routes finalized Foundation %s launches to their original module controls", async factoryVersion => {
+    const row = { ...nativeFixture().row, sourceKind: "module-foundation-v1", factoryVersion,
+      routerAddress: null, stampHash: null, sourceAddress: a(101), sourceReleaseDigest: h(201),
+      feeLedgerAddress: a(102), poolManager: a(103), quoteAsset: a(104),
+      launchId: h(301), poolId: h(301), metadataHash: h(302), compositionHash: h(303), decimals: 18,
+    } as RobinhoodLaunch;
+    const deps = dependencies(row);
+    const result = await resolveSwapToken({ address: row.tokenAddress, chainId: 4663 }, deps);
+    expect(result).toMatchObject({ status: "ready", route: { kind: "module-foundation", transactionHash: row.transactionHash },
+      manageHref: `/modules/${row.tokenAddress.toLowerCase()}` });
+    expect(parseSwapTokenDescriptor(result, { address: row.tokenAddress, chainId: 4663 })).toEqual(result);
+    expect(deps.custom).not.toHaveBeenCalled();
+    expect(deps.native).not.toHaveBeenCalled();
+    expect(() => parseSwapTokenDescriptor({ ...result, manageHref: `/modules/${a(900)}` }, { address: row.tokenAddress })).toThrow("controls link");
+    expect(() => parseSwapTokenDescriptor({ ...result, route: { kind: "module-foundation", transactionHash: "0x" } }, { address: row.tokenAddress })).toThrow("identity");
+  });
+
+  it("selects Ethereum Foundation controls before generic stamped swaps", async () => {
+    const row = { ...shardRouterTradeEntry, launchTransactionHash: h(101), launchStampProvenance: {
+      ...shardRouterTradeEntry.launchStampProvenance!,
+      routerAddress: ethereumModuleSpec.canonicalStamp.router.address,
+      routeLauncherAddress: ethereumModuleSpec.canonicalStamp.graphFactory.address,
+      blockNumber: ETHEREUM_MODULE_SOURCE.startBlock.toString(),
+      components: [{ kind: "other", scope: "exclusive", runtimeCodeHash: ETHEREUM_MODULE_SOURCE.proxyRuntimeCodeHash },
+        { kind: "token" }, { kind: "hook" }],
+    } } as unknown as CanonicalTokenExploreEntry;
+    const { deps } = nativeFixture();
+    vi.mocked(deps.ethereum).mockResolvedValue({ chainId: 1, status: "ready", token: row } as Awaited<ReturnType<SwapTokenDependencies["ethereum"]>>);
+    const result = await resolveSwapToken({ address: row.tokenAddress, chainId: 1 }, deps);
+    expect(result).toMatchObject({ status: "ready", route: { kind: "module-foundation", transactionHash: h(101) },
+      manageHref: `/modules/${row.tokenAddress.toLowerCase()}?chainId=1` });
+    expect(parseSwapTokenDescriptor(result, { address: row.tokenAddress, chainId: 1 })).toEqual(result);
+    expect(deps.ethereumCustom).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])("uses the exact saved native release with an empty current catalogue (V2=%s)", async v2 => {
     const f = nativeFixture(v2);
     const value = await resolveSwapToken({ address: f.row.tokenAddress }, f.deps);

@@ -4,7 +4,7 @@ import { readRobinhoodToken } from "@/lib/server/robinhood-index/read";
 import { readEthereumToken } from "@/lib/server/ethereum-explore";
 import { readModuleModeAvailability } from "@/lib/server/module-mode/catalog";
 import { readModuleEngineAvailability } from "@/lib/server/module-engine/catalog";
-import { isRobinhoodNativeModuleLaunch, isRobinhoodEngineLaunch, robinhoodModuleManageHref, type RobinhoodLaunch } from "@/lib/robinhood-launches";
+import { isRobinhoodFoundationLaunch, isRobinhoodNativeModuleLaunch, isRobinhoodEngineLaunch, robinhoodModuleManageHref, type RobinhoodLaunch } from "@/lib/robinhood-launches";
 import { isModuleEngineSharedQuoteRelease } from "@/lib/module-engine/profile";
 import { resolveProjectionAddress } from "@/lib/custom-launch/launch-projection-v1";
 import { readCustomV4SwapDescriptor } from "./custom-v4";
@@ -13,6 +13,7 @@ import { resolveServerBoundRouterTradeAdapterV1 } from "@/lib/server/custom-laun
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
 import { readRobinhoodSwapDecimals } from "./token-metadata";
 import { SWAP_TOKEN_SCHEMA, SwapUnavailableError, type SwapChainId, type SwapTokenDescriptor } from "@/lib/swap/types";
+import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
 import { ethereumStampedSwapRoute } from "@/lib/swap/ethereum-stamped";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
@@ -53,6 +54,10 @@ export async function resolveSwapToken(input: { address: string; chainId?: SwapC
     const row = result.token;
     if (row.tokenAddress.toLowerCase() !== address.toLowerCase()) throw new SwapUnavailableError("Enter the coin’s token address, rather than one of its supporting contracts.", "NOT_PRIMARY_TOKEN");
     const base = { schemaVersion: SWAP_TOKEN_SCHEMA, chainId: 1 as const, token: tokenMetadata(row), manageHref: null };
+    if (isEthereumModuleLaunchCandidate(row) && row.launchTransactionHash) {
+      return { ...base, status: "ready", manageHref: `/modules/${address.toLowerCase()}?chainId=1`,
+        route: { kind: "module-foundation", transactionHash: row.launchTransactionHash as `0x${string}` } };
+    }
     if (row.launchStampProvenance) {
       const adapter = await dependencies.ethereumCustom(row);
       const market = adapter?.project.markets.find(item => item.marketId === adapter.market.marketId);
@@ -89,6 +94,9 @@ export async function resolveSwapToken(input: { address: string; chainId?: SwapC
 async function resolveRobinhoodSwapToken(row: RobinhoodLaunch, dependencies: SwapTokenDependencies): Promise<SwapTokenDescriptor> {
   const decimals = row.decimals ?? await dependencies.decimals(row.tokenAddress);
   const base = { schemaVersion: SWAP_TOKEN_SCHEMA, chainId: 4663 as const, token: tokenMetadata({ ...row, decimals }), manageHref: robinhoodModuleManageHref(row) };
+  if (isRobinhoodFoundationLaunch(row)) {
+    return { ...base, status: "ready", route: { kind: "module-foundation", transactionHash: row.transactionHash as `0x${string}` } };
+  }
   if (isRobinhoodNativeModuleLaunch(row)) {
     const availability = await dependencies.native(row.sourceReleaseDigest);
     if (!availability.release || availability.release.releaseDigest.toLowerCase() !== row.sourceReleaseDigest.toLowerCase()) return unavailable(base, "This coin’s original module version is temporarily unavailable. Try again.");

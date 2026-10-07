@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { ArrowUpRight, Check, LoaderCircle, RefreshCw, Settings2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { formatUnits, isAddress, type Hex } from "viem";
@@ -14,6 +15,8 @@ import { runSwapFlow } from "./swap-flow";
 import { TradeWalletButton } from "./responsive-trade-panel";
 import { TradeAssetBadge } from "./trade-asset-badge";
 import styles from "./swap-panel.module.css";
+
+const FoundationSwap = dynamic(() => import("./module-foundation-market-host").then(module => module.ModuleFoundationMarketHost));
 
 type PendingView = { key: string; operation: PendingSwap | null; error?: string };
 function message(error: unknown) {
@@ -81,7 +84,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
   const quoteKey = `${assetKey}:${ownerKey}:${side}:${amount}:${slippageBps}:${revision}`;
   const review = quotation?.key === quoteKey ? quotation.review : undefined;
   const quoteError = quotation?.key === quoteKey ? quotation.error : undefined;
-  const canQuote = descriptor?.status === "ready" && connected && correctNetwork && parsed !== null && !insufficient && !pending && !pendingError && pendingLoaded;
+  const canQuote = descriptor?.status === "ready" && descriptor.route.kind !== "module-foundation" && connected && correctNetwork && parsed !== null && !insufficient && !pending && !pendingError && pendingLoaded;
   const quoting = canQuote && !review && !quoteError && !busy;
   const ticker = descriptor?.token.symbol || tokenSymbol || "Coin";
   const inputSymbol = side === "buy" ? "ETH" : ticker;
@@ -249,18 +252,15 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
   const disabled = Boolean(busy || walletBusy || pending || pendingError || !pendingLoaded
     || (connected && correctNetwork && (!review || insufficient || descriptor?.status !== "ready")));
 
-  return <div className={embedded ? styles.embedded : styles.page}>
-    <section className={styles.card} aria-label={embedded ? `Trade ${ticker}` : "Swap"}>
-      {!embedded ? <header className={styles.heading}>
+  const heading = !embedded ? <header className={styles.heading}>
         <h1>Swap</h1>
         <label className={styles.network}><span className="sr-only">Network</span>
           <select value={chainId} disabled={locked} onChange={event => edit(() => { setChainId(Number(event.target.value) as SwapChainId); setAmount(""); })}>
             <option value={4663}>Robinhood</option><option value={1}>Ethereum</option>
           </select>
         </label>
-      </header> : null}
-      <form onSubmit={event => { event.preventDefault(); void act(); }}>
-        {!embedded ? <>
+      </header> : null;
+  const coinPicker = !embedded ? <>
           <label htmlFor={`${id}-token`} className={styles.addressLabel}>Coin address</label>
           <div className={styles.addressField}>
             <input ref={addressRef} id={`${id}-token`} value={address} onChange={event => edit(() => { setAddress(event.target.value); setAmount(""); })}
@@ -274,7 +274,20 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
               : address.trim() && !validAddress ? "Enter a complete token contract address."
                 : validAddress && !currentAsset ? <><LoaderCircle size={14} aria-hidden="true" className={styles.spin} />Finding your coin…</> : null}
           </div>
-        </> : null}
+        </> : null;
+  if (descriptor?.status === "ready" && descriptor.route.kind === "module-foundation") {
+    return <div className={embedded ? styles.embedded : styles.page}>
+      {!embedded ? <section className={styles.card} aria-label="Swap">{heading}{coinPicker}</section> : null}
+      <FoundationSwap key={assetKey} tradeOnly chainId={chainId} token={descriptor.token.address}
+        transactionHash={descriptor.route.transactionHash} initialName={descriptor.token.name} />
+    </div>;
+  }
+
+  return <div className={embedded ? styles.embedded : styles.page}>
+    <section className={styles.card} aria-label={embedded ? `Trade ${ticker}` : "Swap"}>
+      {heading}
+      <form onSubmit={event => { event.preventDefault(); void act(); }}>
+        {coinPicker}
         <div className={styles.sides} role="group" aria-label="Trade direction">
           {(["buy", "sell"] as const).map(value => <button key={value} type="button" aria-pressed={side === value} disabled={locked}
             onClick={() => edit(() => { setSide(value); setAmount(""); })}>{value === "buy" ? "Buy" : "Sell"}</button>)}
