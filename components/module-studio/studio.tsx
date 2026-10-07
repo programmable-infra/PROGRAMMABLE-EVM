@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
-import { ArrowRight, Check, ChevronDown, ImagePlus, Plus, Waves, X } from "lucide-react";
-import type { FoundationModuleDescriptor, FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
+import { ArrowLeft, ArrowRight, Check, ChevronDown, ImagePlus, Plus, Waves, X } from "lucide-react";
+import { foundationConfigurationError, type FoundationModuleDescriptor, type FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
 import { foundationStudioModules, foundationStudioSelection, type FoundationStudioCategory, type FoundationStudioDraft } from "@/lib/module-foundation/studio";
 import { FOUNDATION_DEFAULT_IMAGE } from "@/lib/module-foundation/default-image";
 import { MAX_OTHER_LINKS, type ModuleSocialKind } from "@/lib/module-mode/token-metadata";
@@ -67,8 +67,12 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
   const addOtherLink = useRef<HTMLButtonElement>(null);
   useEffect(() => { if (pickerOpen && picker.current && !picker.current.open) picker.current.showModal(); }, [pickerOpen]);
   const errorSignature = Object.entries(errors).filter(([, value]) => value).map(([key, value]) => `${key}:${value}`).sort().join("|");
+  const invalidModule = draft.modules.find(item => {
+    const descriptor = catalog.find(module => module.id === item.id);
+    return !descriptor?.available || descriptor.fields.some(field => foundationConfigurationError(field, item.configuration[field.key]));
+  });
   const errorPanel = Object.keys(errors).some(key => ["name", "symbol", "description", "image", "initialBuy", "creatorFeeBps"].includes(key) || key.startsWith("social-")) ? "coin"
-    : errors.quoteAsset || errors.quoteValuation ? "quote" : errors.modules ? draft.modules[0]?.id ?? "modules" : undefined;
+    : errors.quoteAsset || errors.quoteValuation ? "quote" : errors.modules ? invalidModule?.id ?? draft.modules[0]?.id ?? "modules" : undefined;
   const panel = errorPanel && errorSignature !== handledErrors ? errorPanel : chosenPanel;
   const activeMobilePanel = errorPanel && errorSignature !== handledErrors ? "settings" : mobilePanel;
   // Keep the revealed panel when typing clears validation. Otherwise mobile
@@ -149,6 +153,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
       </section>
 
       <aside className={styles.inspector} aria-label="Coin and module settings">
+        {panel !== "coin" ? <button type="button" className={styles.inspectorBack} onClick={() => focusPanel("coin")}><ArrowLeft size={16} /> Back to coin details</button> : null}
         <div className={styles.panelHeading}><h2>{panel === "coin" ? "Coin details" : panel === "quote" ? "Any Quote Pool" : panel === "fees" ? "Creator fees" : panel === "modules" ? "Selected modules" : selected?.name ?? "Settings"}</h2></div>
         <div className={styles.inspectorContent} key={panel}>
           {panel === "coin" ? <>
@@ -161,6 +166,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
               {draft.quoteValuation !== undefined ? <p className={styles.settingStatus}>First buy is unavailable with a custom starting value.</p> : null}
               <StudioField id="foundation-creator-fee-inline" label="Creator fees · %" error={errors.creatorFeeBps}><input id="foundation-creator-fee-inline" name="creatorFeeBps" type="number" min={0} max={10} step={1} value={draft.creatorFeeBps / 100} aria-invalid={Boolean(errors.creatorFeeBps) || undefined} aria-describedby={errors.creatorFeeBps ? "foundation-creator-fee-inline-error" : undefined} onChange={event => props.onUpdate("creatorFeeBps", Number(event.target.value) * 100)} /></StudioField>
               </div>
+              {draft.quoteValuation === undefined ? <p className={styles.settingStatus}>Optional. Enter 0 to launch without a first buy.</p> : null}
             </section>
             {field("description", "Description", "About your coin", 280)}
             <StudioDetails title="Links" forceOpen={Object.keys(errors).some(key => key.startsWith("social-"))}>{(["website", "twitter", "telegram"] as const).map(key => <StudioField key={key} id={`foundation-social-${key}`} label={key === "twitter" ? "X" : key === "website" ? "Website" : "Telegram"} error={errors[`social-${key}`]}><input id={`foundation-social-${key}`} name={key} inputMode={key === "website" ? "url" : "text"} autoComplete="off" autoCapitalize="none" spellCheck={false} value={draft.socialLinks[key] ?? ""} aria-invalid={Boolean(errors[`social-${key}`]) || undefined} aria-describedby={errors[`social-${key}`] ? `foundation-social-${key}-error` : undefined} placeholder={key === "website" ? "example.com" : "@username or link"} onChange={event => updateSocial(key, event.target.value)} onBlur={event => { const value = normalizeFoundationSocialInput(key, event.target.value); if (value !== event.target.value) updateSocial(key, value); }} /></StudioField>)}
@@ -201,7 +207,12 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
             }} /></div>)}
             <StudioDetails title="Details">{selected.fields.map(configField => configField.description ? <p key={configField.key}><strong>{configField.label}</strong><br />{configField.description}</p> : null)}</StudioDetails>
             {blockedReason(selected) ? <div className={styles.error}>{blockedReason(selected)}</div> : null}{errors.modules ? <div className={styles.error}>{errors.modules}</div> : null}
-          </> : null}
+          </> : selection ? <p className={styles.error}>This module is no longer available. Remove it and choose a current module.</p> : null}
+          {selection ? <button type="button" className={styles.inspectorBack} onClick={() => {
+            setSavedConfigurations(current => ({ ...current, [selection.id]: selection.configuration }));
+            props.onUpdate("modules", draft.modules.filter(item => item.id !== selection.id));
+            focusPanel(nextPanel(selection.id));
+          }}><X size={16} /> Remove {selected?.name ?? "module"}</button> : null}
         </div>
         <div className={styles.inspectorAction}>
           <button type="submit" className={styles.launch} disabled={props.actionDisabled || disabled} aria-busy={props.busy}>{props.actionLabel}<ArrowRight size={19} /></button>

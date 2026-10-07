@@ -25,6 +25,7 @@ import { PlugsConnectedIcon } from "@phosphor-icons/react/dist/csr/PlugsConnecte
 import styles from "./module-foundation-ui.module.css";
 import { FoundationStudio } from "./module-studio/studio";
 import type { FoundationStudioDraft } from "@/lib/module-foundation/studio";
+import { clearFoundationLaunchDraft, readFoundationLaunchDraft, rememberFoundationLaunchDraft } from "@/lib/module-foundation/launch-draft";
 
 type EditableDraft = FoundationStudioDraft;
 type LocalImage = { blob: Blob; preview: string; sha256: Hex };
@@ -54,6 +55,8 @@ export interface ModuleFoundationBuilderProps {
   onRetryAvailability?: () => void;
   walletAction?: FoundationWalletAction;
   initialDraft?: Partial<FoundationLaunchDraft>;
+  /** Keep editable fields and image bytes across navigation in this browser tab. */
+  persistDraft?: boolean;
   suggestedInitialBuy?: string;
   launchProgress?: string;
   /** Host-owned durable wallet operation guard, including uncertain submissions. */
@@ -86,15 +89,17 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
     initialBuy: initial?.initialBuy ?? "", ...(initial?.quoteValuation !== undefined ? { quoteValuation: initial.quoteValuation } : {}), additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
-export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
-  const [draft, setDraft] = useState<EditableDraft>(() => initialForm(initialDraft, quoteAssets, availability.chainId));
-  const [buyEdited, setBuyEdited] = useState(initialDraft?.initialBuy !== undefined);
+export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, persistDraft = false, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
+  const [restored] = useState(() => persistDraft && !initialDraft ? readFoundationLaunchDraft(availability.chainId) : null);
+  const [draft, setDraft] = useState<EditableDraft>(() => restored?.draft ?? initialForm(initialDraft, quoteAssets, availability.chainId));
+  const [buyEdited, setBuyEdited] = useState(restored?.buyEdited ?? (initialDraft?.initialBuy !== undefined));
   const initialBuy = draft.quoteValuation !== undefined ? "0" : buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
   const [localImage, setLocalImage] = useState<LocalImage | null>(null);
+  const [imageRestored, setImageRestored] = useState(!restored?.localImage);
   const [imagePreparing, setImagePreparing] = useState(false);
   const [imageError, setImageError] = useState("");
   const [quoteLookup, setQuoteLookup] = useState<{ address: string; status: "checking" | "resolved" | "error"; contextKey: string; asset?: FoundationQuoteAsset; message?: string } | null>(null);
-  const [customQuote, setCustomQuote] = useState(Boolean(initialDraft?.quoteAsset && !quoteAssets.some(asset => asset.supportsNativeEth && asset.address.toLowerCase() === initialDraft.quoteAsset?.toLowerCase())));
+  const [customQuote, setCustomQuote] = useState(restored?.customQuote ?? Boolean(initialDraft?.quoteAsset && initialDraft.quoteAsset.toLowerCase() !== foundationChainProfile(availability.chainId).wrappedEth.address.toLowerCase() && !quoteAssets.some(asset => asset.supportsNativeEth && asset.address.toLowerCase() === initialDraft.quoteAsset?.toLowerCase())));
   const [modulePickerView, setModulePickerView] = useState<"modules" | "quote" | null>(null);
   const [phase, setPhase] = useState<Phase>("editing");
   const [errors, setErrors] = useState<Errors>({});
@@ -122,6 +127,20 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const selectedImage = useRef(localImage);
   const imageUpload = useRef<{ key: string; promise: Promise<FoundationImage> } | null>(null);
   const [warmRetry, setWarmRetry] = useState(0);
+  useEffect(() => {
+    if (!restored?.localImage) return;
+    const preview = URL.createObjectURL(restored.localImage.blob);
+    // The browser URL must be allocated after commit and revoked on unmount, including Strict Mode cleanup.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLocalImage({ ...restored.localImage, preview });
+    setImageRestored(true);
+    return () => URL.revokeObjectURL(preview);
+  }, [restored]);
+  useEffect(() => {
+    if (!persistDraft || !imageRestored) return;
+    if (phase === "result" && result?.status !== "reverted") clearFoundationLaunchDraft(availability.chainId);
+    else rememberFoundationLaunchDraft(availability.chainId, { draft, buyEdited, customQuote, localImage });
+  }, [persistDraft, imageRestored, availability.chainId, draft, buyEdited, customQuote, localImage, phase, result]);
   useLayoutEffect(() => {
     if (currentContext.current !== contextKey) {
       quoteGeneration.current += 1; pendingQuote.current = null;
@@ -243,7 +262,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (draft.image && !isFoundationDefaultImage(draft.image) && !isProgrammableTokenImageUrl(draft.image.url)) next.image = "Choose an image to save with this launch.";
     if (!selectedQuote?.supported || selectedQuote.chainId !== availability.chainId || (!customQuote && !selectedQuote.supportsNativeEth)) next.quoteAsset = selectedQuote?.reason ?? (customQuote ? /^0x[0-9a-fA-F]{40}$/.test(quoteAddress) ? "This token could not be verified. Try launching again." : `Enter a token contract address on ${availability.chainName}.` : "ETH pairing could not be verified. Try again.");
     if (!isFoundationCreatorFee(draft.creatorFeeBps)) next.creatorFeeBps = "Choose a whole percentage from 0% to 10%.";
-    const buyError = foundationDecimalError(buyAmount, 18, draft.quoteValuation !== undefined);
+    const buyError = foundationDecimalError(buyAmount, 18);
     if (buyError) next.initialBuy = buyError;
     if (draft.quoteValuation !== undefined) {
       const priceError = foundationDecimalError(draft.quoteValuation, selectedQuote?.decimals ?? 18, false);

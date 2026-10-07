@@ -38,6 +38,7 @@ import styles from "./module-foundation-ui.module.css";
 import studioStyles from "./module-studio/studio.module.css";
 import { StudioAtmosphere } from "./module-studio/studio-atmosphere";
 import { ChainMark } from "./chain-mark";
+import { clearFoundationLaunchDraft } from "@/lib/module-foundation/launch-draft";
 
 /** A saved result is only a locator; recover its exact launch from current authority and canonical chain evidence. */
 export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, saved: FoundationResolution, signal?: AbortSignal) {
@@ -228,6 +229,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
     if (!outcome.receipt || outcome.receipt.status !== "success" || outcome.sequence.kind !== "launch"
       || outcome.sequence.steps[outcome.stepIndex].kind !== "launch") return outcome.result;
     const sequence = outcome.sequence;
+    clearFoundationLaunchDraft(chainId);
     try {
       const verified = await verifyFoundationLaunchReceipt({ client: session.client, binding: sequence.binding, transactionHash: outcome.result.transactionHash,
         expected: { transaction: sequence.steps[outcome.stepIndex].transaction, parameters: sequence.parameters, result: sequence.result, metadataHash: sequence.metadataHash } });
@@ -259,7 +261,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
     </> : null;
   return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
     {layout !== "studio" && previousLaunchAction ? <div className={`${styles.page} ${styles.sessionStatus}`}>{previousLaunchAction}</div> : null}
-    <ModuleFoundationBuilder key={`${chainId}:${session.resultGeneration}`} layout={layout} networkControl={
+    <ModuleFoundationBuilder key={`${chainId}:${session.resultGeneration}`} persistDraft layout={layout} networkControl={
       <fieldset className={styles.networkChoice} disabled={Boolean(session.progress) || launchBusy || changingNetwork} aria-busy={changingNetwork}>
         <legend className="sr-only">Launch network</legend>
         {([{ id: 4663, name: "Robinhood" }, { id: 1, name: "Ethereum" }] as const).map(network =>

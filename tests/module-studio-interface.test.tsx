@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { ModuleFoundationBuilder } from "@/components/module-foundation-builder";
+import { FoundationStudio } from "@/components/module-studio/studio";
 import type { FoundationAvailability, FoundationModuleDescriptor } from "@/lib/module-foundation/ui-types";
 
 const actions = { onUploadImage: vi.fn(), onPrepareLaunch: vi.fn(), onConfirmLaunch: vi.fn() };
@@ -11,6 +12,24 @@ const render = (availability: FoundationAvailability, catalog: FoundationModuleD
   layout="studio" contextKey="studio-test" availability={availability} catalog={catalog} quoteAssets={[quote]} onResolveQuote={vi.fn()} {...actions} />);
 
 describe("Module Studio interface", () => {
+  it("opens the invalid module and marks malformed input instead of selecting the first valid module", () => {
+    const invalid = { ...descriptor, id: "invalid", name: "Reference module", fields: [
+      { key: "pool", label: "Reference pool", kind: "address" as const, required: true },
+    ] };
+    const html = renderToStaticMarkup(<FoundationStudio
+      draft={{ name: "Coin", symbol: "COIN", description: "", image: null, socialLinks: {}, quoteAsset: "", creatorFeeBps: 0,
+        initialBuy: "0", additionalLiquidity: "0", modules: [
+          { id: descriptor.id, version: descriptor.version, digest: descriptor.digest, configuration: {} },
+          { id: invalid.id, version: invalid.version, digest: invalid.digest, configuration: { pool: "bad-address" } },
+        ] }} catalog={[descriptor, invalid]} quoteSymbol="ETH" initialBuy="0" actionLabel="Launch coin"
+      errors={{ modules: "Enter a valid address for Reference pool." }} customQuote={false} canResolveQuote={false}
+      onUpdate={vi.fn()} onChooseImage={vi.fn()} onRemoveImage={vi.fn()} onQuoteChange={vi.fn()}
+      onDefaultQuote={vi.fn()} onEnableQuote={vi.fn()} onSubmit={vi.fn()} />);
+    expect(html).toContain("<h2>Reference module</h2>");
+    expect(html).toMatch(/id="foundation-module-invalid-pool"[^>]*aria-invalid="true"/);
+    expect(html).toContain("Back to coin details");
+    expect(html).toContain("Remove Reference module");
+  });
   it("distinguishes loading, failed loading and an empty verified catalog", () => {
     const availability = { chainId: 4663, chainName: "Robinhood Chain" };
     expect(render({ ...availability, status: "checking" })).toContain("Loading modules…");
