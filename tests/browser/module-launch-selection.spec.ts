@@ -436,3 +436,23 @@ test.describe("Module Studio", () => {
     expect(errors).toEqual([]);
   });
 });
+
+for (const [width, chainId] of [[1440, 1], [390, 1], [1440, 4663], [390, 4663]]) {
+  test(`wallet recovery unlocks the saved draft on ${chainId} at ${width}px`, async ({ page }) => {
+    const studio = await createModuleStudioServer(); studio.listen(0, "127.0.0.1"); await once(studio, "listening");
+    const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
+    try {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto(`http://127.0.0.1:${address.port}/?mode=pending-recovery&chainId=${chainId}`);
+      if (width < 700) await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Launch coin", exact: true })).toBeDisabled();
+      await expect(page.getByRole("button", { name: "Check wallet activity", exact: true })).toBeVisible();
+      expect(await page.locator("form form").count()).toBe(0);
+      await page.getByRole("button", { name: "Check wallet activity", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Launch coin", exact: true })).toBeEnabled();
+      await expect(page.getByLabel("Name", { exact: true })).toHaveValue("BRUNO");
+      await expect(page.getByLabel("Ticker", { exact: true })).toHaveValue("BRUNO");
+      await expect(page.getByLabel("First buy · ETH", { exact: true })).toHaveValue("0");
+    } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
+  });
+}

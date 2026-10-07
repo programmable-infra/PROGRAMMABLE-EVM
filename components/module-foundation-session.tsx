@@ -10,7 +10,7 @@ import { createFoundationClient } from "@/lib/module-foundation/client";
 import { fetchFoundationAvailability, FoundationProviderDisagreementError, type FoundationAvailabilityEnvelope } from "@/lib/module-foundation/availability";
 import { bindFoundationCatalogV1 } from "@/lib/module-foundation/catalog";
 import { readFoundationLaunchDisplay, rememberFoundationLaunchDisplay, subscribeFoundationLaunchDisplay } from "@/lib/module-foundation/launch-display-cache";
-import { bindFoundationWalletStep, FOUNDATION_PENDING_EVENT, readFoundationPending, reconcileFoundationPending,
+import { bindFoundationWalletStep, FOUNDATION_PENDING_EVENT, readFoundationPending, reconcileFoundationPending, recoverFoundationPending,
   submitFoundationWalletStep, type FoundationPreparedSequence } from "@/lib/module-foundation/wallet";
 import { acknowledgeFoundationResolution, FOUNDATION_RESOLUTION_EVENT, readFoundationResolution,
   type FoundationResolution } from "@/lib/module-foundation/result-store";
@@ -92,9 +92,9 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
   }, [pending]);
   useEffect(() => {
     // An active submission already waits for its receipt. Recovery is for interrupted or reloaded sessions.
-    if (!account || !pendingTransactionHash || progress || requestPending || executing.current) return;
+    if (!account || pending === "null" || pending === "unreadable" || progress || requestPending || executing.current) return;
     const start = () => watchFoundationRecovery({
-      reconcile: () => reconcileFoundationPending(client, account, pendingTransactionHash),
+      reconcile: () => recoverFoundationPending(client, account),
       visible: () => document.visibilityState === "visible",
     });
     let stop = start();
@@ -181,7 +181,7 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
     label: walletStep === "connect" ? "Connect wallet" : `Switch to ${profile.name}`, busy: walletBusy,
     onClick: walletStep === "connect" ? openWallet : () => switchModuleModeNetwork(switchNetwork, chainId),
   };
-  const preparationBlocked = pending !== "null" ? "A previous wallet operation needs confirmation before you continue."
+  const preparationBlocked = pending !== "null" ? "Checking your previous wallet transaction. Your coin details are saved."
     : resolutionState === "unreadable" ? "The saved transaction result could not be read. Check wallet activity before continuing."
     : (chainId === 4663 && savedLegacy.blocked) ? "A previous Module Mode operation needs recovery before you continue."
       : requestPending ? "Complete the open wallet request before continuing." : undefined;
@@ -200,7 +200,7 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
         const step = sequence.steps[index];
         if (mounted.current) setProgress(sequence.kind === "launch" ? "Confirm in your wallet…" : `Step ${index + 1} of ${sequence.steps.length}: ${step.label}`);
         const preparation = bindFoundationWalletStep({ client, sequence, index, resolveAuthority, resolveCatalog });
-        const hash = await submitFoundationWalletStep(preparation, sendModuleModeTransaction);
+        const hash = await submitFoundationWalletStep(preparation, sendModuleModeTransaction, true);
         if (mounted.current) setProgress(sequence.kind === "launch" ? "Creating your coin…" : "Waiting for confirmation…");
         const outcome: FoundationExecutionResult = { sequence, stepIndex: index,
           result: { status: "submitted", transactionHash: hash, explorerUrl: `${profile.explorer}/tx/${hash}`,
@@ -264,9 +264,9 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
     retryAvailability: () => setRefresh(value => value + 1) };
 }
 
-export function FoundationSessionStatus({ session, editingNewLaunch = false, showProgress = true, hideSuccessfulLaunch = false, hideSuccessfulTrade = false }: {
+export function FoundationSessionStatus({ session, editingNewLaunch = false, showProgress = true, hideSuccessfulLaunch = false, hideSuccessfulTrade = false, inline = false }: {
   session: ReturnType<typeof useFoundationSession>; editingNewLaunch?: boolean; showProgress?: boolean;
-  hideSuccessfulLaunch?: boolean; hideSuccessfulTrade?: boolean;
+  hideSuccessfulLaunch?: boolean; hideSuccessfulTrade?: boolean; inline?: boolean;
 }) {
   const [hash, setHash] = useState(""); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
   const recovery = session.pending !== "null";
@@ -277,18 +277,26 @@ export function FoundationSessionStatus({ session, editingNewLaunch = false, sho
   const resolved = hideResolved ? null : saved;
   if (!showProgress && session.progress) return null;
   if (!session.progress && !recovery && (session.resolutionState === "null" || hideResolved) && !message) return null;
-  return <div className={`${styles.page} ${styles.sessionStatus}`}>
+  const check = () => {
+    if (busy || !session.account) return;
+    setBusy(true); setMessage("");
+    void recoverFoundationPending(session.client, session.account, hash.trim() ? hash.trim() as Hex : undefined)
+      .then(() => setMessage(""))
+      .catch(error => setMessage(error instanceof Error ? error.message : "Wallet activity could not be checked. Try again."))
+      .finally(() => setBusy(false));
+  };
+  return <div className={inline ? styles.inlineRecovery : `${styles.page} ${styles.sessionStatus}`}>
     {showProgress && session.progress ? <p role="status">{session.progress}</p> : null}
     {!session.progress && resolved ? <details className={styles.savedResult} open={!editingNewLaunch} aria-label="Saved transaction result"><summary>{editingNewLaunch
-      ? resolved.status === "success" ? "Previous transaction confirmed" : "Previous transaction reverted"
-      : resolved.status === "success" ? "Your transaction is confirmed" : "Your transaction reverted"}</summary>
+      ? resolved.status === "success" ? "Previous transaction confirmed" : resolved.status === "replaced" ? "Previous transaction replaced" : "Previous transaction reverted"
+      : resolved.status === "success" ? "Your transaction is confirmed" : resolved.status === "replaced" ? "Your transaction was replaced" : "Your transaction reverted"}</summary>
       <p>{resolved.status === "success" && resolved.metadata?.stepKind === "wrap"
         ? "Your ETH was converted to WETH and is in your wallet. Review the launch again to continue; the converted amount will be used first."
         : resolved.status === "success" && resolved.metadata?.stepKind === "approve"
         ? "The approval is confirmed. Review the remaining operation with current balances before continuing."
         : resolved.status === "success" ? editingNewLaunch ? "You can configure a new coin below. Your previous transaction is available here."
           : `Your ${resolved.metadata?.stepKind === "launch" ? "launch" : "transaction"} is saved at block ${resolved.blockNumber}. You can return to its details after reloading this page.`
-          : "The request did not complete. Network gas may have been charged."}</p>
+          : resolved.status === "replaced" ? "Your wallet cancelled or replaced the previous request. You can continue with your coin details below." : "The request did not complete. Network gas may have been charged."}</p>
       <p><a href={`${foundationChainProfile(foundationBindingChainId(resolved)).explorer}/tx/${resolved.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a>
         {resolved.status === "success" && resolved.metadata?.stepKind === "launch" && resolved.metadata.token
           ? <> · <a href={`/modules/${resolved.metadata.token}?${foundationBindingChainId(resolved) === 1 ? "chainId=1&" : ""}transaction=${resolved.transactionHash}`}>View Coin</a></> : null}</p>
@@ -299,20 +307,17 @@ export function FoundationSessionStatus({ session, editingNewLaunch = false, sho
       }}>{busy ? "Continuing…" : editingNewLaunch ? "Dismiss" : resolved.status === "success" && resolved.metadata?.stepKind === "launch" ? "Create another coin" : "Continue"}</button> : null}
     </details> : null}
     {session.resolutionState === "unreadable" ? <p role="alert">The saved transaction result could not be read. Check wallet activity before continuing.</p> : null}
-    {recovery && !session.progress ? <details className={styles.savedResult} open={!session.pendingTransactionHash} aria-label="Recover wallet operation">
-      <summary>{session.pendingTransactionHash ? "Waiting for transaction confirmation" : "Finish your previous transaction"}</summary>
-      <p>{session.pendingTransactionHash ? "Confirmation is checked automatically. You can also view the transaction in your wallet."
-        : "Your wallet did not return a transaction hash. Paste it from your wallet activity to continue."}</p>
+    {recovery && !session.progress ? <details className={styles.savedResult} open aria-label="Recover wallet operation">
+      <summary>{session.pendingTransactionHash ? "Waiting for transaction confirmation" : "Check previous wallet transaction"}</summary>
+      <p>{session.pendingTransactionHash ? "Confirmation is checked automatically, including transactions sped up in your wallet."
+        : "We are checking your wallet activity. If the request is still open in your wallet, confirm or cancel it there."}</p>
       {session.pendingTransactionHash ? <p><a href={`${session.profile.explorer}/tx/${session.pendingTransactionHash}`} target="_blank" rel="noreferrer">View transaction</a></p> : null}
-      <form className={styles.field} onSubmit={event => { event.preventDefault(); if (busy || !session.account) return; setBusy(true); setMessage("");
-        void reconcileFoundationPending(session.client, session.account, hash.trim() ? hash.trim() as Hex : undefined)
-          .then(() => setMessage(""))
-          .catch(() => setMessage("This transaction could not be confirmed yet. Check the hash and try again."))
-          .finally(() => setBusy(false)); }}>
-        {!session.pendingTransactionHash ? <><label htmlFor="foundation-recovery-hash">Transaction hash</label>
-          <input id="foundation-recovery-hash" value={hash} onChange={event => setHash(event.target.value)} placeholder="0x…" autoComplete="off" required pattern="0x[0-9a-fA-F]{64}" /></> : null}
-        <button type="submit" className={styles.secondaryButton} disabled={busy}>{busy ? "Checking…" : "Check confirmation"}</button>
-      </form></details> : null}
+      <button type="button" className={styles.secondaryButton} onClick={check} disabled={busy}>{busy ? "Checking…" : "Check wallet activity"}</button>
+      {!session.pendingTransactionHash ? <details><summary>Add transaction hash</summary><div className={styles.field}>
+        <label htmlFor="foundation-recovery-hash">Transaction hash (optional)</label>
+        <input id="foundation-recovery-hash" value={hash} onChange={event => setHash(event.target.value)} placeholder="0x…" autoComplete="off" />
+      </div></details> : null}
+    </details> : null}
     {message ? <p role="status">{message}</p> : null}
   </div>;
 }

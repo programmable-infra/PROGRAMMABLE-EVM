@@ -27,7 +27,7 @@ export interface FoundationResolution {
   startBlock: string;
   createdAt: number;
   transactionHash: Hex;
-  status: "success" | "reverted";
+  status: "success" | "reverted" | "replaced";
   blockNumber: string;
   blockHash: Hex;
   resolvedAt: number;
@@ -77,7 +77,7 @@ function parse(value: unknown, account: Address, chainId: FoundationChainId = 46
   if (foundationBindingChainId({ chainId: item.chainId as FoundationChainId | undefined }) !== chainId || item.schemaVersion !== SCHEMA || address(item.account) !== getAddress(account)
     || typeof item.operationId !== "string" || !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(item.operationId)
     || typeof item.value !== "string" || !/^0x[0-9a-f]{1,64}$/i.test(item.value)
-    || (item.status !== "success" && item.status !== "reverted")) return invalid();
+    || (item.status !== "success" && item.status !== "reverted" && item.status !== "replaced")) return invalid();
   const startBlock = quantity(item.startBlock), blockNumber = quantity(item.blockNumber);
   if (BigInt(blockNumber) < BigInt(startBlock)) return invalid();
   const extra = metadata(item.metadata);
@@ -98,15 +98,15 @@ export function readFoundationResolution(account: Address, chainId: FoundationCh
 
 /** Call while holding the wallet's account WebLock, after exact canonical receipt validation and before clearing pending. */
 export function writeFoundationResolution(pending: FoundationPendingOperation, receipt: TransactionReceipt,
-  detail?: FoundationResolutionMetadata): FoundationResolution {
+  detail?: FoundationResolutionMetadata, replaced = false): FoundationResolution {
   const chainId = foundationBindingChainId(pending);
   if (pending.schemaVersion !== "programmable.foundation.pending.v1" || !receipt.to
-    || address(receipt.from) !== address(pending.account) || address(receipt.to) !== address(pending.to)
-    || (pending.transactionHash !== null && hash(pending.transactionHash) !== hash(receipt.transactionHash))) return invalid();
+    || address(receipt.from) !== address(pending.account) || (!replaced && address(receipt.to) !== address(pending.to))
+    || (!replaced && pending.transactionHash !== null && hash(pending.transactionHash) !== hash(receipt.transactionHash))) return invalid();
   const result = parse({ schemaVersion: SCHEMA, ...(pending.chainId === undefined ? {} : { chainId }), account: pending.account, operationId: pending.operationId,
     releaseDigest: pending.releaseDigest, calldataHash: pending.calldataHash, to: pending.to, value: pending.value,
     nonce: pending.nonce, startBlock: pending.startBlock, createdAt: pending.createdAt,
-    transactionHash: receipt.transactionHash, status: receipt.status, blockNumber: receipt.blockNumber.toString(),
+    transactionHash: receipt.transactionHash, status: replaced ? "replaced" : receipt.status, blockNumber: receipt.blockNumber.toString(),
     blockHash: receipt.blockHash, resolvedAt: Date.now(), metadata: detail }, pending.account, chainId);
   const current = readFoundationResolution(result.account, chainId);
   if (current) {

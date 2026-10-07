@@ -2672,6 +2672,11 @@ function PrivyWalletBridge({
                 }
                 return hash;
               };
+              if ("sourceKind" in prepared && prepared.sourceKind === "module-foundation-v1") {
+                const { noteFoundationWalletRequest } = await import("@/lib/module-foundation/wallet");
+                assertCurrentSession();
+                noteFoundationWalletRequest(prepared);
+              }
               if (isEmbeddedWallet) {
                 walletRequestAttempted = true;
                 const result = await sendPrivyTransaction({

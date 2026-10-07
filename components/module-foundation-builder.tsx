@@ -35,6 +35,7 @@ type Errors = Record<string, string>;
 export interface ModuleFoundationBuilderProps {
   layout?: "form" | "studio";
   previousLaunchAction?: ReactNode;
+  recoveryAction?: ReactNode;
   networkControl?: ReactNode;
   availability: FoundationAvailability;
   /** Custody of the currently verified launch factory; unknown while availability loads. */
@@ -89,7 +90,7 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
     initialBuy: initial?.initialBuy ?? "", ...(initial?.quoteValuation !== undefined ? { quoteValuation: initial.quoteValuation } : {}), additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
-export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, persistDraft = false, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
+export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, recoveryAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, persistDraft = false, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
   const [restored] = useState(() => persistDraft && !initialDraft ? readFoundationLaunchDraft(availability.chainId) : null);
   const [draft, setDraft] = useState<EditableDraft>(() => restored?.draft ?? initialForm(initialDraft, quoteAssets, availability.chainId));
   const [buyEdited, setBuyEdited] = useState(restored?.buyEdited ?? (initialDraft?.initialBuy !== undefined));
@@ -446,10 +447,10 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
 
   const actionLabel = walletAction?.label ?? (availability.status === "checking" ? "Checking launch…" : phase === "uploading" ? "Saving image…" : phase === "signing" ? launchProgress || "Opening coin…" : phase === "preparing" ? "Preparing launch…" : "Launch coin");
   if (layout === "studio" && phase !== "result") return <FoundationStudio draft={draft} catalog={catalog} imageSource={imageSource}
-    previousLaunchAction={previousLaunchAction} networkControl={networkControl} quoteSymbol={quoteSymbol} quoteStatus={quoteStatus}
+    previousLaunchAction={previousLaunchAction} recoveryAction={recoveryAction} networkControl={networkControl} quoteSymbol={quoteSymbol} quoteStatus={quoteStatus}
     initialBuy={initialBuy} actionLabel={actionLabel} disabled={locked || imagePreparing} busy={busy || walletAction?.busy}
     actionDisabled={unavailable || Boolean(submissionBlocked) || walletAction?.busy} status={launchProgress || (availability.status !== "ready" ? availability.reason || actionLabel : undefined)}
-    error={error || submissionBlocked} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
+    error={error || (recoveryAction ? undefined : submissionBlocked)} errors={{ ...errors, ...(imageError ? { image: imageError } : {}) }}
     customQuote={customQuote} canResolveQuote={canResolveQuote} modulesLoading={availability.status === "checking" && !catalog.length} formRef={form} imageInput={imageInput}
     onSocialChange={updateSocial} onImageError={() => setImageError("The image could not load. Choose another image.")}
     onEnableQuote={() => chooseMarket(true)} onRetryAvailability={availability.status === "unavailable" ? onRetryAvailability : undefined}

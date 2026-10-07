@@ -2,7 +2,7 @@ import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { encodeFunctionData, getAddress, keccak256, toHex, type Hex, type PublicClient } from "viem";
 import {
-  bindFoundationWalletStep, foundationWalletRequestNonce, readFoundationPending, reconcileFoundationPending,
+  bindFoundationWalletStep, foundationWalletRequestNonce, readFoundationPending, reconcileFoundationPending, recoverFoundationPending, noteFoundationWalletRequest,
   revalidateFoundationWalletStep, submitFoundationWalletStep,
   type FoundationPreparedSequence, type FoundationWalletPreparation,
 } from "@/lib/module-foundation/wallet";
@@ -460,5 +460,107 @@ describe("foundation exact pending reconciliation", () => {
     finish.resolve({ from: account, to: router, transactionHash, blockNumber: 101n, blockHash, status: "success" });
     await recovering;
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("interrupted wallet recovery", () => {
+  async function mined(chainId: 1 | 4663 = 4663) {
+    const f = fixture();
+    await expect(submitFoundationWalletStep(f.bind(), async () => { throw new Error("Unknown response"); })).rejects.toThrow();
+    const original = readFoundationPending(account)!;
+    if (chainId === 1) {
+      storage.removeItem(`programmable:foundation-pending:v1:4663:${account.toLowerCase()}`);
+      storage.setItem(`programmable:foundation-pending:v1:1:${account.toLowerCase()}`, JSON.stringify({ ...original, chainId }));
+      Object.assign(f.client, { chain: { id: 1 } });
+      vi.mocked(f.client.getChainId).mockResolvedValue(1);
+      f.getTransaction.mockResolvedValue({ ...await f.getTransaction(), chainId });
+    }
+    vi.mocked(f.client.getTransactionCount).mockImplementation(async args => args?.blockNumber !== undefined && args.blockNumber < 101n ? 7 : 8);
+    f.getBlock.mockImplementation(async (args?: unknown) => {
+      const request = args as { blockTag?: string; blockNumber?: bigint; includeTransactions?: boolean };
+      return { number: request.blockNumber ?? 120n, hash: blockHash, timestamp: BigInt(fixedTime / 1000),
+        transactions: request.includeTransactions ? [await f.getTransaction()] : [] };
+    });
+    return f;
+  }
+
+  it.each([1, 4663] as const)("finds a missing hash on chain %s and preserves the confirmed result", async chainId => {
+    const f = await mined(chainId);
+    await recoverFoundationPending(f.client, account);
+    expect(readFoundationPending(account, chainId)).toBeNull();
+    expect(readFoundationResolution(account, chainId)).toMatchObject({ status: "success", transactionHash });
+  });
+
+  it("recovers a speed-up with the same nonce and exact call", async () => {
+    const f = await mined();
+    const key = `programmable:foundation-pending:v1:4663:${account.toLowerCase()}`;
+    storage.setItem(key, JSON.stringify({ ...readFoundationPending(account), transactionHash: h(999) }));
+    await recoverFoundationPending(f.client, account);
+    expect(readFoundationResolution(account)?.transactionHash).toBe(transactionHash);
+  });
+
+  it("records a finalized cancellation as replaced, never as a successful launch", async () => {
+    const f = await mined();
+    f.getTransaction.mockResolvedValue({ ...await f.getTransaction(), to: account });
+    f.getTransactionReceipt.mockResolvedValue({ ...await f.getTransactionReceipt(), to: account });
+    await recoverFoundationPending(f.client, account);
+    expect(readFoundationPending(account)).toBeNull();
+    expect(readFoundationResolution(account)?.status).toBe("replaced");
+  });
+
+  it("retains a replacement until finality and never releases an unmined request", async () => {
+    const f = await mined();
+    vi.mocked(f.client.getTransactionCount).mockResolvedValueOnce(7);
+    await expect(recoverFoundationPending(f.client, account)).rejects.toThrow("not confirmed");
+    f.getTransaction.mockResolvedValue({ ...await f.getTransaction(), to: account });
+    f.getTransactionReceipt.mockResolvedValue({ ...await f.getTransactionReceipt(), to: account });
+    const getBlock = f.getBlock.getMockImplementation()! as (args?: unknown) => Promise<Awaited<ReturnType<typeof f.getBlock>>>;
+    f.getBlock.mockImplementation(async (args?: unknown) => ({ ...await getBlock(args),
+      ...((args as { blockTag?: string }).blockTag === "finalized" ? { number: 100n } : {}) }));
+    await expect(recoverFoundationPending(f.client, account)).rejects.toThrow("not final");
+    expect(readFoundationPending(account)).not.toBeNull();
+  });
+
+  it("releases an interrupted preparation only after its submission lock is gone", async () => {
+    const f = fixture(), entered = deferred<void>(), finish = deferred<Hex>();
+    const active = submitFoundationWalletStep(f.bind(), async () => { entered.resolve(); return finish.promise; }, true);
+    await entered.promise;
+    const pending = readFoundationPending(account)!;
+    expect(pending.walletPhase).toBe("preparing");
+    await expect(recoverFoundationPending(f.client, account)).rejects.toThrow("still active");
+    finish.resolve(transactionHash); await active;
+    // Simulate a tab closed during preflight, before a wallet request was issued.
+    storage.setItem(`programmable:foundation-pending:v1:4663:${account.toLowerCase()}`, JSON.stringify(pending));
+    await expect(recoverFoundationPending(f.client, account)).resolves.toBeNull();
+    expect(readFoundationPending(account)).toBeNull();
+  });
+
+  it("keeps legacy hashless records blocked unless their nonce is confirmed", async () => {
+    const f = await mined();
+    const key = `programmable:foundation-pending:v1:4663:${account.toLowerCase()}`;
+    const record = readFoundationPending(account)!;
+    delete record.walletPhase;
+    storage.setItem(key, JSON.stringify(record));
+    vi.mocked(f.client.getTransactionCount).mockResolvedValue(7);
+    await expect(recoverFoundationPending(f.client, account)).rejects.toThrow("not confirmed");
+    expect(readFoundationPending(account)).toEqual(record);
+  });
+
+  it("preserves pending when discovered block data is inconsistent", async () => {
+    const f = await mined();
+    f.getTransaction.mockResolvedValue({ ...await f.getTransaction(), blockHash: h(888) });
+    await expect(recoverFoundationPending(f.client, account)).rejects.toThrow("changed");
+    expect(readFoundationPending(account)).not.toBeNull();
+  });
+
+  it("persists the requested phase before handing control to the wallet", async () => {
+    const f = fixture();
+    await expect(submitFoundationWalletStep(f.bind(), async value => {
+      noteFoundationWalletRequest(value);
+      expect(readFoundationPending(account)?.walletPhase).toBe("requested");
+      throw new Error("Wallet response lost");
+    })).rejects.toThrow("Wallet response lost");
+    expect(readFoundationPending(account)?.walletPhase).toBe("requested");
   });
 });

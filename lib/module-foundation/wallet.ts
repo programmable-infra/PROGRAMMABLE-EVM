@@ -1,3 +1,4 @@
+import { findFoundationTransactionByNonce } from "./transaction-by-nonce";
 import { decodeFoundationEthereumTransaction } from "./ethereum-graph";
 import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
 import { getAddress, keccak256, toHex, type Address, type Hex, type PublicClient } from "viem";
@@ -165,6 +166,7 @@ export interface FoundationPendingOperation {
   schemaVersion: "programmable.foundation.pending.v1";
   chainId?: FoundationChainId; account: Address; releaseDigest: Hex; calldataHash: Hex; to: Address; value: Hex;
   transactionHash: Hex | null; createdAt: number;
+  walletPhase?: "preparing" | "requested";
   /** The pending account nonce and canonical height immediately before this wallet request. */
   nonce: number; startBlock: string;
   operationId: string;
@@ -184,6 +186,7 @@ export function readFoundationPending(account: Address, chainId: FoundationChain
     || (value.transactionHash !== null && !/^0x[0-9a-fA-F]{64}$/.test(value.transactionHash))) {
     throw new Error("The saved wallet operation cannot be read. Check wallet activity before continuing.");
   }
+  if (value.walletPhase !== undefined && value.walletPhase !== "preparing" && value.walletPhase !== "requested") throw new Error("The saved wallet phase cannot be read.");
   getAddress(value.to);
   return value;
 }
@@ -209,9 +212,20 @@ export async function foundationWalletRequestNonce(value: FoundationWalletPrepar
   return pending.nonce;
 }
 
-/** Persist intent before invoking the wallet. An uncertain outcome stays blocked across reloads. */
+/** Called immediately before invoking a wallet send method, while the submission lock is held. */
+export function noteFoundationWalletRequest(value: FoundationWalletPreparation): void {
+  assertFoundationWalletSubmissionContext(value);
+  const key = storeKey(value.account, value.transaction.chainId);
+  const pending = readFoundationPending(value.account, value.transaction.chainId)!;
+  const serialized = JSON.stringify({ ...pending, walletPhase: "requested" });
+  localStorage.setItem(key, serialized);
+  if (localStorage.getItem(key) !== serialized) throw new Error("The wallet request could not be saved.");
+  signalChange();
+}
+
+/** Persist intent before invoking the wallet. Only adapters calling noteFoundationWalletRequest may opt into preflight tracking. */
 export async function submitFoundationWalletStep(value: FoundationWalletPreparation,
-  send: (value: FoundationWalletPreparation) => Promise<Hex>): Promise<Hex> {
+  send: (value: FoundationWalletPreparation) => Promise<Hex>, trackPreflight = false): Promise<Hex> {
   const binding = prepared.get(value);
   if (!binding || binding.state !== "ready") throw new Error("This transaction is not ready for signing.");
   if (!navigator.locks) throw new Error("This browser cannot safely coordinate wallet requests.");
@@ -225,7 +239,7 @@ export async function submitFoundationWalletStep(value: FoundationWalletPreparat
     if (block.number === null || !block.hash) throw new Error("The current wallet nonce could not be bound to chain state.");
     const pending: FoundationPendingOperation = { schemaVersion: "programmable.foundation.pending.v1", chainId: value.transaction.chainId, account: value.account,
       releaseDigest: value.releaseDigest, calldataHash: keccak256(value.transaction.data), to: value.transaction.to,
-      value: value.transaction.value, transactionHash: null, createdAt: Date.now(), nonce, startBlock: block.number.toString(), operationId: crypto.randomUUID(),
+      value: value.transaction.value, transactionHash: null, walletPhase: trackPreflight ? "preparing" : "requested", createdAt: Date.now(), nonce, startBlock: block.number.toString(), operationId: crypto.randomUUID(),
       metadata: { stepKind: binding.sequence.steps[binding.index].kind, operationKind: binding.sequence.kind,
         token: binding.sequence.kind === "launch" ? binding.sequence.result.token : binding.sequence.pool.token } };
     localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify(pending));
@@ -237,45 +251,84 @@ export async function submitFoundationWalletStep(value: FoundationWalletPreparat
       if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) throw new Error("The wallet returned no valid transaction hash. Check wallet activity.");
       binding.state = "submitted";
       // Failure to persist the known hash leaves the earlier unknown operation in place.
-      try { localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify({ ...pending, transactionHash: hash })); signalChange(); } catch { /* Return known hash for manual recovery. */ }
+      try { localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify({ ...pending, walletPhase: "requested", transactionHash: hash })); signalChange(); } catch { /* Return known hash for manual recovery. */ }
       return hash;
     } catch (error) {
       const failure = error as { code?: number; walletRequestAttempted?: boolean; walletRequestRejected?: boolean };
       if (failure.walletRequestAttempted === false || failure.walletRequestRejected === true || failure.code === 4001) {
         localStorage.removeItem(storeKey(value.account, value.transaction.chainId)); signalChange();
+      } else {
+        // Unknown send adapters are conservative too: an error is not evidence of no broadcast.
+        const current = readFoundationPending(value.account, value.transaction.chainId);
+        if (current?.operationId === pending.operationId && current.walletPhase === "preparing") {
+          localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify({ ...current, walletPhase: "requested" }));
+          signalChange();
+        }
       }
       throw error;
     } finally { binding.activeOperation = undefined; }
   });
 }
 
-/** Only an exact mined transaction (success or revert) resolves an uncertain send. */
-export async function reconcileFoundationPending(client: PublicClient, account: Address, knownHash?: Hex) {
+/** Verify the exact mined call; discovery may also prove a finalized same-nonce replacement. */
+export async function reconcileFoundationPending(client: PublicClient, account: Address, knownHash?: Hex, discover = false) {
   if (!navigator.locks) throw new Error("This browser cannot safely coordinate wallet recovery.");
   const chainId = foundationClientProfile(client).chainId;
   return navigator.locks.request(storeKey(account, chainId), { mode: "exclusive", ifAvailable: true }, async lock => {
   if (!lock) throw new Error("A wallet request is still active. Wait for it to complete.");
   const pending = readFoundationPending(account, chainId);
-  const hash = pending?.transactionHash ?? knownHash;
-  if (!pending || !hash) throw new Error("Find the transaction hash in your wallet activity before continuing.");
+  if (!pending) throw new Error("No saved wallet operation needs recovery.");
   if (await client.getChainId() !== chainId) throw new Error("Recovery is connected to the wrong chain.");
+  const hash = discover
+    ? (await findFoundationTransactionByNonce(client, account, pending.nonce, BigInt(pending.startBlock))).hash
+    : pending.transactionHash ?? knownHash;
+  if (!hash) throw new Error("Find the transaction hash in your wallet activity before continuing.");
   const [transaction, receipt] = await Promise.all([client.getTransaction({ hash }), client.getTransactionReceipt({ hash })]);
-  if (!transaction.to || getAddress(transaction.from) !== getAddress(account) || getAddress(transaction.to) !== getAddress(pending.to)
+  if (getAddress(transaction.from) !== getAddress(account) || getAddress(receipt.from) !== getAddress(account)
+    || transaction.to?.toLowerCase() !== receipt.to?.toLowerCase()
     || transaction.hash !== hash || receipt.transactionHash !== hash || transaction.nonce !== pending.nonce
     || (transaction.chainId !== undefined && transaction.chainId !== chainId)
     || receipt.blockNumber < BigInt(pending.startBlock) || transaction.blockNumber !== receipt.blockNumber
-    || transaction.blockHash !== receipt.blockHash
-    || keccak256(transaction.input) !== pending.calldataHash || transaction.value !== BigInt(pending.value)) throw new Error("This transaction does not match the saved wallet operation.");
+    || transaction.blockHash !== receipt.blockHash) throw new Error("This transaction does not match the saved wallet operation.");
+  const exactCall = transaction.to && getAddress(transaction.to) === getAddress(pending.to)
+    && keccak256(transaction.input) === pending.calldataHash && transaction.value === BigInt(pending.value);
+  if (!exactCall && !discover) throw new Error("This transaction does not match the saved wallet operation.");
+  if (!exactCall) {
+    // A different call with this nonce must be final before an unknown launch can be released.
+    const finalized = await client.getBlock({ blockTag: "finalized" });
+    if (finalized.number === null || finalized.number < receipt.blockNumber) throw new Error("Your replacement transaction is confirmed but not final yet. Check again shortly.");
+  }
   const canonical = await client.getBlock({ blockNumber: receipt.blockNumber });
   if (canonical.hash !== receipt.blockHash) throw new Error("The wallet transaction is not in the canonical chain. Check again.");
   // Preserve a newer operation written in another tab.
   const current = readFoundationPending(account, chainId);
   if (current?.operationId === pending.operationId) {
-    writeFoundationResolution(pending, receipt, pending.metadata);
+    writeFoundationResolution({ ...pending, transactionHash: hash }, receipt, pending.metadata, !exactCall);
     localStorage.removeItem(storeKey(account, chainId)); signalChange();
   }
   return receipt;
   });
+}
+
+/** Read-only recovery also finds a lost hash, speed-up, or finalized cancellation by account nonce. */
+export async function recoverFoundationPending(client: PublicClient, account: Address, knownHash?: Hex) {
+  const chainId = foundationClientProfile(client).chainId;
+  if (readFoundationPending(account, chainId)?.walletPhase === "preparing") {
+    if (!navigator.locks) throw new Error("This browser cannot safely coordinate wallet recovery.");
+    const released = await navigator.locks.request(storeKey(account, chainId), { mode: "exclusive", ifAvailable: true }, async lock => {
+      if (!lock) throw new Error("A wallet request is still active. Wait for it to complete.");
+      const pending = readFoundationPending(account, chainId);
+      if (!pending || pending.walletPhase !== "preparing" || pending.transactionHash) return false;
+      localStorage.removeItem(storeKey(account, chainId)); signalChange();
+      return true;
+    });
+    if (released) return null;
+  }
+  if (knownHash || readFoundationPending(account, foundationClientProfile(client).chainId)?.transactionHash) {
+    try { return await reconcileFoundationPending(client, account, knownHash); }
+    catch { /* The wallet may have replaced the hash; discover the exact nonce onchain. */ }
+  }
+  return reconcileFoundationPending(client, account, undefined, true);
 }
 
 export function foundationStepSummary(step: FoundationPreparedStep, chainId: FoundationChainId = 4663) {
