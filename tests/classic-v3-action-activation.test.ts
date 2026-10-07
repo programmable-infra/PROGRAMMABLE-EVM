@@ -310,8 +310,8 @@ vi.mock("../lib/data-pipeline/action-lookup", async (importOriginal) => {
   };
 });
 
-vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
-  readEnvioClassicV3CatalogV1: mocks.readCatalog,
+vi.mock("../lib/market-data/classic-launch-catalog.server", () => ({
+  readClassicLaunchCatalogV1: mocks.readCatalog,
 }));
 
 vi.mock("../lib/classic-v4-release", async (importOriginal) => {

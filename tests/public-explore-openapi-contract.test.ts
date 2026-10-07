@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({ snapshot: vi.fn(),
 }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ unstable_cache: (read: () => unknown) => read }));
-vi.mock("@/lib/market-data/envio-classic-v3-catalog.server", () => ({ readEnvioClassicV3CatalogV1: vi.fn() }));
+vi.mock("@/lib/market-data/classic-launch-catalog.server", () => ({ readClassicLaunchCatalogV1: vi.fn() }));
 vi.mock("@/lib/alchemy/router-custom-public.server", () => ({ readWebsiteRouterCustomIdentitySnapshotV1: vi.fn() }));
 vi.mock("@/lib/server/robinhood-index/store", () => ({ indexStore: () => ({ read: mocks.snapshot }) }));
 vi.mock("@/lib/server/robinhood-presentation", () => ({
