@@ -29,10 +29,16 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
   const [transactionHash, setTransactionHash] = useState<Hex | null>(null);
   const owner = session.account?.toLowerCase() === account.toLowerCase()
     && launch.creator.toLowerCase() === account.toLowerCase();
-  const balance = balanceState?.context === session.contextKey ? balanceState : null;
   const releaseDigest = session.envelope?.binding?.releaseDigest;
   const savedClaim = session.resolution?.metadata?.operationKind === "claim"
     && session.resolution.metadata.token?.toLowerCase() === token.toLowerCase() ? session.resolution : null;
+  // Background receipt recovery must invalidate the balance shown before that claim.
+  const balanceContext = `${session.contextKey}:${savedClaim?.operationId ?? ""}`;
+  const balance = balanceState?.context === balanceContext ? balanceState : null;
+  const resolvedCurrentClaim = transactionHash && savedClaim?.transactionHash.toLowerCase() === transactionHash.toLowerCase() ? savedClaim : null;
+  const displayedMessage = resolvedCurrentClaim
+    ? resolvedCurrentClaim.status === "success" ? "Fee payout confirmed onchain." : "Fee payout reverted."
+    : message;
   // A successful, displayed result can be acknowledged by the next Claim click.
   // Pending, unreadable and reverted operations still require recovery first.
   const claimBlocked = session.preparationBlocked
@@ -42,11 +48,11 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
     if (!owner || session.availability.status !== "ready" || !releaseDigest) return;
     let active = true;
     void readFoundationProfileRewards(session.client, session.envelope!.binding!, launch).then(value => {
-      if (active) { setBalanceError(""); setBalanceState({ context: session.contextKey, ...value }); }
+      if (active) { setBalanceError(""); setBalanceState({ context: balanceContext, ...value }); }
     }).catch(() => { if (active) { setBalanceState(null); setBalanceError("Rewards could not be checked."); } });
     return () => { active = false; };
   }, [account, launch.creator, launch.feeLedgerAddress, launch.quoteAsset, launch.sourceReleaseDigest, owner,
-    launch, releaseDigest, refresh, liveRefresh, session.availability.status, session.client, session.contextKey, session.envelope, session.resultGeneration]);
+    launch, releaseDigest, refresh, liveRefresh, session.availability.status, session.client, balanceContext, session.envelope, session.resultGeneration]);
 
   async function claim() {
     if (!session.account || !owner || claiming.current || !balance || balance.amount <= 0n) return;
@@ -110,7 +116,7 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
         <a href={`${explorer}/tx/${session.resolution.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a></span>
       : session.submissionBlocked ? <span className={styles.claimStatus}>{session.submissionBlocked}{" "}
         <a href={`/modules/${session.resolution?.metadata?.token ?? token}?chainId=${chainId}`}>Review wallet activity</a></span> : null}
-    {message ? <p className={styles.claimMessage} role="status">{message}{transactionHash ? <> <a href={`${explorer}/tx/${transactionHash}`}
+    {displayedMessage ? <p className={styles.claimMessage} role="status">{displayedMessage}{transactionHash ? <> <a href={`${explorer}/tx/${transactionHash}`}
       target="_blank" rel="noreferrer">View transaction</a></> : null}</p> : null}
   </div>;
 }
