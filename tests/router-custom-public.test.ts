@@ -37,7 +37,6 @@ import {
   mergeRouterCustomExploreEntriesV1,
   normalizeRouterCustomSnapshotBlobEtagV1,
   persistRouterCustomIdentitySnapshotFromSourceV1,
-  publicLaunchSourceV1,
   readFinalizedRouterCustomExploreEntriesV1,
   readSavedRouterCustomIdentitySnapshotV1,
   readWebsiteRouterCustomIdentitySnapshotV1,
@@ -838,29 +837,5 @@ describe("finalized Router Custom public projection", () => {
     ).tokens).toEqual([customGraphExploreEntry]);
   });
 
-  it("reports the exact set of healthy public identity lanes", () => {
-    expect(publicLaunchSourceV1({
-      envioAvailable: false,
-      registryCustomCurrent: false,
-      routerCustomCurrent: true,
-    })).toBe("canonical-launch-stamp-router");
-    expect(publicLaunchSourceV1({
-      registryCustomCurrent: false,
-      routerCustomCurrent: false,
-    })).toBe("envio-classic-v3");
-    expect(publicLaunchSourceV1({
-      registryCustomCurrent: true,
-      routerCustomCurrent: false,
-    })).toBe("envio-classic-v3+registry.custom-launched");
-    expect(publicLaunchSourceV1({
-      registryCustomCurrent: false,
-      routerCustomCurrent: true,
-    })).toBe("envio-classic-v3+canonical-launch-stamp-router");
-    expect(publicLaunchSourceV1({
-      registryCustomCurrent: true,
-      routerCustomCurrent: true,
-    })).toBe(
-      "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router",
-    );
-  });
+
 });

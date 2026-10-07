@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "chainId": 1,
+  "confirmations": 12,
+  "sources": [
+    {
+      "version": "classic-v2",
+      "launcher": "0xd240d06f8586eb799f20056054e5b527405e6bad",
+      "hook": "0x025a386eaa79f6067d29848fd05ccc71beab20cc",
+      "startBlock": 25624131,
+      "launcherRuntimeCodeHash": "0xd229555c79c61874549a1991c43df172104e1db3087ba8fca8804675b7440d36",
+      "hookRuntimeCodeHash": "0x274e29fb8d19f0607533ac7582827db0236ab546bb393d52049229b2ffe74381"
+    },
+    {
+      "version": "classic-v3",
+      "launcher": "0xc3bd04aac2fb2ba58efd7eb673e544e0b80de770",
+      "hook": "0x35fe236ea82f7cf525c9719d7df8f49f94d720cc",
+      "startBlock": 25639596,
+      "launcherRuntimeCodeHash": "0x9cc9723456c471d90ac838c02fa4fc47ed4b7e82c85358e71deec978c48d2dc8",
+      "hookRuntimeCodeHash": "0x3eba781023d3146ed9b502ac5b402d39cea4c34a14f64c878cb9ea62149590f1"
+    },
+    {
+      "version": "classic-v4",
+      "launcher": "0xbbdf30a2fe1394e4aa864ac269c6cf09b518e699",
+      "hook": "0xadf955a44fd7f009380240d56d71dfafb46020cc",
+      "startBlock": 25853086,
+      "launcherRuntimeCodeHash": "0xc80a1d3b6b3f196a54cea46fc94913d59aec2937e94e70b53fe5c5fd7f5c4b12",
+      "hookRuntimeCodeHash": "0xf3a1a628ce898c527f24569b426aa795ec65ff9d97afa2b89e8ea5a2b99ad280"
+    }
+  ]
+}

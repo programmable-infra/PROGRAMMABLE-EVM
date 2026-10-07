@@ -5,7 +5,7 @@ import { parseEthereumExploreQuery } from "@/lib/ethereum-explore";
 import { customGraphExploreEntry } from "./launch-stamp-surface-fixture";
 import { shardRouterTradeEntry } from "./shard-router-trade-fixture";
 vi.mock("server-only", () => ({}));
-vi.mock("@/lib/market-data/envio-classic-v3-catalog.server", () => ({ readEnvioClassicV3CatalogV1: vi.fn() }));
+vi.mock("@/lib/market-data/classic-launch-catalog.server", () => ({ readClassicLaunchCatalogV1: vi.fn() }));
 vi.mock("@/lib/alchemy/router-custom-public.server", () => ({ readWebsiteRouterCustomIdentitySnapshotV1: vi.fn() }));
 import { readEthereumCustomExploreCatalog, readEthereumUnifiedExploreCatalog, readEthereumLaunches, readEthereumToken } from "@/lib/server/ethereum-explore";
 const hex = (n: number, size: number) => `0x${n.toString(16).padStart(size, "0")}` as `0x${string}`;

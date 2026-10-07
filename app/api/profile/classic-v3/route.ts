@@ -7,7 +7,6 @@ import {
   isAddress,
   isHex,
   keccak256,
-  parseAbiItem,
   type Address,
   type Hex,
   type PublicClient,
@@ -32,8 +31,8 @@ import {
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { getWebsiteReadOnchainDeployment } from "@/lib/onchain";
 import {
-  readEnvioClassicV3CatalogV1,
-} from "@/lib/market-data/envio-classic-v3-catalog.server";
+  readClassicLaunchCatalogV1,
+} from "@/lib/market-data/classic-launch-catalog.server";
 import {
   safeOperationalRpcError,
   withOperationalRpcFailover,
@@ -49,7 +48,6 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 const MAX_REQUEST_BYTES = 2_048;
-const LOG_RANGE = 10_000n;
 const CONFIRMATIONS = 12n;
 
 type ClassicActionRewardIdentity = Readonly<{
@@ -74,9 +72,6 @@ type ClassicActionRelease = Readonly<{
   rewardVaultFactoryRuntimeCodeHash: Hex;
   launcherDeploymentBlock: bigint;
 }>;
-const classicV3LaunchEvent = parseAbiItem(
-  "event MemeTokenLaunchedV2(address indexed deployer,address indexed token,bytes32 indexed poolId,address feeHook,address rewardVault,address positionRecipient,uint256 positionTokenId,uint16 buySwapFeeBps,uint16 sellSwapFeeBps,bytes32 rewardConfigurationHash,bytes32 launchHash)",
-);
 
 const environment =
   process.env.PROGRAMMABLE_ONCHAIN_NETWORK === "rehearsal"
@@ -306,134 +301,23 @@ async function assertCodeHashAtBlock(
   }
 }
 
-function minimum(left: bigint, right: bigint) {
-  return left < right ? left : right;
-}
-
-async function readLaunchLogs(
-  client: PublicClient,
-  launcher: Address,
-  fromBlock: bigint,
-  toBlock: bigint,
-  deployer?: Address,
-) {
-  const logs = [];
-  for (
-    let rangeStart = fromBlock;
-    rangeStart <= toBlock;
-    rangeStart += LOG_RANGE
-  ) {
-    logs.push(
-      ...(await client.getLogs({
-        address: launcher,
-        event: classicV3LaunchEvent,
-        ...(deployer ? { args: { deployer } } : {}),
-        fromBlock: rangeStart,
-        toBlock: minimum(toBlock, rangeStart + LOG_RANGE - 1n),
-        strict: true,
-      })),
-    );
-  }
-  return logs;
-}
-
-async function readLaunchByTransactionFromClient(
+function readLaunchByTransaction(
   account: Address,
   transactionHash: Hex,
-  client: PublicClient,
+  entries: readonly CanonicalTokenExploreEntry[],
 ) {
   const releases = configuredClassicActionReleases();
-  if (releases.length === 0) {
-    return { status: "not-deployed" as const, launch: null };
-  }
-  const latestBlock = await client.getBlockNumber();
-  const snapshotBlock = latestBlock > CONFIRMATIONS
-    ? latestBlock - CONFIRMATIONS
-    : latestBlock;
-  await Promise.all(
-    releases.flatMap((release) => [
-      assertCodeHashAtBlock(
-        client,
-        release.launcher,
-        release.launcherRuntimeCodeHash,
-        snapshotBlock,
-        `${release.releaseVersion} launcher`,
-      ),
-      assertCodeHashAtBlock(
-        client,
-        release.hook,
-        release.hookRuntimeCodeHash,
-        snapshotBlock,
-        `${release.releaseVersion} hook`,
-      ),
-      assertCodeHashAtBlock(
-        client,
-        release.rewardVaultFactory,
-        release.rewardVaultFactoryRuntimeCodeHash,
-        snapshotBlock,
-        "Classic reward factory",
-      ),
-    ]),
-  );
-  const launches = (
-    await Promise.all(
-      releases.map(async (release) => ({
-        release,
-        logs: release.launcherDeploymentBlock <= snapshotBlock
-          ? await readLaunchLogs(
-              client,
-              release.launcher,
-              release.launcherDeploymentBlock,
-              snapshotBlock,
-              account,
-            )
-          : [],
-      })),
-    )
-  ).flatMap(({ release, logs }) =>
-    logs
-      .filter(
-        (candidate) =>
-          !candidate.removed &&
-          candidate.transactionHash.toLowerCase() ===
-            transactionHash.toLowerCase(),
-      )
-      .map((launch) => ({ release, launch }))
-  );
-  if (launches.length === 0) {
-    return { status: "ready" as const, launch: null };
-  }
-  if (launches.length !== 1) {
-    throw new Error("Classic launch transaction identity is ambiguous");
-  }
-  const { release, launch } = launches[0];
-  if (getAddress(launch.args.feeHook) !== release.hook) {
-    throw new Error("Classic launch hook does not match its release");
-  }
-  const tokenAddress = getAddress(launch.args.token);
-  const [name, symbol] = await Promise.all([
-    client.readContract({
-      address: tokenAddress,
-      abi: uerc20ReadAbi,
-      functionName: "name",
-      blockNumber: snapshotBlock,
-    }),
-    client.readContract({
-      address: tokenAddress,
-      abi: uerc20ReadAbi,
-      functionName: "symbol",
-      blockNumber: snapshotBlock,
-    }),
-  ]);
-  return {
-    status: "ready" as const,
-    launch: {
-      tokenAddress,
-      name,
-      symbol,
-      launchTransactionHash: launch.transactionHash,
-    },
-  };
+  if (releases.length === 0) return { status: "not-deployed" as const, launch: null };
+  const launches = entries.filter(entry => entry.creatorAddress?.toLowerCase() === account.toLowerCase()
+    && entry.launchTransactionHash?.toLowerCase() === transactionHash.toLowerCase()
+    && releases.some(release => release.releaseVersion === entry.launchModelVersion
+      && release.hook.toLowerCase() === entry.hookAddress.toLowerCase()));
+  if (launches.length > 1) throw new Error("Classic launch transaction identity is ambiguous");
+  const launch = launches[0];
+  return { status: "ready" as const, launch: launch ? {
+    tokenAddress: launch.tokenAddress, name: launch.name, symbol: launch.symbol,
+    launchTransactionHash: launch.launchTransactionHash,
+  } : null };
 }
 
 function prospectiveAllocation(
@@ -670,6 +554,7 @@ async function readClassicActionState(input: {
 async function readRewardsFromClient(
   account: Address,
   client: PublicClient,
+  entries: readonly CanonicalTokenExploreEntry[],
 ) {
   const releases = configuredClassicActionReleases();
   if (releases.length === 0) {
@@ -708,37 +593,33 @@ async function readRewardsFromClient(
       ),
     ]),
   );
-  const logs = (
-    await Promise.all(
-      releases.map(async (release) => ({
-        release,
-        logs: release.launcherDeploymentBlock <= snapshotBlock
-          ? await readLaunchLogs(
-              client,
-              release.launcher,
-              release.launcherDeploymentBlock,
-              snapshotBlock,
-            )
-          : [],
-      })),
-    )
-  ).flatMap(({ release, logs: releaseLogs }) =>
-    releaseLogs
-      .filter((log) => !log.removed)
-      .map((log) => ({ release, log }))
-  );
+  const identities = entries.flatMap(entry => {
+    const release = releases.find(release => release.releaseVersion === entry.launchModelVersion);
+    if (!release) return [];
+    if (entry.launchModel !== "classic" || !entry.rewardVaultAddress || !entry.launchTransactionHash
+      || !entry.launchBlockNumber || entry.buyHookFeeBps === undefined || entry.sellHookFeeBps === undefined
+      || entry.hookAddress.toLowerCase() !== release.hook.toLowerCase()) {
+      throw new Error("Classic catalog reward identity is incomplete");
+    }
+    if (BigInt(entry.launchBlockNumber) > snapshotBlock) return [];
+    return [{ release, candidate: {
+      token: entry.tokenAddress, rewardVault: entry.rewardVaultAddress, poolId: entry.poolId,
+      feeHook: entry.hookAddress, buySwapFeeBps: entry.buyHookFeeBps, sellSwapFeeBps: entry.sellHookFeeBps,
+      transactionHash: entry.launchTransactionHash,
+    } }];
+  });
   if (
     new Set(
-      logs.map(({ log }) => getAddress(log.args.rewardVault).toLowerCase()),
-    ).size !== logs.length
+      identities.map(({ candidate }) => getAddress(candidate.rewardVault).toLowerCase()),
+    ).size !== identities.length
   ) {
     throw new Error("Classic reward vault identity is ambiguous");
   }
 
   const relevant = (
     await Promise.all(
-      logs.map(async ({ release, log }) => {
-        const vaultAddress = getAddress(log.args.rewardVault);
+      identities.map(async ({ release, candidate }) => {
+        const vaultAddress = getAddress(candidate.rewardVault);
         const [share, checkpointed, claimed] = await Promise.all([
           client.readContract({
             address: vaultAddress,
@@ -763,17 +644,17 @@ async function readRewardsFromClient(
           }),
         ]);
         return Number(share) > 0 || checkpointed > 0n || claimed > 0n
-          ? { release, log, share, checkpointed, claimed }
+          ? { release, candidate, share, checkpointed, claimed }
           : null;
       }),
     )
   ).filter((item) => item !== null);
 
   const rewards = await Promise.all(
-    relevant.map(async ({ release, log, share, checkpointed, claimed }) => {
-      const tokenAddress = getAddress(log.args.token);
-      const vaultAddress = getAddress(log.args.rewardVault);
-      const poolId = log.args.poolId;
+    relevant.map(async ({ release, candidate, share, checkpointed, claimed }) => {
+      const tokenAddress = getAddress(candidate.token);
+      const vaultAddress = getAddress(candidate.rewardVault);
+      const poolId = candidate.poolId;
       const [
         tokenName,
         tokenSymbol,
@@ -838,7 +719,7 @@ async function readRewardsFromClient(
       ]);
       if (
         !factoryVault ||
-        getAddress(log.args.feeHook).toLowerCase() !==
+        getAddress(candidate.feeHook).toLowerCase() !==
           release.hook.toLowerCase() ||
         getAddress(vaultHook).toLowerCase() !== release.hook.toLowerCase() ||
         vaultPoolId.toLowerCase() !== poolId.toLowerCase() ||
@@ -847,8 +728,8 @@ async function readRewardsFromClient(
         getAddress(poolConfig[1]).toLowerCase() !==
           release.launcher.toLowerCase() ||
         !poolConfig[4] ||
-        Number(disclosure[0]) !== Number(log.args.buySwapFeeBps) ||
-        Number(disclosure[1]) !== Number(log.args.sellSwapFeeBps) ||
+        Number(disclosure[0]) !== Number(candidate.buySwapFeeBps) ||
+        Number(disclosure[1]) !== Number(candidate.sellSwapFeeBps) ||
         Number(disclosure[2]) + Number(disclosure[4]) !==
           Number(disclosure[0]) ||
         Number(disclosure[3]) + Number(disclosure[4]) !==
@@ -937,7 +818,7 @@ async function readRewardsFromClient(
         sellSwapFeeBps: disclosure[1],
         platformFeeBps: 10 as const,
         beneficiaries,
-        launchTransactionHash: log.transactionHash,
+        launchTransactionHash: candidate.transactionHash,
       };
     }),
   );
@@ -967,39 +848,23 @@ export async function GET(request: NextRequest) {
   }
   try {
     const launch = search.get("launch")?.trim();
-    const deployment = classicActionDeployment();
-    if (launch) {
-      if (!isHex(launch, { strict: true }) || launch.length !== 66) {
-        return json({ error: "Enter a valid launch transaction hash" }, 400);
-      }
-      const result = await withOperationalRpcFailover(
-        deployment,
-        async (selected) => ({
-          profile: await readLaunchByTransactionFromClient(
-            getAddress(input),
-            launch as Hex,
-            createActionClient(selected.rpcUrl),
-          ),
-          provider: classicRpcProviderHeader(deployment, selected.rpcUrl),
-        }),
-      );
-      return NextResponse.json(
-        result.profile,
-        {
-          headers: {
-            "Cache-Control": "private, max-age=0, s-maxage=15",
-            "X-Programmable-Read-Source": "rpc",
-            "X-Programmable-Rpc-Provider": result.provider,
-          },
-        },
-      );
+    if (launch && (!isHex(launch, { strict: true }) || launch.length !== 66)) {
+      return json({ error: "Enter a valid launch transaction hash" }, 400);
     }
+    const catalog = await readClassicLaunchCatalogV1({ signal: request.signal, deadlineMs: Date.now()+12_000 });
+    if (launch) {
+      return NextResponse.json(readLaunchByTransaction(getAddress(input), launch as Hex, catalog.entries), {
+        headers: { "Cache-Control": "private, max-age=0, s-maxage=15", "X-Programmable-Read-Source": "codex" },
+      });
+    }
+    const deployment = classicActionDeployment();
     const result = await withOperationalRpcFailover(
       deployment,
       async (selected) => ({
         profile: await readRewardsFromClient(
           getAddress(input),
           createActionClient(selected.rpcUrl),
+          catalog.entries,
         ),
         provider: classicRpcProviderHeader(deployment, selected.rpcUrl),
       }),
@@ -1009,14 +874,14 @@ export async function GET(request: NextRequest) {
       {
         headers: {
           "Cache-Control": "private, max-age=0, s-maxage=15",
-          "X-Programmable-Read-Source": "rpc",
+          "X-Programmable-Read-Source": "codex",
           "X-Programmable-Rpc-Provider": result.provider,
         },
       },
     );
   } catch (error) {
     console.error(
-      "Classic profile RPC read failed",
+      "Classic profile read failed",
       safeOperationalRpcError(error),
     );
     return json(classicV3ProfileApiError("temporary"), 503);
@@ -1075,7 +940,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const catalog = await readEnvioClassicV3CatalogV1({
+    const catalog = await readClassicLaunchCatalogV1({
       signal: request.signal,
       deadlineMs: Date.now() + 7_000,
     });

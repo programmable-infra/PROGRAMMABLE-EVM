@@ -1,7 +1,7 @@
 import "server-only";
 
 import { readWebsiteRouterCustomIdentitySnapshotV1 } from "@/lib/alchemy/router-custom-public.server";
-import { readEnvioClassicV3CatalogV1 } from "@/lib/market-data/envio-classic-v3-catalog.server";
+import { readClassicLaunchCatalogV1 } from "@/lib/market-data/classic-launch-catalog.server";
 import { publicExploreCatalogEntriesV1, publicExplorePresentationEntryV1 } from "@/lib/public-explore-catalog-v1";
 import { isPublicExploreIdentityV1 } from "@/lib/explore-public-visibility";
 import { readCodexMarkets } from "./codex-market";
@@ -12,13 +12,14 @@ import { readEthereumPublicTokenMetadata } from "./ethereum-public-token-metadat
 
 type SourceStatus = "current" | "last-known-good" | "unavailable";
 type SourceEvidence = {
-  source: "envio-classic-v3" | "canonical-launch-stamp-router";
+  source: "codex-classic-launches" | "canonical-launch-stamp-router";
   asOfBlock: string;
   asOfBlockHash: string;
   commitment: string;
   generatedAt: string;
-  deployment?: string;
-  sourceCommit?: string;
+  releaseDigest?: string;
+  provider?: "codex";
+  observedAt?: string;
 };
 type CatalogSource = { entries: readonly CanonicalTokenExploreEntry[]; status: Exclude<SourceStatus, "unavailable">; generatedAt: string; evidence?: SourceEvidence };
 type Dependencies = {
@@ -29,10 +30,10 @@ type Dependencies = {
 const readers: Dependencies = {
   metadata: readEthereumPublicTokenMetadata,
   classic: async () => {
-    const catalog = await readEnvioClassicV3CatalogV1();
+    const catalog = await readClassicLaunchCatalogV1();
     return { ...catalog, entries: catalog.entries.filter((entry): entry is CanonicalTokenExploreEntry => entry.exploreKind === "token"),
       evidence: { source: catalog.source, asOfBlock: catalog.asOfBlock, asOfBlockHash: catalog.asOfBlockHash,
-        commitment: catalog.evidence.commitment, generatedAt: catalog.generatedAt, deployment: catalog.evidence.deployment, sourceCommit: catalog.evidence.sourceCommit } };
+        commitment: catalog.evidence.commitment, generatedAt: catalog.generatedAt, releaseDigest: catalog.evidence.releaseDigest, provider: catalog.evidence.provider, observedAt: catalog.evidence.observedAt } };
   },
   custom: async () => {
     const catalog = await readWebsiteRouterCustomIdentitySnapshotV1();

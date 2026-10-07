@@ -30,7 +30,7 @@ describe("creator article authenticated APIs", () => {
     chainId: 1 as const,
     tokenAddress: TOKEN,
     creatorAddress: CREATOR,
-    source: "envio-classic-v3" as const,
+    source: "codex-classic-launches" as const,
     name: "Project",
     symbol: "PROJECT",
     imageUrl: null,

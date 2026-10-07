@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RobinhoodLaunch } from "@/lib/robinhood-launches";
 
-const onchain = vi.hoisted(() => ({ read: vi.fn() }));
-vi.mock("@/lib/server/robinhood-market", () => ({ readRobinhoodOnchainMarkets: onchain.read }));
+const codex = vi.hoisted(() => ({ read: vi.fn() }));
+vi.mock("@/lib/server/codex-market", () => ({ readCodexMarkets: codex.read }));
 const moduleMetadata = vi.hoisted(() => ({ read: vi.fn() }));
 vi.mock("@/lib/server/module-mode/token-presentation", () => ({ readModuleTokenMetadata: moduleMetadata.read }));
 const storage = vi.hoisted(() => ({ list: vi.fn(), token: vi.fn() }));
@@ -65,31 +65,28 @@ function feed(launches = [finalizedLaunch()]) {
   };
 }
 
-function pair() {
-  return {
-    chainId: "robinhood", dexId: "uniswap", labels: ["v4"], pairAddress: TOKEN.poolId,
-    baseToken: { address: TOKEN.tokenAddress }, priceUsd: "0.003", marketCap: 3_000_000,
-    fdv: 8_000_000, liquidity: { usd: 250_000 }, volume: { h24: 0 }, priceChange: { h24: -2.5 },
-    url: "https://wrong-provider-url.example/",
-  };
+function market() {
+  return { poolId: TOKEN.poolId, source: "codex" as const, priceUsd: 0.003, marketCapUsd: 3_000_000,
+    fdvUsd: 8_000_000, liquidityUsd: 250_000, volume24hUsd: 0, change24hPercent: -2.5,
+    observedAt: new Date().toISOString(), sourceUrl: "https://www.codex.io/" };
 }
 
-function sourceFetch(metadata: unknown = feed(), market: unknown = { pairs: [pair()] }) {
+function sourceFetch(metadata: unknown = feed(), observation: unknown = new Map([[TOKEN.tokenAddress, market()]])) {
+  codex.read.mockImplementation(async () => {
+    if (observation instanceof Error) throw observation;
+    return observation instanceof Map ? observation : new Map();
+  });
   return vi.fn(async (input: string | URL | Request) => {
     const url = String(input);
     if (url.startsWith("https://api.programmable.market/v4/chains/4663/finalized-custom-launches")) {
       if (metadata instanceof Error) throw metadata;
       return metadata instanceof Response ? metadata : Response.json(metadata);
     }
-    if (url.startsWith("https://api.dexscreener.com/latest/dex/pairs/robinhood/")) {
-      if (market instanceof Error) throw market;
-      return market instanceof Response ? market : Response.json(market);
-    }
     throw new Error("Unexpected source request");
   });
 }
 
-beforeEach(() => { vi.clearAllMocks(); onchain.read.mockResolvedValue(new Map()); });
+beforeEach(() => { vi.clearAllMocks(); codex.read.mockResolvedValue(new Map()); });
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("Robinhood optional coin presentation", () => {
@@ -100,11 +97,10 @@ describe("Robinhood optional coin presentation", () => {
     expect(value).toMatchObject({ tokenAddress: TOKEN.tokenAddress, imageUrl: "https://example.com/token.png",
       links: [{ label: "Website", url: "https://example.com/" }, { label: "X", url: "https://x.com/programmable" }],
       market: { poolId: TOKEN.poolId, priceUsd: 0.003, marketCapUsd: 3_000_000, liquidityUsd: 250_000,
-        volume24hUsd: 0, change24hPercent: -2.5, sourceUrl: `https://dexscreener.com/robinhood/${TOKEN.poolId}` },
+        volume24hUsd: 0, change24hPercent: -2.5, sourceUrl: "https://www.codex.io/" },
     });
-    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(fetcher).toHaveBeenCalledTimes(1);
     expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual(expect.arrayContaining([
-      `https://api.dexscreener.com/latest/dex/pairs/robinhood/${TOKEN.poolId}`,
       "https://api.programmable.market/v4/chains/4663/finalized-custom-launches?limit=25",
     ]));
   });
@@ -131,24 +127,6 @@ describe("Robinhood optional coin presentation", () => {
     expect(value.market?.marketCapUsd).toBe(3_000_000);
   });
 
-  it.each([
-    ["chain", { chainId: "ethereum" }], ["pool", { pairAddress: hash("9") }],
-    ["token", { baseToken: { address: address("9") } }], ["DEX", { dexId: "other" }],
-    ["generation", { labels: ["v3"] }],
-  ])("rejects a market for another %s without removing the verified artwork", async (_, change) => {
-    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: [{ ...pair(), ...change }] }));
-    const [value] = await readRobinhoodPresentations([TOKEN]);
-    expect(value.market).toBeNull();
-    expect(value.imageUrl).toBe("https://example.com/token.png");
-  });
-
-  it("leaves missing market cap empty instead of relabelling FDV", async () => {
-    const market: Record<string, unknown> = pair();
-    delete market.marketCap;
-    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: [market] }));
-    expect((await readRobinhoodPresentations([TOKEN]))[0].market).toMatchObject({ marketCapUsd: null, priceUsd: 0.003 });
-  });
-
   it("resolves committed IPFS artwork through the established public gateway", async () => {
     const launch = finalizedLaunch();
     const cid = "QmYwAPJzv5CZsnAzt8auVZRnGi1Wm4eQNf6gMss5QZb7S6";
@@ -158,11 +136,6 @@ describe("Robinhood optional coin presentation", () => {
     launch.onchain.commitments.metadata = commitment;
     vi.stubGlobal("fetch", sourceFetch(feed([launch])));
     expect((await readRobinhoodPresentations([TOKEN]))[0].imageUrl).toBe(`https://ipfs.io/ipfs/${cid}`);
-  });
-
-  it("rejects ambiguous duplicate pool matches", async () => {
-    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: [pair(), pair()] }));
-    expect((await readRobinhoodPresentations([TOKEN]))[0].market).toBeNull();
   });
 
   it("keeps successful artwork when the market provider fails", async () => {
@@ -234,77 +207,33 @@ describe("Robinhood optional coin presentation", () => {
 });
 
 describe("Robinhood catalog market observations", () => {
-  it.each([new Error("offline"), { invalid: true }])("rejects failed refreshes so they cannot replace a cached observation", async (failure) => {
-    vi.stubGlobal("fetch", sourceFetch(feed(), failure));
-    await expect(readRobinhoodMarkets([TOKEN])).rejects.toThrow("Market observation unavailable");
+  it("does not start another provider when Codex has no observation", async () => {
+    const fetcher = sourceFetch(feed(), new Map());
+    vi.stubGlobal("fetch", fetcher);
+    expect(await readRobinhoodMarkets([TOKEN])).toEqual(new Map());
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(codex.read).toHaveBeenCalledTimes(1);
   });
 
-  it("accepts a successful response with no indexed pair as unknown market data", async () => {
-    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: null }));
+  it("discards expired Codex observations", async () => {
+    sourceFetch(feed(), new Map([[TOKEN.tokenAddress, {...market(), observedAt:"2020-01-01T00:00:00.000Z"}]]));
     expect(await readRobinhoodMarkets([TOKEN])).toEqual(new Map());
   });
 
-  it("fills a provider-missing exact pool from the independent onchain observation", async () => {
-    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: null }));
-    const value = { poolId: TOKEN.poolId, source: "uniswap-v4", valuationKind: "fdv", priceUsd: 0.01,
-      marketCapUsd: null, fdvUsd: 10_000_000, liquidityUsd: null, volume24hUsd: null, change24hPercent: null,
-      observedAt: new Date().toISOString(), sourceUrl: "https://robinhoodchain.blockscout.com/block/123" };
-    onchain.read.mockResolvedValue(new Map([[TOKEN.tokenAddress, value]]));
-    const result = await readRobinhoodMarkets([TOKEN]);
-    expect(result.get(TOKEN.tokenAddress)).toEqual(value);
-    expect(onchain.read).toHaveBeenCalledWith([expect.objectContaining({ tokenAddress: TOKEN.tokenAddress,
-      transactionHash: TOKEN.transactionHash, poolManager: TOKEN.poolManager, blockHash: TOKEN.blockHash })]);
-  });
-
-  it("does not replace an exact provider market cap with a total-supply valuation", async () => {
-    vi.stubGlobal("fetch", sourceFetch());
-    const result = await readRobinhoodMarkets([TOKEN]);
-    expect(result.get(TOKEN.tokenAddress)).toMatchObject({ source: "dexscreener", marketCapUsd: 3_000_000, fdvUsd: 8_000_000, valuationKind: "market-cap" });
-    expect(onchain.read).not.toHaveBeenCalled();
-  });
-
-  it("carries quote identity only from the exact matched pool", async () => {
-    const quoteToken = { address: address("7"), symbol: "QUOTE" };
-    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: [{ ...pair(), quoteToken }] }));
-    expect((await readRobinhoodMarkets([TOKEN])).get(TOKEN.tokenAddress)?.quoteAsset).toEqual(quoteToken);
-    vi.stubGlobal("fetch", sourceFetch(feed(), { pairs: [{ ...pair(), pairAddress: hash("9"), quoteToken }] }));
-    expect((await readRobinhoodMarkets([TOKEN])).get(TOKEN.tokenAddress)).toBeUndefined();
-  });
-
-  it("batches the full catalog beyond the visible page with bounded concurrency and exact pool joins", async () => {
-    const tokens = Array.from({ length: 151 }, (_, index) => ({ ...TOKEN,
-      tokenAddress: `0x${(index + 1).toString(16).padStart(40, "0")}`,
-      poolId: `0x${(index + 1).toString(16).padStart(64, "0")}`,
-    }));
-    let active = 0;
-    let peak = 0;
-    const sizes: number[] = [];
-    const fetcher = vi.fn(async (input: string) => {
-      active++;
-      peak = Math.max(peak, active);
-      const pools = input.split("/").at(-1)!.split(",");
-      sizes.push(pools.length);
-      await Promise.resolve();
-      active--;
-      return Response.json({ pairs: pools.map((pool) => {
-        const token = tokens.find((row) => row.poolId === pool)!;
-        return { ...pair(), pairAddress: pool, baseToken: { address: token.tokenAddress } };
-      }) });
-    });
-    vi.stubGlobal("fetch", fetcher);
-    const result = await readRobinhoodMarkets(tokens.toReversed());
-    expect(result.size).toBe(151);
-    expect(fetcher).toHaveBeenCalledTimes(6);
-    expect(Math.max(...sizes)).toBe(30);
-    expect(peak).toBeLessThanOrEqual(4);
-    expect(result.get(tokens[150].tokenAddress)?.poolId).toBe(tokens[150].poolId);
+  it("passes the full catalog to Codex using the verified token and pool identities", async () => {
+    const tokens = Array.from({length:151},(_,i)=>({...TOKEN,
+      tokenAddress:`0x${(i+1).toString(16).padStart(40,"0")}`,poolId:`0x${(i+1).toString(16).padStart(64,"0")}`}));
+    await readRobinhoodMarkets(tokens.toReversed());
+    expect(codex.read).toHaveBeenCalledTimes(1);
+    expect(codex.read.mock.calls[0][0]).toHaveLength(151);
+    expect(codex.read.mock.calls[0][0][0]).toMatchObject({tokenAddress:tokens[0].tokenAddress,poolId:tokens[0].poolId});
   });
 
   it("uses the supplied catalog observation for card values without fetching prices again", async () => {
     const fetcher = sourceFetch();
     vi.stubGlobal("fetch", fetcher);
     const market = { poolId: TOKEN.poolId, priceUsd: 2, marketCapUsd: 42, liquidityUsd: null,
-      volume24hUsd: null, change24hPercent: null, observedAt: new Date().toISOString(), sourceUrl: "https://dexscreener.com/" };
+      volume24hUsd: null, change24hPercent: null, observedAt: new Date().toISOString(), sourceUrl: "https://www.codex.io/" };
     const result = await readRobinhoodPresentations([TOKEN], new Map([[TOKEN.tokenAddress, market]]));
     expect(result[0].market).toBe(market);
     expect(fetcher).toHaveBeenCalledTimes(1);

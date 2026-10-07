@@ -88,10 +88,11 @@ function timestamp(value, nowMs) {
 }
 
 function validateEthereumSource(name, source, expectations, nowMs) {
-  check(record(source) && source.source === (name === "classic" ? "envio-classic-v3" : "canonical-launch-stamp-router") &&
+  check(record(source) && source.source === (name === "classic" ? "codex-classic-launches" : "canonical-launch-stamp-router") &&
     BLOCK.test(source.asOfBlock ?? "") && HASH.test(source.asOfBlockHash ?? "") && DIGEST.test(source.commitment ?? "") &&
     timestamp(source.generatedAt, nowMs), "Ethereum source evidence");
-  if (name === "classic") check(source.deployment === expectations.ethereum.deployment && source.sourceCommit === expectations.ethereum.sourceCommit,
+  if (name === "classic") check(source.provider === "codex" && source.releaseDigest === expectations.ethereum.releaseDigest
+    && timestamp(source.observedAt, nowMs),
     "Ethereum source release binding");
 }
 

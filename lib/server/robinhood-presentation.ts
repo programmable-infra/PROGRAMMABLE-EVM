@@ -2,9 +2,9 @@ import { readCodexMarkets } from "./codex-market";
 import "server-only";
 
 import { unstable_cache } from "next/cache";
-import { readRobinhoodOnchainMarkets, type RobinhoodMarketIdentity } from "./robinhood-market";
+import type { RobinhoodMarketIdentity } from "./robinhood-market";
 import { isRobinhoodModuleSourceKind, type RobinhoodLaunch } from "@/lib/robinhood-launches";
-import { coinValuation, ROBINHOOD_MARKET_MAX_AGE_MS, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
+import { ROBINHOOD_MARKET_MAX_AGE_MS, type RobinhoodCoinMarket, type RobinhoodCoinPresentation } from "@/lib/robinhood-presentation";
 import { PROGRAMMABLE_MAIN_TOKEN_PRESENTATION } from "@/lib/programmable-main-token-presentation";
 import { safePublicImageUrl } from "@/lib/safe-public-image-url";
 import { MODULE_DEFAULT_TOKEN_IMAGE } from "@/lib/module-mode/token-metadata";
@@ -15,7 +15,6 @@ import { projectLinkLabel } from "@/lib/project-link-label";
 import { hashProjectMetadata, validateProjectMetadata } from "@/packages/launch/src/project-metadata.mjs";
 
 const FINALIZED_FEED = "https://api.programmable.market/v4/chains/4663/finalized-custom-launches";
-const DEX_PAIRS = "https://api.dexscreener.com/latest/dex/pairs/robinhood/";
 const MAIN_TOKEN = "0xc60ba256b44334a0cd2c7242e98b88f031abb006";
 const MAX_RESPONSE_BYTES = 2_000_000;
 const MAX_METADATA_PAGES = 8;
@@ -28,7 +27,6 @@ type JsonObject = Record<string, unknown>;
 type Metadata = Pick<RobinhoodCoinPresentation, "imageUrl" | "description" | "links">;
 type MetadataBinding = Readonly<{ launch: JsonObject; metadata: Metadata }>;
 type MarketToken = RobinhoodMarketIdentity;
-type VerifiedMarketToken = MarketToken & { poolId: string };
 const object = (value: unknown): value is JsonObject =>
   value !== null && typeof value === "object" && !Array.isArray(value);
 const same = (left: unknown, right: unknown) =>
@@ -206,82 +204,6 @@ async function readMetadata(tokens: readonly RobinhoodLaunch[]): Promise<Map<str
   return result;
 }
 
-function numeric(value: unknown, signed = false): number | null {
-  if (typeof value !== "number" && typeof value !== "string") return null;
-  if (typeof value === "string" && !/^-?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && (signed || parsed >= 0) ? parsed : null;
-}
-
-async function readMarkets(tokens: readonly VerifiedMarketToken[]): Promise<Map<string, RobinhoodCoinMarket>> {
-  const pools = [...new Set(tokens.map((token) => token.poolId.toLowerCase()))];
-  const batches = Array.from({ length: Math.ceil(pools.length / 30) }, (_, index) => pools.slice(index * 30, (index + 1) * 30));
-  const pairs: { pair: unknown; observedAt: string }[] = [];
-  const overall = AbortSignal.timeout(6_000);
-  let nextBatch = 0;
-  let failed = false;
-  async function worker() {
-    while (nextBatch < batches.length && !overall.aborted) {
-      const batch = batches[nextBatch++];
-      try {
-        const payload = await readJson(`${DEX_PAIRS}${batch.join(",")}`,
-          AbortSignal.any([overall, AbortSignal.timeout(4_000)]));
-        if (!object(payload) || !(payload.pairs === null || Array.isArray(payload.pairs))
-          || (Array.isArray(payload.pairs) && payload.pairs.length > 100)) throw new Error("Invalid market response");
-        const observedAt = new Date().toISOString();
-        if (Array.isArray(payload.pairs)) pairs.push(...payload.pairs.map((pair) => ({ pair, observedAt })));
-      } catch { failed = true; }
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(4, batches.length) }, worker));
-  // A provider outage may still have an independently verified onchain observation.
-  // All returned observations retain their own age; token membership is independent.
-  const incompleteDexObservation = failed || nextBatch < batches.length;
-  const byIdentity = new Map<string, { pair: JsonObject; observedAt: string } | null>();
-  for (const { pair, observedAt } of pairs) {
-    if (!object(pair) || pair.chainId !== "robinhood" || pair.dexId !== "uniswap"
-      || !Array.isArray(pair.labels) || !pair.labels.includes("v4")
-      || typeof pair.pairAddress !== "string" || !HASH.test(pair.pairAddress)
-      || !object(pair.baseToken) || typeof pair.baseToken.address !== "string" || !ADDRESS.test(pair.baseToken.address)) continue;
-    const key = `${pair.baseToken.address.toLowerCase()}:${pair.pairAddress.toLowerCase()}`;
-    // Ambiguous duplicates never become a price for a verified launch.
-    byIdentity.set(key, byIdentity.has(key) ? null : { pair, observedAt });
-  }
-  const markets = new Map<string, RobinhoodCoinMarket>();
-  for (const token of tokens) {
-    const match = byIdentity.get(`${token.tokenAddress.toLowerCase()}:${token.poolId.toLowerCase()}`);
-    if (!match) continue;
-    const { pair, observedAt } = match;
-    markets.set(token.tokenAddress.toLowerCase(), {
-      poolId: token.poolId,
-      priceUsd: numeric(pair.priceUsd),
-      marketCapUsd: numeric(pair.marketCap),
-      fdvUsd: numeric(pair.fdv),
-      source: "dexscreener",
-      ...(object(pair.quoteToken) && typeof pair.quoteToken.address === "string" && ADDRESS.test(pair.quoteToken.address)
-        ? { quoteAsset: { address: pair.quoteToken.address, symbol: typeof pair.quoteToken.symbol === "string" && pair.quoteToken.symbol.trim().length <= 128 ? pair.quoteToken.symbol.trim() || null : null } }
-        : {}),
-      ...(numeric(pair.marketCap) !== null ? { valuationKind: "market-cap" }
-        : numeric(pair.fdv) !== null ? { valuationKind: "fdv" } : {}),
-      liquidityUsd: object(pair.liquidity) ? numeric(pair.liquidity.usd) : null,
-      volume24hUsd: object(pair.volume) ? numeric(pair.volume.h24) : null,
-      change24hPercent: object(pair.priceChange) ? numeric(pair.priceChange.h24, true) : null,
-      observedAt,
-      sourceUrl: `https://dexscreener.com/robinhood/${token.poolId.toLowerCase()}`,
-    });
-  }
-  const missing = tokens.filter(token => {
-    const market = markets.get(token.tokenAddress.toLowerCase());
-    return !market || market.priceUsd === null || (market.marketCapUsd === null && market.fdvUsd == null);
-  });
-  if (missing.length) {
-    const onchain = await readRobinhoodOnchainMarkets(missing).catch(() => new Map<string, RobinhoodCoinMarket>());
-    for (const [identity, observation] of onchain) markets.set(identity, observation);
-  }
-  if (incompleteDexObservation && markets.size === 0) throw new Error("Market observation unavailable");
-  return markets;
-}
-
 const cachedMetadata = unstable_cache(async (tokens: readonly RobinhoodLaunch[]) =>
   Array.from(await readMetadata(tokens)), ["robinhood-coin-metadata-v2"], { revalidate: 60 });
 
@@ -306,10 +228,6 @@ async function readCachedModuleMetadata(tokens: readonly RobinhoodLaunch[]): Pro
   return metadata;
 }
 
-// A shared full-catalog observation makes sorting independent of the current page.
-const cachedMarkets = unstable_cache(async (tokens: readonly VerifiedMarketToken[]) =>
-  Array.from(await readMarkets(tokens)), ["robinhood-coin-markets-v4"], { revalidate: 15 });
-
 export async function readRobinhoodMarkets(tokens: readonly MarketToken[]): Promise<Map<string, RobinhoodCoinMarket>> {
   if (tokens.length === 0) return new Map();
   if (tokens.length > MAX_MARKET_TOKENS || tokens.some((token) => !ADDRESS.test(token.tokenAddress) || (token.poolId !== null && !HASH.test(token.poolId)))) {
@@ -321,18 +239,8 @@ export async function readRobinhoodMarkets(tokens: readonly MarketToken[]): Prom
     .toSorted((a, b) => a.tokenAddress.localeCompare(b.tokenAddress));
   if (identities.length === 0) return new Map();
   const codex = await readCodexMarkets(identities);
-  const missing = identities.filter(token => !codex.has(token.tokenAddress)
-    || coinValuation(codex.get(token.tokenAddress)).value === null);
-  const fallback = missing.length ? await cachedMarkets(missing).catch(error => { if (!codex.size) throw error; return []; }) : [];
-  // Keep an observation whole. Never attach an older supply valuation to a newer price/timestamp.
-  const entries = new Map(codex);
   const now = Date.now();
-  for (const [identity, observation] of fallback) {
-    const age = now - Date.parse(observation.observedAt);
-    if (age >= 0 && age <= ROBINHOOD_MARKET_MAX_AGE_MS
-      && (!entries.has(identity) || coinValuation(observation).value !== null)) entries.set(identity, observation);
-  }
-  return new Map([...entries].filter(([, market]) => {
+  return new Map([...codex].filter(([, market]) => {
     const age = now - Date.parse(market.observedAt);
     return age >= 0 && age <= ROBINHOOD_MARKET_MAX_AGE_MS;
   }));

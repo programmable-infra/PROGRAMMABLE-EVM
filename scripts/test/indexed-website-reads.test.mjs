@@ -27,7 +27,7 @@ function sourceConfiguration(t, engineRelease,
   indexReleases = JSON.parse(readFileSync("config/module-engine/index-releases.json", "utf8"))) {
   const root = mkdtempSync(join(tmpdir(), "indexed-website-sources-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const file of ["config/envio-classic-v4-catalog-release.v1.json", "config/module-mode/robinhood.preview.json",
+  for (const file of ["config/classic-launch-catalog.v1.json", "config/module-mode/robinhood.preview.json",
     "config/module-engine/robinhood.json", "config/module-mode/historical-releases.json",
     "config/module-engine/historical-releases.json", "config/module-engine/index-releases.json",
     "config/module-foundation/index-releases.json", "config/module-engine/catalog.json", "config/module-engine/review-release.json", "contracts/deployments/robinhood-custom-launch-v1.json"]) {
@@ -268,8 +268,8 @@ function listBody(chainId, page) {
     presentations: selected.map(item => ({ tokenAddress: item.tokenAddress, imageUrl: null, description: null, links: [], market: null })),
     page: { number: page, size: 50, totalItems: items.length, totalPages: Math.ceil(items.length / 50), hasMore: page < Math.ceil(items.length / 50) } };
   return ethereum ? { ...body, sources: { classic: "current", custom: "last-known-good" }, sourceEvidence: {
-    classic: { source: "envio-classic-v3", deployment: EXPECTATIONS.ethereum.deployment,
-      sourceCommit: EXPECTATIONS.ethereum.sourceCommit, commitment: DIGEST, generatedAt: UPDATED, asOfBlock: "25930000", asOfBlockHash: HASH(567) },
+    classic: { source: "codex-classic-launches", provider: "codex", observedAt: UPDATED,
+      releaseDigest: EXPECTATIONS.ethereum.releaseDigest, commitment: DIGEST, generatedAt: UPDATED, asOfBlock: "25930000", asOfBlockHash: HASH(567) },
     custom: { source: "canonical-launch-stamp-router", commitment: DIGEST, generatedAt: UPDATED, asOfBlock: "25930000", asOfBlockHash: HASH(567) },
   } } : { ...body, sourceEvidence: { router: robinhoodSource(), modules: [] } };
 }
@@ -455,7 +455,7 @@ test("malformed or untrusted incomplete source envelopes never trigger availabil
     spec => { spec.body.sources.extra = "unavailable"; },
     spec => { spec.body.sourceEvidence.custom = {}; },
     spec => { spec.body.sourceEvidence.classic = null; },
-    spec => { spec.body.sourceEvidence.classic.sourceCommit = "c".repeat(40); },
+    spec => { spec.body.sourceEvidence.classic.releaseDigest = `sha256:${"c".repeat(64)}`; },
     spec => { spec.body.sourceEvidence.classic.commitment = "invalid"; },
     spec => { spec.body.page = null; },
     spec => { spec.body.updatedAt = null; },
@@ -734,7 +734,7 @@ test("wrong source, partial source and unsupported ready claims fail closed", as
     body => { body.chainId = 4663; },
     body => { body.sources.custom = "unavailable"; body.status = "partial"; },
     body => { body.status = "ready"; },
-    body => { body.sourceEvidence.classic.sourceCommit = "c".repeat(40); },
+    body => { body.sourceEvidence.classic.releaseDigest = `sha256:${"c".repeat(64)}`; },
     body => { body.sourceEvidence.classic.asOfBlockHash = "unknown"; },
     body => { body.sourceEvidence.classic.generatedAt = new Date(NOW + 120_000).toISOString(); },
     body => { body.sourceEvidence.custom = null; },

@@ -41,7 +41,7 @@ const mocks = vi.hoisted(() => {
   return {
     client,
     createPublicClient: vi.fn(() => client),
-    readEnvioClassicV3CatalogV1: vi.fn(),
+    readClassicLaunchCatalogV1: vi.fn(),
     classicV4Release: null as ClassicV4PublicRelease | null,
     runtimeCodes,
   };
@@ -72,8 +72,8 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
-vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
-  readEnvioClassicV3CatalogV1: mocks.readEnvioClassicV3CatalogV1,
+vi.mock("../lib/market-data/classic-launch-catalog.server", () => ({
+  readClassicLaunchCatalogV1: mocks.readClassicLaunchCatalogV1,
 }));
 
 vi.mock("../lib/classic-v4-release", async (importOriginal) => {
@@ -142,7 +142,7 @@ describe("Classic profile release gate", () => {
     vi.clearAllMocks();
     mocks.classicV4Release = null;
     mocks.createPublicClient.mockReturnValue(mocks.client);
-    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue({ entries: [] });
+    mocks.readClassicLaunchCatalogV1.mockResolvedValue({ entries: [] });
     vi.stubEnv("ETHEREUM_RPC_URL", drpcRpcUrl);
     vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
     vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");
@@ -195,14 +195,14 @@ describe("Classic profile release gate", () => {
     expect(response.status).toBe(200);
     expect(mocks.createPublicClient).toHaveBeenCalledTimes(1);
     expect(response.headers.get("X-Programmable-Read-Source")).toBe(
-      "rpc",
+      "codex",
     );
     expect(response.headers.get("X-Programmable-Rpc-Provider")).toBe(
       "drpc-primary",
     );
   });
 
-  it("reads both exact launchers when the Classic V4 indexer manifest is active", async () => {
+  it("verifies both exact launchers without scanning history when Classic V4 is active", async () => {
     mocks.classicV4Release = classicV4Release();
 
     const response = await GET(
@@ -212,9 +212,9 @@ describe("Classic profile release gate", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(
-      mocks.client.getLogs.mock.calls.map(([input]) => input.address),
-    ).toEqual(expect.arrayContaining([v3Launcher, v4Launcher]));
+    expect(mocks.client.getLogs).not.toHaveBeenCalled();
+    expect(mocks.readClassicLaunchCatalogV1).toHaveBeenCalledTimes(1);
+    expect(mocks.client.getCode).toHaveBeenCalledWith({ address: v3Launcher, blockNumber: 25_639_596n });
     expect(mocks.client.getCode).toHaveBeenCalledWith({
       address: v4Launcher,
       blockNumber: 25_639_596n,
@@ -260,6 +260,23 @@ describe("Classic profile release gate", () => {
       error: "Enter a valid launch transaction hash",
     });
     expect(mocks.createPublicClient).not.toHaveBeenCalled();
+  });
+
+
+  it("looks up an owned launch in Codex without scanning or calling an RPC", async () => {
+    mocks.classicV4Release = classicV4Release();
+    const transaction = `0x${"ab".repeat(32)}`;
+    const entry = { creatorAddress: account, launchTransactionHash: transaction, launchModelVersion: "classic-v4",
+      hookAddress: v4Hook, tokenAddress: vault, name: "Example", symbol: "EX" };
+    mocks.readClassicLaunchCatalogV1.mockResolvedValue({ entries: [entry] });
+    const response = await GET(new NextRequest(`http://localhost/api/profile/classic-v3?account=${account}&launch=${transaction}`));
+    expect(response.status).toBe(200);
+    expect((await response.json()).launch).toMatchObject({ tokenAddress: vault, launchTransactionHash: transaction });
+    expect(mocks.createPublicClient).not.toHaveBeenCalled();
+    expect(mocks.client.getLogs).not.toHaveBeenCalled();
+    mocks.readClassicLaunchCatalogV1.mockResolvedValue({ entries: [{...entry,creatorAddress:vault}] });
+    const other = await GET(new NextRequest(`http://localhost/api/profile/classic-v3?account=${account}&launch=${transaction}`));
+    expect((await other.json()).launch).toBeNull();
   });
 
   it("rejects claims from a wallet that does not own the vault", async () => {

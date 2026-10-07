@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { createHash } from "node:crypto";
 import { appendFileSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -7,6 +8,7 @@ import { keccak256, stringToHex } from "viem";
 import { engineWire } from "../../contracts/scripts/module-engine/shared.mjs";
 
 import {
+  canonicalJson,
   evaluateReadModelDeployPolicy,
   validateBoundVercelProductionMetadata,
 } from "./read-model-deploy-policy.mjs";
@@ -67,14 +69,18 @@ function foundationSourceExpectations(value) {
 // not replace the server readers' release, provenance or finality validation.
 export async function readIndexedWebsiteSourceExpectations(root = process.cwd()) {
   const json = (path) => JSON.parse(readFileSync(resolve(root, path), "utf8"));
-  const catalog = json("config/envio-classic-v4-catalog-release.v1.json");
-  const envio = catalog.releaseBinding?.envio;
-  if (catalog.status !== "indexer-activated" || catalog.chainId !== 1 ||
-    catalog.releaseBinding?.chainId !== 1 ||
-    !/^[a-z0-9][a-z0-9-]{1,127}$/u.test(envio?.deploymentLabel ?? "") ||
-    !/^[0-9a-f]{40}$/u.test(envio?.sourceCommit ?? "")) {
+  const catalog = json("config/classic-launch-catalog.v1.json");
+  if (catalog.schemaVersion !== 1 || catalog.chainId !== 1 || catalog.confirmations !== 12
+    || !Array.isArray(catalog.sources) || catalog.sources.length !== 3
+    || catalog.sources.some(source => !["classic-v2", "classic-v3", "classic-v4"].includes(source.version)
+      || !ADDRESS.test(source.launcher) || !ADDRESS.test(source.hook)
+      || !HASH.test(source.launcherRuntimeCodeHash) || !HASH.test(source.hookRuntimeCodeHash)
+      || !/^[1-9][0-9]*$/.test(String(source.startBlock)))
+    || new Set(catalog.sources.map(source => source.version)).size !== 3) {
     throw new Error("indexed website Ethereum release identity is invalid");
   }
+  const releaseDigest = `sha256:${createHash("sha256").update("programmable.classic-launch-catalog.v1")
+    .update(Uint8Array.of(0)).update(canonicalJson(catalog)).digest("hex")}`;
   const modules = [
     json("config/module-mode/robinhood.preview.json"),
     json("config/module-engine/robinhood.json"),
@@ -122,8 +128,8 @@ export async function readIndexedWebsiteSourceExpectations(root = process.cwd())
     throw new Error("indexed website Robinhood Router identity is invalid");
   }
   return Object.freeze({
-    ethereum: Object.freeze({ deployment: envio.deploymentLabel, sourceCommit: envio.sourceCommit,
-      hooks: catalog.releaseBinding.sources.filter(source => /^ClassicV[0-9]+Hook$/u.test(source.contractName)).map(source => source.address.toLowerCase()) }),
+    ethereum: Object.freeze({ provider: "codex", releaseDigest,
+      hooks: catalog.sources.map(source => source.hook.toLowerCase()) }),
     robinhood: Object.freeze({ routerAddress: routerAddress.toLowerCase(), startBlock, modules: Object.freeze(modules) }),
   });
 }

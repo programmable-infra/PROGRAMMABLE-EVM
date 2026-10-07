@@ -332,3 +332,13 @@ test("detects another credential before or after the allowed canary field on the
     assertFiles(scan(t, { [visibilityTest]: `const launch = { ${fields} };` }, { raw: true }), [visibilityTest]);
   }
 });
+
+test("Classic discovery permits only the exact historical public address assignment", t => {
+  const path = "lib/market-data/classic-launch-proof.ts";
+  const value = "0x7987f03462200b3d8a072e02c89a8a41dcb124ee";
+  const line = `export const CLASSIC_MAIN_TOKEN = "${value}";`;
+  assert.deepEqual(scan(t, { [path]: line }, { raw: true }), []);
+  assertFiles(scan(t, { [path]: line.replace(value, material) }, { raw: true }), [path]);
+  assertFiles(scan(t, { [path]: `const apiKey = "${value}";` }, { raw: true }), [path]);
+  assertFiles(scan(t, { [`${path}.backup`]: line }, { raw: true }), [`${path}.backup`]);
+});

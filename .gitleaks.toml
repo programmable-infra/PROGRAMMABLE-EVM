@@ -505,3 +505,11 @@ condition = "AND"
 regexTarget = "secret"
 paths = ['''^contracts/deployments/ethereum-module-foundation-v1\.json$''']
 regexes = ['''(?i)^0x(?:1a6a3948b0c54670b634dd2a54598793ee192895|e2f175af5edf2ba4793ecdad94888fcdc5e1ab5f)$''']
+
+[[allowlists]]
+description = "Codex launch proof pins the historical public Programmable token address"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+paths = ['''^lib/market-data/classic-launch-proof\.ts$''']
+regexes = ['''^CLASSIC_MAIN_TOKEN = "0x7987f03462200b3d8a072e02c89a8a41dcb124ee"$''']
