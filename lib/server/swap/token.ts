@@ -15,6 +15,7 @@ import { readRobinhoodSwapDecimals } from "./token-metadata";
 import { SWAP_TOKEN_SCHEMA, SwapUnavailableError, type SwapChainId, type SwapTokenDescriptor } from "@/lib/swap/types";
 import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
 import { ethereumStampedSwapRoute } from "@/lib/swap/ethereum-stamped";
+import { readEthereumFeeClassificationV1 } from "@/lib/server/custom-launch/ethereum-routing-fee-policy-v1";
 
 const ZERO = "0x0000000000000000000000000000000000000000";
 export interface SwapTokenDependencies {
@@ -59,7 +60,10 @@ export async function resolveSwapToken(input: { address: string; chainId?: SwapC
         route: { kind: "module-foundation", transactionHash: row.launchTransactionHash as `0x${string}` } };
     }
     if (row.launchStampProvenance) {
-      const adapter = await dependencies.ethereumCustom(row);
+      let classification;
+      try { classification = await readEthereumFeeClassificationV1(row); }
+      catch { return unavailable(base, "The launch fee policy is updating. Please try again shortly."); }
+      const adapter = classification?.profileVersion === "3.6.0" ? null : await dependencies.ethereumCustom(row);
       const market = adapter?.project.markets.find(item => item.marketId === adapter.market.marketId);
       const capability = market?.tradeCapability;
       if (adapter?.chainId === "1" && market && capability
@@ -71,7 +75,7 @@ export async function resolveSwapToken(input: { address: string; chainId?: SwapC
         && capability.supportedSides.includes("base-to-quote") && capability.supportedSides.includes("quote-to-base")) {
         return { ...base, status: "ready", route: { kind: "custom-market", projectId: adapter.projectId, marketId: market.marketId, capability } };
       }
-      const automatic = ethereumStampedSwapRoute(row);
+      const automatic = ethereumStampedSwapRoute(row, classification);
       if (automatic) return { ...base, status: "ready", route: { kind: "ethereum-stamped", descriptor: automatic } };
       return unavailable(base, "An ETH swap route is not available for this launch yet.");
     }

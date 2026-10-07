@@ -49,6 +49,7 @@ export interface SwapReview {
   expiresAt: bigint;
   gasEstimate: bigint;
   approvalLabel?: string;
+  platformFee?: { amount: bigint; rateBps: number; includedInPool: boolean };
 }
 
 export interface SwapReceipt {
