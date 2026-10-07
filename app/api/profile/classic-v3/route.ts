@@ -32,8 +32,8 @@ import {
 import { uerc20ReadAbi } from "@/lib/onchain/abis";
 import { getWebsiteReadOnchainDeployment } from "@/lib/onchain";
 import {
-  readEnvioClassicV3CatalogV1,
-} from "@/lib/market-data/envio-classic-v3-catalog.server";
+  readClassicLaunchCatalogV1,
+} from "@/lib/market-data/classic-launch-catalog.server";
 import {
   safeOperationalRpcError,
   withOperationalRpcFailover,
@@ -1075,7 +1075,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const catalog = await readEnvioClassicV3CatalogV1({
+    const catalog = await readClassicLaunchCatalogV1({
       signal: request.signal,
       deadlineMs: Date.now() + 7_000,
     });

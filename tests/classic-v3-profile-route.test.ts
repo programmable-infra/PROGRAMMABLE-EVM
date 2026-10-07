@@ -41,7 +41,7 @@ const mocks = vi.hoisted(() => {
   return {
     client,
     createPublicClient: vi.fn(() => client),
-    readEnvioClassicV3CatalogV1: vi.fn(),
+    readClassicLaunchCatalogV1: vi.fn(),
     classicV4Release: null as ClassicV4PublicRelease | null,
     runtimeCodes,
   };
@@ -72,8 +72,8 @@ vi.mock("viem", async (importOriginal) => {
   };
 });
 
-vi.mock("../lib/market-data/envio-classic-v3-catalog.server", () => ({
-  readEnvioClassicV3CatalogV1: mocks.readEnvioClassicV3CatalogV1,
+vi.mock("../lib/market-data/classic-launch-catalog.server", () => ({
+  readClassicLaunchCatalogV1: mocks.readClassicLaunchCatalogV1,
 }));
 
 vi.mock("../lib/classic-v4-release", async (importOriginal) => {
@@ -142,7 +142,7 @@ describe("Classic profile release gate", () => {
     vi.clearAllMocks();
     mocks.classicV4Release = null;
     mocks.createPublicClient.mockReturnValue(mocks.client);
-    mocks.readEnvioClassicV3CatalogV1.mockResolvedValue({ entries: [] });
+    mocks.readClassicLaunchCatalogV1.mockResolvedValue({ entries: [] });
     vi.stubEnv("ETHEREUM_RPC_URL", drpcRpcUrl);
     vi.stubEnv("ETHEREUM_RPC_URL_B", quickNodeRpcUrl);
     vi.stubEnv("PROGRAMMABLE_WEBSITE_MAINNET_RPC_PRIMARY_PROVIDER", "drpc");

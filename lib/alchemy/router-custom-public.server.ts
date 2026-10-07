@@ -60,15 +60,6 @@ class RouterCustomSnapshotConflictError extends Error {
   override name = "RouterCustomSnapshotConflictError";
 }
 
-export type PublicLaunchSourceV1 =
-  | "registry.custom-launched"
-  | "canonical-launch-stamp-router"
-  | "registry.custom-launched+canonical-launch-stamp-router"
-  | "envio-classic-v3"
-  | "envio-classic-v3+registry.custom-launched"
-  | "envio-classic-v3+canonical-launch-stamp-router"
-  | "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router";
-
 export type RouterCustomIdentitySnapshotV1 = Readonly<{
   schemaVersion: typeof ROUTER_CUSTOM_SNAPSHOT_SCHEMA_VERSION;
   source: typeof ROUTER_CUSTOM_LAUNCH_SOURCE;
@@ -901,30 +892,6 @@ export function mergeRouterCustomExploreEntriesV1(
   }
 
   return Object.freeze([...retainedExisting, ...additions]);
-}
-
-export function publicLaunchSourceV1(input: Readonly<{
-  envioAvailable?: boolean;
-  registryCustomCurrent: boolean;
-  routerCustomCurrent: boolean;
-}>): PublicLaunchSourceV1 {
-  if (input.envioAvailable === false) {
-    if (input.registryCustomCurrent && input.routerCustomCurrent) {
-      return "registry.custom-launched+canonical-launch-stamp-router";
-    }
-    if (input.registryCustomCurrent) return "registry.custom-launched";
-    if (input.routerCustomCurrent) return "canonical-launch-stamp-router";
-  }
-  if (input.registryCustomCurrent && input.routerCustomCurrent) {
-    return "envio-classic-v3+registry.custom-launched+canonical-launch-stamp-router";
-  }
-  if (input.registryCustomCurrent) {
-    return "envio-classic-v3+registry.custom-launched";
-  }
-  if (input.routerCustomCurrent) {
-    return "envio-classic-v3+canonical-launch-stamp-router";
-  }
-  return "envio-classic-v3";
 }
 
 export function mergeRouterCustomCreatorProfileV1(

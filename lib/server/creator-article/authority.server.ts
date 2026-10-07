@@ -4,8 +4,8 @@ import { getAddress, isAddress } from "viem";
 
 import { readFinalizedRouterCustomExploreEntriesV1 } from
   "../../alchemy/router-custom-public.server";
-import { readEnvioClassicV3CatalogV1 } from
-  "../../market-data/envio-classic-v3-catalog.server";
+import { readClassicLaunchCatalogV1 } from
+  "../../market-data/classic-launch-catalog.server";
 import {
   isLaunchStampProvenanceV1,
   type ExploreEntry,
@@ -25,7 +25,7 @@ export type CreatorArticleAuthorityV1 = Readonly<{
   tokenAddress: `0x${string}`;
   creatorAddress: `0x${string}`;
   source:
-    | "envio-classic-v3"
+    | "codex-classic-launches"
     | "registry.custom-launched"
     | "canonical-launch-stamp-router"
     | "official-main-token";
@@ -96,8 +96,8 @@ export function createCreatorArticleAuthorityReaderV1(input: Readonly<{
           source = tokenAddress.toLowerCase() === MAIN_TOKEN
             ? "official-main-token"
             : entry.launchModel === "classic"
-                && entry.launchModelVersion === "classic-v3"
-              ? "envio-classic-v3"
+                && ["classic-v3", "classic-v4"].includes(entry.launchModelVersion ?? "")
+              ? "codex-classic-launches"
               : null;
         } else if (lane === "custom" && entry.exploreKind === "custom-project") {
           if (
@@ -173,7 +173,7 @@ export function createProductionCreatorArticleAuthorityReaderV1():
 CreatorArticleAuthorityReaderV1 {
   return createCreatorArticleAuthorityReaderV1({
     async readClassic(signal) {
-      const catalog = await readEnvioClassicV3CatalogV1({
+      const catalog = await readClassicLaunchCatalogV1({
         signal,
         deadlineMs: Date.now() + 7_500,
       });

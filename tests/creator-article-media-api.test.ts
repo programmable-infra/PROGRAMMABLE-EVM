@@ -35,7 +35,7 @@ describe("creator article media API", () => {
           chainId: 1,
           tokenAddress: TOKEN,
           creatorAddress: CREATOR,
-          source: "envio-classic-v3",
+          source: "codex-classic-launches",
           name: "Project",
           symbol: "PROJECT",
           imageUrl: null,
