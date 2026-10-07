@@ -413,6 +413,28 @@ describe("production wallet request lock", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    { code: "4001" },
+    { cause: { code: 4001 } },
+    { code: -32603, data: { originalError: { code: 4001 } } },
+    { error: { cause: { code: "4001" } } },
+  ])("releases wrapped explicit wallet rejections: %j", async wrapped => {
+    const requestRuntime = runtime();
+    const failure = Object.assign(new Error("Wallet request failed"), wrapped);
+    await expect(request(async () => { throw failure; }, requestRuntime)).rejects.toBe(failure);
+    expect(requestRuntime.localStorage.values).toHaveLength(0);
+    const retry = vi.fn(async () => `0x${"4".repeat(64)}`);
+    await expect(request(retry, requestRuntime)).resolves.toBe(`0x${"4".repeat(64)}`);
+  });
+
+  it("keeps wrapped unknown outcomes blocked and handles cyclic provider errors", async () => {
+    const requestRuntime = runtime();
+    const failure: Error & { cause?: unknown } = new Error("Wallet request failed");
+    failure.cause = { code: -32603, cause: failure };
+    await expect(request(async () => { throw failure; }, requestRuntime)).rejects.toBe(failure);
+    expect(requestRuntime.localStorage.values).toHaveLength(1);
+  });
+
   it("fails closed when browser lock state is malformed", async () => {
     const requestRuntime = runtime();
     requestRuntime.localStorage.setItem(
