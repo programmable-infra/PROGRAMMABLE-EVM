@@ -1,0 +1,156 @@
+{
+  "$schema": "./cli-release-binding.schema.json",
+  "schemaVersion": "programmable.launch-cli-v4-client-release-binding.v1",
+  "package": {
+    "name": "@programmable/launch",
+    "version": "4.1.3",
+    "tag": "programmable-launch-v4.1.3",
+    "repository": "programmablehq/PROGRAMMABLE"
+  },
+  "apiProfile": {
+    "schemaVersion": "programmable.custom-launch-profile-ref.v4",
+    "structuralProfileId": "programmable.custom-launch.robinhood-mainnet.v1",
+    "businessProfileId": "robinhood-production-launch",
+    "admissionDescriptorDigest": "sha256:b09611360e284641873fdb2914b4282e0545e32ea587b278fcd11f4db9a4e7f5",
+    "admissionPolicyDigest": "sha256:47801f57e2365f89eb7397a2df10d697bd1f756ec01536b9b34755e89809da04",
+    "admissionBindingDigest": "sha256:5b2486f35fcd44bd476cafd5bfb5a12decf05a756ba237ca191928f5414c721e",
+    "admissionSchemaDigest": "sha256:6a8194a3b5d8b6432a95ec04da3cd86091ad64c93c0531125caf00ecb919c8cf",
+    "profileRevision": 2,
+    "profileVersion": "4.1.0",
+    "profileDigest": "sha256:b0fca91264a49d358ed1a9eec2a679b59a48d716b71475bef583c2545e1ee502"
+  },
+  "ethereumClient": {
+    "chainId": "1",
+    "requestSchemaVersion": "programmable.custom-launch-create-request.v3",
+    "defaultProfileVersion": "3.3.0",
+    "candidateProfileVersion": "3.5.0",
+    "packConfigSchemaPath": "packages/launch/schemas/programmable-launch-pack-config-v3.5.json",
+    "candidateActivation": "requires-server-capabilities",
+    "activatesWriteProfile": false,
+    "requiresCliForDirectHttp": false
+  },
+  "existingApiReleaseBinding": {
+    "schemaVersion": "programmable.launch-cli-v4-release-binding.v2",
+    "path": "docs/operations/releases/custom-launch-v4.1/cli-release-binding.json",
+    "sha256": "sha256:d8c36266908b2f1c7f0d9ac517fbf2547541f81ab09f8eb8377e625d8eccc75e"
+  },
+  "coverage": {
+    "path": "/v4/chains/4663/launch-coverage",
+    "schemaVersion": "programmable.robinhood-launch-coverage.v1",
+    "authentication": "none",
+    "requestAuthorization": false,
+    "activatesWriteProfile": false
+  },
+  "clientFiles": [
+    {
+      "path": "packages/launch/package.json",
+      "sha256": "sha256:512fd9984ab2527ef2250267980fdfccb430d1e7daeda48d30566980a662ef20"
+    },
+    {
+      "path": "packages/launch/npm-shrinkwrap.json",
+      "sha256": "sha256:3bd1d5a5f3e69cc2366a6dbeee28269fefea6f1eb0eeffccb6036460409554aa"
+    },
+    {
+      "path": "packages/launch/src/constants.mjs",
+      "sha256": "sha256:d65b60cb65b45f24c74f3ed4aae5281fd79629b64b7ccf400944205171aa2b97"
+    },
+    {
+      "path": "packages/launch/src/cli.mjs",
+      "sha256": "sha256:ec3b02a6a8199e5c2c373ed23e956e18f04a471f2f7f1750d94dc4bb99bc4dbc"
+    },
+    {
+      "path": "packages/launch/src/index.mjs",
+      "sha256": "sha256:ba520a51991f1d764b4f6557a75ad33902c456ae67c4f5a9c76c2d986f082abd"
+    },
+    {
+      "path": "packages/launch/src/api-client.mjs",
+      "sha256": "sha256:dc83956ed29fdd24ef01e9806409c47c19360c37c522fd312012d599971e5263"
+    },
+    {
+      "path": "packages/launch/src/api-response.mjs",
+      "sha256": "sha256:3406fa6a0a47f482670d9950e7aed86ea349a2aa478cee6e800d5febe18e0878"
+    },
+    {
+      "path": "packages/launch/src/canonical-json.mjs",
+      "sha256": "sha256:0ed0d9004ce490d996fda3172ffd7863f7ecb603d91c78ea492e7ba089e80c6d"
+    },
+    {
+      "path": "packages/launch/src/io.mjs",
+      "sha256": "sha256:a9c61664c8c803aad35f823a366c612108e9698d34507091653920da63bbac32"
+    },
+    {
+      "path": "packages/launch/src/launch-coverage-v1.mjs",
+      "sha256": "sha256:623795d9e8829b0abfc9b8286a185233eb5c2d41004af803fd137244f592593a"
+    },
+    {
+      "path": "packages/launch/schemas/robinhood-launch-coverage-v1.json",
+      "sha256": "sha256:722f813982a42f86b6d97c9d067d394ec6d692ff61b53c45115150d556a87305"
+    },
+    {
+      "path": "packages/launch/bin/programmable-launch.mjs",
+      "sha256": "sha256:4dc5ab1c44f7f53ad8e59d26f8fc279f6c7f180117b54a6f44375a132e2544a7"
+    },
+    {
+      "path": "packages/launch/README.md",
+      "sha256": "sha256:0d4a579bc6362233675f148ae5665e06c2ade6b4bbb156b838ceaa364ce2be1e"
+    },
+    {
+      "path": "packages/launch/src/pack.mjs",
+      "sha256": "sha256:2e7681d33712788342ab7e4e74ec66553de9895888f75c9e7c14834100a410bf"
+    },
+    {
+      "path": "packages/launch/src/validate.mjs",
+      "sha256": "sha256:9886927b6e437c1ed62a8f50d10591afe21d8b62813864af6eca4abc055dd78e"
+    },
+    {
+      "path": "packages/launch/src/profile-direct-native-v1.mjs",
+      "sha256": "sha256:59c9a2cb5591557eaa3453ced9b7a6b6f347b8ceb7ffcbabb221c0fc34c45079"
+    },
+    {
+      "path": "packages/launch/src/canonical-settlement-fee-vault-v1.mjs",
+      "sha256": "sha256:222d82e73b00146f659c97ed8c05a8f07491ba0a7b8bb5e388f36a9d49dcb281"
+    },
+    {
+      "path": "packages/launch/src/canonical-settlement-fee-vault-v2.mjs",
+      "sha256": "sha256:a3336106ee3d8ed8ba6c7eb74e912c78d3bc89433edb2c3f6a38efd33fbcf15c"
+    },
+    {
+      "path": "packages/launch/src/settlement-fee-vault-validation.mjs",
+      "sha256": "sha256:fe5f364a442b73743b477eb0769a2aea411267cb73eff4a66cc888870d45249d"
+    },
+    {
+      "path": "packages/launch/schemas/programmable-launch-pack-config-v3.5.json",
+      "sha256": "sha256:3fa502ec2d515a0eceb0486165c8a1685215e3f452239adffb224ecd17fb1e65"
+    },
+    {
+      "path": "packages/launch/contracts/settlement-fee-vault-v2/EthereumSettlementFeeVaultV2.artifact.json",
+      "sha256": "sha256:49df5f5471db88cb0a03f862b796d171d1eb15d87ff5b5f23881870f77326f69"
+    },
+    {
+      "path": "packages/launch/contracts/settlement-fee-vault-v2/EthereumSettlementFeeVaultV2.build.json",
+      "sha256": "sha256:4b65fc13362946635e52c1d8d9c7f7a0a8726699598b8ea5c6d7db48d1f12720"
+    },
+    {
+      "path": "packages/launch/contracts/settlement-fee-vault-v2/EthereumSettlementFeeVaultV2.standard-json.json",
+      "sha256": "sha256:0b7c83b8e4ac01499e7967ac44ca711fa9e7192f0db5dd9ab5ee58433cbad7d0"
+    },
+    {
+      "path": "packages/launch/contracts/settlement-fee-vault-v2/release-binding.v2.json",
+      "sha256": "sha256:6aeb8f26c2251e3492dbeb6eb2daab8e6e966ee40da7647d4579cce6be978ea1"
+    }
+  ],
+  "machineContracts": [
+    {
+      "name": "openapi",
+      "path": "public/openapi/launch-coverage-v1.json",
+      "url": "https://programmable.market/openapi/launch-coverage-v1.json",
+      "sha256": "sha256:d36b595c174bca9671660716b38a0e42379c4cd845124207ef3c965e80503650"
+    },
+    {
+      "name": "response",
+      "path": "public/schemas/custom-launch/coverage/v1.json",
+      "url": "https://programmable.market/schemas/custom-launch/coverage/v1.json",
+      "sha256": "sha256:722f813982a42f86b6d97c9d067d394ec6d692ff61b53c45115150d556a87305"
+    }
+  ]
+}
