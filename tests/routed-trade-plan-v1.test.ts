@@ -9,9 +9,9 @@ vi.mock("@/contracts/spec/robinhood-custom-launch/chain-4663.v1.json", async imp
   return { default: value };
 });
 import { projectionFixture, controller, component, runtime, runtimeHash, hash, now, nowIso } from "./fixtures/universal-launch-v1";
-import { buildLaunchPlanRoutedSwapV1, launchPlanTradeAmountsV1, launchPlanTradeBindingV1, launchPlanTradePreparationDigestV1,
+import { buildLaunchPlanRoutedSwapV1, buildLaunchPlanTradeApprovalV1, launchPlanTradeApprovalExpirationV1, launchPlanTradeAmountsV1, launchPlanTradeBindingV1, launchPlanTradePreparationDigestV1,
   parseLaunchPlanTradeRequestV1, ROUTED_FEE_POLICY_V2, ROUTED_FEE_RECIPIENT_V1, ROUTED_TRADE_CONTRACTS_V1, ROUTED_TRADE_REQUEST_V1, ROUTED_TRADE_ROUTER_ABI_V1,
-  ROUTED_TRADE_TOKEN_ABI_V1, validateLaunchPlanTradePreparationV1, type LaunchPlanTradeRequestV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
+  ROUTED_TRADE_TOKEN_ABI_V1, ROUTED_TRADE_PERMIT2_ABI_V1, validateLaunchPlanTradePreparationV1, type LaunchPlanTradeRequestV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
 import { prepareLaunchPlanTradeV1 } from "@/lib/server/custom-launch/routed-trade-plan-v1";
 import { productionTradeRpcsV1, tradePostStateV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 import { prepareLaunchPlanTradeWalletV1 } from "@/lib/custom-launch/routed-trade-wallet-v1";
@@ -84,7 +84,7 @@ function fixtureRpc(options: { revert?: boolean; missingFee?: boolean; underpaid
 const prepared = async (options: Parameters<typeof fixtureRpc>[0] = {}) => prepareLaunchPlanTradeV1(request(), {
   loadProjection: async () => projection(), rpcs: [fixtureRpc(options), fixtureRpc(options)], now: () => now });
 
-function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAccrual?: boolean; missingRecord?: boolean; missingVault?: boolean; sell?: boolean; provenance?: boolean; native30?: boolean } = {}) {
+function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAccrual?: boolean; missingRecord?: boolean; missingVault?: boolean; sell?: boolean; provenance?: boolean; native30?: boolean; permitExpiration?: number } = {}) {
   const vector = (options.native30 ? native30Vector : feeVectors.proofs[index]!) as unknown as ImmutablePoolFeeRuntimeProofV1;
   const proof = rebuildImmutablePoolFeeRuntimeProof(vector, vector.market);
   const recipes = proof.schemaVersion === "programmable.immutable-pool-fee-runtime-proof.v2" ? feeRecipesV2[proof.recipeId] : feeRecipes[proof.recipeId];
@@ -114,7 +114,7 @@ function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAcc
     }
     const tx=params[0] as {from:string;to:string;data:Hex;value:Hex};
     if (method === "eth_call" && tx.to.toLowerCase() === ROUTED_TRADE_CONTRACTS_V1.v4Quoter.address.toLowerCase()) return encodeAbiParameters([{type:"uint256"},{type:"uint256"}],[quoteAmount,100000n]);
-    if (method === "eth_call" && tx.to.toLowerCase() === ROUTED_TRADE_CONTRACTS_V1.permit2.address.toLowerCase()) return encodeAbiParameters([{type:"uint160"},{type:"uint48"},{type:"uint48"}],[100000n,Number(BigInt(tradeRequest.deadline)),0]);
+    if (method === "eth_call" && tx.to.toLowerCase() === ROUTED_TRADE_CONTRACTS_V1.permit2.address.toLowerCase()) return encodeAbiParameters([{type:"uint160"},{type:"uint48"},{type:"uint48"}],[100000n,options.permitExpiration ?? Number(BigInt(tradeRequest.deadline)),0]);
     if (method === "eth_call" && [proof.feeVault.toLowerCase(),proof.market.poolManager.toLowerCase()].includes(tx.to.toLowerCase())) {
       const name=decodeFunctionData({abi:LEDGER,data:tx.data}).functionName,post=!!params[2];
       return toHex(name==="platformAccrued"?1000n+(post?(options.wrongAccrual?platform-1n:platform):0n)
@@ -142,6 +142,25 @@ function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAcc
 }
 
 describe("generic vNext routed swap", () => {
+  it("reuses the exact-amount Permit2 approval after mining and refreshing a sell quote", async () => {
+    const original = { ...request(), zeroForOne: false };
+    const approval = buildLaunchPlanTradeApprovalV1(original, component, "permit2_approval");
+    const decoded = decodeFunctionData({ abi: ROUTED_TRADE_PERMIT2_ABI_V1, data: approval.data });
+    if (decoded.functionName !== "approve") throw new Error("Expected exact-amount approval");
+    expect(decoded.args.slice(0, 3)).toEqual([component, ROUTED_TRADE_CONTRACTS_V1.universalRouter.address, BigInt(original.amountIn)]);
+    expect(BigInt(decoded.args[3])).toBe(BigInt(original.deadline) + 300n);
+    const fixture = immutablePoolFixture(0, { native30: true, provenance: true, sell: true, permitExpiration: Number(decoded.args[3]) });
+    fixture.request.deadline = (BigInt(original.deadline) + 60n).toString();
+    const refreshed = await fixture.prepare();
+    expect(refreshed.status).toBe("ready");
+    expect(refreshed.transaction.kind).toBe("swap");
+    expect(validateLaunchPlanTradePreparationV1(refreshed, fixture.projection, fixture.request, now)).toEqual(refreshed);
+  });
+  it("keeps the Permit2 expiry within uint48 including its bounded refresh window", () => {
+    const maximum = (1n << 48n) - 1n;
+    expect(launchPlanTradeApprovalExpirationV1((maximum - 300n).toString())).toBe(maximum);
+    expect(() => launchPlanTradeApprovalExpirationV1((maximum - 299n).toString())).toThrow();
+  });
   it("charges 30 bps for current provenance trades and binds the same fee in the wallet transaction", async () => {
     const value = provenanceProjection(), original = structuredClone(value);
     const binding = launchPlanTradeBindingV1(value, request());

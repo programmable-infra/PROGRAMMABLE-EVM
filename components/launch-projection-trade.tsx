@@ -83,13 +83,13 @@ export function LaunchProjectionTrade({ projection }: { projection: LaunchProjec
         <div><dt>Expected received after route fee</dt><dd>{amount(review.preparation.quote.amountOut, review.preparation.quote.outputDecimals)} {short(outputCurrency)}</dd></div>
         <div><dt>Minimum received</dt><dd>{amount(review.preparation.quote.amountOutMinimum, review.preparation.quote.outputDecimals)} {short(outputCurrency)}</dd></div>
         <div><dt>Programmable route fee</dt><dd>{amount(review.preparation.quote.platformFeeAmount, review.preparation.quote.outputDecimals)} {short(outputCurrency)} ({review.preparation.fee.routedRateBps / 100}%)</dd></div>
-        {review.preparation.fee.mode === "pool_enforced" ? <div><dt>Platform fee included in pool</dt><dd>{poolFeeWei ? `${formatUnits(BigInt(poolFeeWei), 18)} ETH` : "Native ETH"} (0.2%)</dd></div> : null}
+        {review.preparation.fee.mode === "pool_enforced" ? <div><dt>Platform fee included in pool</dt><dd>{poolFeeWei ? `${formatUnits(BigInt(poolFeeWei), 18)} ETH` : "Native ETH"} ({review.preparation.fee.rateBps / 100}%)</dd></div> : null}
         <div><dt>Fee recipient</dt><dd><code>{review.preparation.fee.recipient.slice(0, 22)}<wbr />{review.preparation.fee.recipient.slice(22)}</code></dd></div>
         <div><dt>Estimated transaction gas cost</dt><dd>{formatUnits(BigInt(review.maxGasCostWei), 18)} ETH</dd></div>
       </dl>
       <p>{review.preparation.fee.mode === "pool_enforced" ? review.preparation.status === "ready"
-        ? "The 0.2% platform fee is already included in this pool. This transaction adds no route fee."
-        : "This pool includes a 0.2% platform fee on swaps. Review its exact amount after this approval."
+        ? `The ${review.preparation.fee.rateBps / 100}% platform fee is already included in this pool. This transaction adds no route fee.`
+        : `This pool includes a ${review.preparation.fee.rateBps / 100}% platform fee on swaps. Review its exact amount after this approval.`
         : "This fee applies to swaps built here. External routes and direct pool interactions can bypass it."}</p>
       {review.preparation.status === "approval_required" ? <p>This transaction approves only the requested input amount. Refresh the trade after that approval is included.</p> : null}
       {review.controllerKind === "connected_contract_wallet" ? <p>Your contract wallet must obtain its own approvals. Its wallet shows the final execution fee.</p> : null}

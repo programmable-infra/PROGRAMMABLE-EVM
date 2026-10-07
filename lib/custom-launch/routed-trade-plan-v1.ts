@@ -18,6 +18,7 @@ export const ROUTED_TRADE_CONTRACTS_V1 = chainProfile.contracts.uniswap;
 export const ROUTED_TRADE_ROUTER_ABI_V1 = parseAbi(["function execute(bytes commands,bytes[] inputs,uint256 deadline) payable"]);
 export const ROUTED_TRADE_TOKEN_ABI_V1 = parseAbi(["function balanceOf(address) view returns(uint256)", "function allowance(address,address) view returns(uint256)", "function approve(address,uint256) returns(bool)", "function decimals() view returns(uint8)"]);
 export const ROUTED_TRADE_PERMIT2_ABI_V1 = parseAbi(["function allowance(address,address,address) view returns(uint160,uint48,uint48)", "function approve(address,address,uint160,uint48)"]);
+export const ROUTED_TRADE_APPROVAL_GRACE_SECONDS_V1 = 300n;
 const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 const SENDER = "0x0000000000000000000000000000000000000001" as Address;
 const UINT128_MAX = (1n << 128n) - 1n;
@@ -161,14 +162,19 @@ export function buildLaunchPlanRoutedSwapV1(projection: LaunchProjectionV1, requ
     data: encodeFunctionData({ abi: ROUTED_TRADE_ROUTER_ABI_V1, functionName: "execute", args: [route.commands as Hex, route.inputs as Hex[], BigInt(request.deadline)] }),
     value: binding.inputCurrency === ZERO ? request.amountIn : "0", gasLimit: "1" };
 }
+export function launchPlanTradeApprovalExpirationV1(deadline: string): bigint {
+  // Leave time to mine the exact-amount approval and refresh the swap quote.
+  // The swap retains its own deadline; this only extends the token allowance.
+  return uint(deadline, (1n << 48n) - 1n - ROUTED_TRADE_APPROVAL_GRACE_SECONDS_V1) + ROUTED_TRADE_APPROVAL_GRACE_SECONDS_V1;
+}
 export function buildLaunchPlanTradeApprovalV1(request: LaunchPlanTradeRequestV1, token: Address, kind: "token_approval" | "permit2_approval"): LaunchPlanTradeTransactionV1 {
-  uint(request.deadline, (1n << 48n) - 1n);
+  const expiration = launchPlanTradeApprovalExpirationV1(request.deadline);
   return { kind, chainId: "4663", from: request.owner, value: "0", gasLimit: "1",
     to: kind === "token_approval" ? token : getAddress(ROUTED_TRADE_CONTRACTS_V1.permit2.address),
     data: kind === "token_approval" ? encodeFunctionData({ abi: ROUTED_TRADE_TOKEN_ABI_V1, functionName: "approve",
       args: [getAddress(ROUTED_TRADE_CONTRACTS_V1.permit2.address), BigInt(request.amountIn)] })
       : encodeFunctionData({ abi: ROUTED_TRADE_PERMIT2_ABI_V1, functionName: "approve", args: [token,
-        getAddress(ROUTED_TRADE_CONTRACTS_V1.universalRouter.address), BigInt(request.amountIn), Number(BigInt(request.deadline))] }) };
+        getAddress(ROUTED_TRADE_CONTRACTS_V1.universalRouter.address), BigInt(request.amountIn), Number(expiration)] }) };
 }
 
 export function launchPlanTradePreparationDigestV1(value: Omit<LaunchPlanTradePreparationV1, "preparationDigest">) {
