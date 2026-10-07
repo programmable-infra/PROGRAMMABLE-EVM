@@ -10,8 +10,8 @@ import { createFoundationClient } from "@/lib/module-foundation/client";
 import { fetchFoundationAvailability, FoundationProviderDisagreementError, type FoundationAvailabilityEnvelope } from "@/lib/module-foundation/availability";
 import { bindFoundationCatalogV1 } from "@/lib/module-foundation/catalog";
 import { readFoundationLaunchDisplay, rememberFoundationLaunchDisplay, subscribeFoundationLaunchDisplay } from "@/lib/module-foundation/launch-display-cache";
-import { bindFoundationWalletStep, FOUNDATION_PENDING_EVENT, readFoundationPending, reconcileFoundationPending, recoverFoundationPending,
-  submitFoundationWalletStep, type FoundationPreparedSequence } from "@/lib/module-foundation/wallet";
+import { bindFoundationWalletStep, FOUNDATION_PENDING_EVENT, readFoundationPending, readFoundationLaunchRetry, reconcileFoundationPending, recoverFoundationPending,
+  submitFoundationWalletStep, type FoundationLaunchRetry, type FoundationPreparedSequence } from "@/lib/module-foundation/wallet";
 import { acknowledgeFoundationResolution, FOUNDATION_RESOLUTION_EVENT, readFoundationResolution,
   type FoundationResolution } from "@/lib/module-foundation/result-store";
 import type { FoundationAvailability, FoundationTransactionResult, FoundationWalletAction } from "@/lib/module-foundation/ui-types";
@@ -90,18 +90,35 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
     if (pending === "null" || pending === "unreadable") return null;
     return (JSON.parse(pending) as { transactionHash: Hex | null }).transactionHash;
   }, [pending]);
+  const [launchRetry, setLaunchRetry] = useState<FoundationLaunchRetry | null>(null);
+  const retryAvailable = !token && !requestPending && launchRetry?.chainId === chainId
+    && launchRetry.account === account && pending !== "null" && pending !== "unreadable"
+    && JSON.parse(pending).operationId === launchRetry.operationId;
+  const checkPending = useCallback(async (knownHash?: Hex) => {
+    if (!account) return;
+    try {
+      const receipt = await recoverFoundationPending(client, account, knownHash);
+      setLaunchRetry(null);
+      return receipt;
+    } catch (error) {
+      const retry = !token && !knownHash ? await readFoundationLaunchRetry(client, account) : null;
+      setLaunchRetry(retry);
+      if (!retry) throw error;
+      return null;
+    }
+  }, [account, client, token]);
   useEffect(() => {
     // An active submission already waits for its receipt. Recovery is for interrupted or reloaded sessions.
     if (!account || pending === "null" || pending === "unreadable" || progress || requestPending || executing.current) return;
     const start = () => watchFoundationRecovery({
-      reconcile: () => recoverFoundationPending(client, account),
+      reconcile: () => checkPending(),
       visible: () => document.visibilityState === "visible",
     });
     let stop = start();
     const visibility = () => { stop(); if (document.visibilityState === "visible") stop = start(); };
     document.addEventListener("visibilitychange", visibility);
     return () => { stop(); document.removeEventListener("visibilitychange", visibility); };
-  }, [account, client, pendingTransactionHash, pending, progress, requestPending]);
+  }, [account, checkPending, pendingTransactionHash, pending, progress, requestPending]);
   const subscribeResolution = useCallback((listener: () => void) => {
     window.addEventListener("storage", listener); window.addEventListener(FOUNDATION_RESOLUTION_EVENT, listener);
     return () => { window.removeEventListener("storage", listener); window.removeEventListener(FOUNDATION_RESOLUTION_EVENT, listener); };
@@ -181,7 +198,7 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
     label: walletStep === "connect" ? "Connect wallet" : `Switch to ${profile.name}`, busy: walletBusy,
     onClick: walletStep === "connect" ? openWallet : () => switchModuleModeNetwork(switchNetwork, chainId),
   };
-  const preparationBlocked = pending !== "null" ? "Checking your previous wallet transaction. Your coin details are saved."
+  const preparationBlocked = pending !== "null" && !retryAvailable ? "Checking your previous wallet transaction. Your coin details are saved."
     : resolutionState === "unreadable" ? "The saved transaction result could not be read. Check wallet activity before continuing."
     : (chainId === 4663 && savedLegacy.blocked) ? "A previous Module Mode operation needs recovery before you continue."
       : requestPending ? "Complete the open wallet request before continuing." : undefined;
@@ -191,7 +208,9 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
     if (executing.current || used.current.has(sequence)) throw new Error("Review a fresh operation before continuing.");
     if (foundationBindingChainId(sequence.binding) !== chainId) throw new Error("This preparation belongs to a different launch network.");
     assertCurrent(sequence.account);
-    if ((chainId === 4663 && savedLegacy.blocked) || readFoundationPending(sequence.account, chainId) || readFoundationResolution(sequence.account, chainId)) throw new Error("Resolve the previous wallet operation first.");
+    if ((chainId === 4663 && savedLegacy.blocked) || (readFoundationPending(sequence.account, chainId) && !retryAvailable)
+      || readFoundationResolution(sequence.account, chainId)) throw new Error("Resolve the previous wallet operation first.");
+    const retry = retryAvailable ? launchRetry! : undefined;
     executing.current = true; used.current.add(sequence);
     const expectedContext = currentContext.current;
     try {
@@ -200,7 +219,7 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
         const step = sequence.steps[index];
         if (mounted.current) setProgress(sequence.kind === "launch" ? "Confirm in your wallet…" : `Step ${index + 1} of ${sequence.steps.length}: ${step.label}`);
         const preparation = bindFoundationWalletStep({ client, sequence, index, resolveAuthority, resolveCatalog });
-        const hash = await submitFoundationWalletStep(preparation, sendModuleModeTransaction, true);
+        const hash = await submitFoundationWalletStep(preparation, sendModuleModeTransaction, true, retry);
         if (mounted.current) setProgress(sequence.kind === "launch" ? "Creating your coin…" : "Waiting for confirmation…");
         const outcome: FoundationExecutionResult = { sequence, stepIndex: index,
           result: { status: "submitted", transactionHash: hash, explorerUrl: `${profile.explorer}/tx/${hash}`,
@@ -260,7 +279,7 @@ export function useFoundationSession(token?: Address, chainId: FoundationChainId
     if (resetDraft) setResultGeneration(value => value + 1);
   }
   return { chainId, profile, client, account, walletContext, availability, envelope, displayEnvelope: token ? null : displayEnvelope, contextKey, walletAction, submissionBlocked, preparationBlocked,
-    pending, pendingTransactionHash, resolution, resolutionState, resultGeneration, acknowledgeResult, progress, assertCurrent, resolveAuthority, resolveCatalog, execute, refreshResult,
+    pending, pendingTransactionHash, retryAvailable, checkPending, resolution, resolutionState, resultGeneration, acknowledgeResult, progress, assertCurrent, resolveAuthority, resolveCatalog, execute, refreshResult,
     retryAvailability: () => setRefresh(value => value + 1) };
 }
 
@@ -280,7 +299,7 @@ export function FoundationSessionStatus({ session, editingNewLaunch = false, sho
   const check = () => {
     if (busy || !session.account) return;
     setBusy(true); setMessage("");
-    void recoverFoundationPending(session.client, session.account, hash.trim() ? hash.trim() as Hex : undefined)
+    void session.checkPending(hash.trim() ? hash.trim() as Hex : undefined)
       .then(() => setMessage(""))
       .catch(error => setMessage(error instanceof Error ? error.message : "Wallet activity could not be checked. Try again."))
       .finally(() => setBusy(false));
@@ -307,7 +326,8 @@ export function FoundationSessionStatus({ session, editingNewLaunch = false, sho
       }}>{busy ? "Continuing…" : editingNewLaunch ? "Dismiss" : resolved.status === "success" && resolved.metadata?.stepKind === "launch" ? "Create another coin" : "Continue"}</button> : null}
     </details> : null}
     {session.resolutionState === "unreadable" ? <p role="alert">The saved transaction result could not be read. Check wallet activity before continuing.</p> : null}
-    {recovery && !session.progress ? <details className={styles.savedResult} open aria-label="Recover wallet operation">
+    {recovery && !session.progress && session.retryAvailable ? <p role="status">Your previous request did not finish. You can retry the launch below.</p> : null}
+    {recovery && !session.progress && !session.retryAvailable ? <details className={styles.savedResult} open aria-label="Recover wallet operation">
       <summary>{session.pendingTransactionHash ? "Waiting for transaction confirmation" : "Check previous wallet transaction"}</summary>
       <p>{session.pendingTransactionHash ? "Confirmation is checked automatically, including transactions sped up in your wallet."
         : "We are checking your wallet activity. If the request is still open in your wallet, confirm or cancel it there."}</p>

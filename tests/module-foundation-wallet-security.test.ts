@@ -2,7 +2,7 @@ import { webcrypto } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { encodeFunctionData, getAddress, keccak256, toHex, type Hex, type PublicClient } from "viem";
 import {
-  bindFoundationWalletStep, foundationWalletRequestNonce, readFoundationPending, reconcileFoundationPending, recoverFoundationPending, noteFoundationWalletRequest,
+  bindFoundationWalletStep, foundationWalletRequestNonce, readFoundationPending, readFoundationLaunchRetry, reconcileFoundationPending, recoverFoundationPending, noteFoundationWalletRequest,
   revalidateFoundationWalletStep, submitFoundationWalletStep,
   type FoundationPreparedSequence, type FoundationWalletPreparation,
 } from "@/lib/module-foundation/wallet";
@@ -562,5 +562,84 @@ describe("interrupted wallet recovery", () => {
       throw new Error("Wallet response lost");
     })).rejects.toThrow("Wallet response lost");
     expect(readFoundationPending(account)?.walletPhase).toBe("requested");
+  });
+});
+
+describe("retrying an unsubmitted launch without advancing its nonce", () => {
+  async function lostLaunch(chainId: 1 | 4663) {
+    const f = fixture(0, true, true);
+    Object.assign(f.sequence.binding, { chainId });
+    Object.assign(f.client, { chain: { id: chainId } });
+    vi.mocked(f.client.getChainId).mockResolvedValue(chainId);
+    await expect(submitFoundationWalletStep(f.bind(), async value => {
+      noteFoundationWalletRequest(value);
+      throw new Error("Wallet response lost");
+    }, true)).rejects.toThrow("Wallet response lost");
+    return f;
+  }
+
+  it.each([1, 4663] as const)("reopens a hashless launch on chain %s with the same reserved nonce", async chainId => {
+    const f = await lostLaunch(chainId), original = readFoundationPending(account, chainId)!;
+    const retry = await readFoundationLaunchRetry(f.client, account);
+    expect(retry).toMatchObject({ operationId: original.operationId, chainId, nonce: 7 });
+    expect(readFoundationPending(account, chainId)).toEqual(original);
+    const send = vi.fn(async (value: FoundationWalletPreparation) => {
+      noteFoundationWalletRequest(value);
+      expect(await foundationWalletRequestNonce(value)).toBe(7);
+      return transactionHash;
+    });
+    await expect(submitFoundationWalletStep(f.bind(), send, true, retry!)).resolves.toBe(transactionHash);
+    expect(send).toHaveBeenCalledOnce();
+    expect(readFoundationPending(account, chainId)).toMatchObject({ nonce: 7, transactionHash });
+  });
+
+  it.each(["latest", "pending"] as const)("does not offer retry when the %s nonce is already advanced", async tag => {
+    const f = await lostLaunch(4663);
+    vi.mocked(f.client.getTransactionCount).mockImplementation(async args => args?.blockTag === tag ? 8 : 7);
+    expect(await readFoundationLaunchRetry(f.client, account)).toBeNull();
+    expect(readFoundationPending(account)?.nonce).toBe(7);
+  });
+
+  it("blocks if the original request becomes visible after the retry was offered", async () => {
+    const f = await lostLaunch(4663), original = readFoundationPending(account);
+    const retry = await readFoundationLaunchRetry(f.client, account), send = vi.fn(async () => transactionHash);
+    vi.mocked(f.client.getTransactionCount).mockResolvedValue(8);
+    await expect(submitFoundationWalletStep(f.bind(), send, true, retry!)).rejects.toThrow("visible onchain");
+    expect(send).not.toHaveBeenCalled();
+    expect(readFoundationPending(account)).toEqual(original);
+  });
+
+  it.each([false, true])("preserves the original reservation when retry fails before sending or is rejected (%s)", async rejected => {
+    const f = await lostLaunch(4663), original = readFoundationPending(account);
+    const retry = await readFoundationLaunchRetry(f.client, account);
+    await expect(submitFoundationWalletStep(f.bind(), async () => {
+      throw Object.assign(new Error("Retry stopped"), { walletRequestAttempted: rejected, walletRequestRejected: rejected });
+    }, true, retry!)).rejects.toThrow("Retry stopped");
+    expect(readFoundationPending(account)).toEqual(original);
+    expect(await readFoundationLaunchRetry(f.client, account)).toEqual(retry);
+  });
+
+  it("does not offer retry for a known hash, unrelated operation, or active wallet request", async () => {
+    const f = await lostLaunch(4663), original = readFoundationPending(account)!;
+    const key = `programmable:foundation-pending:v1:4663:${account.toLowerCase()}`;
+    storage.setItem(key, JSON.stringify({ ...original, transactionHash }));
+    expect(await readFoundationLaunchRetry(f.client, account)).toBeNull();
+    storage.setItem(key, JSON.stringify({ ...original, metadata: { operationKind: "trade", stepKind: "buy" } }));
+    expect(await readFoundationLaunchRetry(f.client, account)).toBeNull();
+    storage.setItem(key, JSON.stringify(original));
+    locks.active.add(key);
+    expect(await readFoundationLaunchRetry(f.client, account)).toBeNull();
+  });
+
+  it("supports old hashless launch records and never accepts a stale reservation", async () => {
+    const f = await lostLaunch(4663), original = readFoundationPending(account)!;
+    const key = `programmable:foundation-pending:v1:4663:${account.toLowerCase()}`;
+    delete original.walletPhase;
+    storage.setItem(key, JSON.stringify(original));
+    const retry = await readFoundationLaunchRetry(f.client, account), send = vi.fn(async () => transactionHash);
+    expect(retry?.nonce).toBe(7);
+    storage.setItem(key, JSON.stringify({ ...original, operationId: crypto.randomUUID() }));
+    await expect(submitFoundationWalletStep(f.bind(), send, true, retry!)).rejects.toThrow("reconciliation");
+    expect(send).not.toHaveBeenCalled();
   });
 });

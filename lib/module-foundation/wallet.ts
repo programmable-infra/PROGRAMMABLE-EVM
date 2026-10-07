@@ -172,6 +172,16 @@ export interface FoundationPendingOperation {
   operationId: string;
   metadata?: FoundationResolutionMetadata;
 }
+export type FoundationLaunchRetry = Readonly<{ account: Address; chainId: FoundationChainId; operationId: string; nonce: number }>;
+function isRetryableLaunch(pending: FoundationPendingOperation | null): pending is FoundationPendingOperation {
+  return Boolean(pending && !pending.transactionHash && pending.walletPhase !== "preparing"
+    && pending.metadata?.operationKind === "launch" && pending.metadata.stepKind === "launch");
+}
+function matchesLaunchRetry(pending: FoundationPendingOperation | null, retry?: FoundationLaunchRetry) {
+  return isRetryableLaunch(pending) && retry && pending.operationId === retry.operationId
+    && foundationBindingChainId(pending) === retry.chainId && getAddress(pending.account) === getAddress(retry.account)
+    && pending.nonce === retry.nonce;
+}
 function storeKey(account: Address, chainId: FoundationChainId = 4663) { return `${PREFIX}${foundationChainProfile(chainId).chainId}:${account.toLowerCase()}`; }
 function signalChange() { window.dispatchEvent(new Event(FOUNDATION_PENDING_EVENT)); }
 export function readFoundationPending(account: Address, chainId: FoundationChainId = 4663): FoundationPendingOperation | null {
@@ -189,6 +199,26 @@ export function readFoundationPending(account: Address, chainId: FoundationChain
   if (value.walletPhase !== undefined && value.walletPhase !== "preparing" && value.walletPhase !== "requested") throw new Error("The saved wallet phase cannot be read.");
   getAddress(value.to);
   return value;
+}
+
+/** A missing response may be retried only at its reserved nonce, never by advancing to another transaction. */
+export async function readFoundationLaunchRetry(client: PublicClient, account: Address): Promise<FoundationLaunchRetry | null> {
+  const chainId = foundationClientProfile(client).chainId;
+  if (!navigator.locks) throw new Error("This browser cannot safely coordinate wallet recovery.");
+  return navigator.locks.request(storeKey(account, chainId), { mode: "exclusive", ifAvailable: true }, async lock => {
+    if (!lock) return null;
+    const pending = readFoundationPending(account, chainId);
+    if (!isRetryableLaunch(pending) || readFoundationResolution(account, chainId)) return null;
+    if (await client.getChainId() !== chainId) throw new Error("Recovery is connected to the wrong chain.");
+    const [confirmed, next, head] = await Promise.all([
+      client.getTransactionCount({ address: account, blockTag: "latest" }),
+      client.getTransactionCount({ address: account, blockTag: "pending" }),
+      client.getBlock({ blockTag: "latest" }),
+    ]);
+    if (confirmed !== pending.nonce || next !== pending.nonce || head.number === null || !head.hash
+      || head.number < BigInt(pending.startBlock) || readFoundationPending(account, chainId)?.operationId !== pending.operationId) return null;
+    return Object.freeze({ account: getAddress(account), chainId, operationId: pending.operationId, nonce: pending.nonce });
+  });
 }
 
 /** Provider calls are permitted only inside this exact durable, cross-tab-locked submission. */
@@ -225,18 +255,26 @@ export function noteFoundationWalletRequest(value: FoundationWalletPreparation):
 
 /** Persist intent before invoking the wallet. Only adapters calling noteFoundationWalletRequest may opt into preflight tracking. */
 export async function submitFoundationWalletStep(value: FoundationWalletPreparation,
-  send: (value: FoundationWalletPreparation) => Promise<Hex>, trackPreflight = false): Promise<Hex> {
+  send: (value: FoundationWalletPreparation) => Promise<Hex>, trackPreflight = false, retry?: FoundationLaunchRetry): Promise<Hex> {
   const binding = prepared.get(value);
   if (!binding || binding.state !== "ready") throw new Error("This transaction is not ready for signing.");
   if (!navigator.locks) throw new Error("This browser cannot safely coordinate wallet requests.");
   return navigator.locks.request(storeKey(value.account, value.transaction.chainId), { mode: "exclusive", ifAvailable: true }, async lock => {
-    if (!lock || readFoundationPending(value.account, value.transaction.chainId) || readFoundationResolution(value.account, value.transaction.chainId)) throw new Error("A previous wallet operation needs reconciliation first.");
+    const previous = readFoundationPending(value.account, value.transaction.chainId);
+    if (!lock || readFoundationResolution(value.account, value.transaction.chainId)
+      || (previous && (!matchesLaunchRetry(previous, retry) || binding.sequence.kind !== "launch"
+        || binding.sequence.steps.length !== 1 || binding.sequence.steps[0].kind !== "launch"))
+      || (retry && !previous)) throw new Error("A previous wallet operation needs reconciliation first.");
     if (await binding.client.getChainId() !== value.transaction.chainId) throw new Error("The wallet operation is connected to the wrong network.");
     const [nonce, block] = await Promise.all([
       binding.client.getTransactionCount({ address: value.account, blockTag: "pending" }),
       binding.client.getBlock({ blockTag: "latest" }),
     ]);
     if (block.number === null || !block.hash) throw new Error("The current wallet nonce could not be bound to chain state.");
+    if (previous && (nonce !== previous.nonce || block.number < BigInt(previous.startBlock)
+      || await binding.client.getTransactionCount({ address: value.account, blockTag: "latest" }) !== previous.nonce)) {
+      throw new Error("Your previous request is now visible onchain. Check its confirmation before trying again.");
+    }
     const pending: FoundationPendingOperation = { schemaVersion: "programmable.foundation.pending.v1", chainId: value.transaction.chainId, account: value.account,
       releaseDigest: value.releaseDigest, calldataHash: keccak256(value.transaction.data), to: value.transaction.to,
       value: value.transaction.value, transactionHash: null, walletPhase: trackPreflight ? "preparing" : "requested", createdAt: Date.now(), nonce, startBlock: block.number.toString(), operationId: crypto.randomUUID(),
@@ -256,7 +294,10 @@ export async function submitFoundationWalletStep(value: FoundationWalletPreparat
     } catch (error) {
       const failure = error as { code?: number; walletRequestAttempted?: boolean; walletRequestRejected?: boolean };
       if (failure.walletRequestAttempted === false || failure.walletRequestRejected === true || failure.code === 4001) {
-        localStorage.removeItem(storeKey(value.account, value.transaction.chainId)); signalChange();
+        // Cancelling a retry cannot prove that the original wallet request was cancelled too.
+        if (previous) localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify(previous));
+        else localStorage.removeItem(storeKey(value.account, value.transaction.chainId));
+        signalChange();
       } else {
         // Unknown send adapters are conservative too: an error is not evidence of no broadcast.
         const current = readFoundationPending(value.account, value.transaction.chainId);
