@@ -7,6 +7,8 @@ import { parseLaunchProjectionV1, projectionObject, resolveProjectionAddress } f
 import { canonicalBrowserJsonV2, canonicalBrowserSha256V2 } from "./browser-authority-v2";
 import { assertIssuedImmutablePoolFeeRuntimeProofV1, rebuildImmutablePoolFeeRuntimeProofV1,
   type ImmutablePoolFeeRuntimeProofV1 } from "./immutable-pool-fee-runtime-custom-launch-plan-v1";
+import { ROUTED_FEE_BPS_V2, ROUTED_FEE_POLICY_V2 } from "./routed-fee-policy-v2";
+export { ROUTED_FEE_BPS_V2, ROUTED_FEE_POLICY_V2 } from "./routed-fee-policy-v2";
 
 export const ROUTED_TRADE_REQUEST_V1 = "programmable.launch-plan-trade-request.v1" as const;
 export const ROUTED_TRADE_RESPONSE_V1 = "programmable.launch-plan-trade-preparation.v1" as const;
@@ -25,8 +27,8 @@ export type LaunchPlanTradeRequestV1 = Readonly<{ schemaVersion: typeof ROUTED_T
   launchId: string; planHash: `sha256:${string}`; marketId: string; owner: Address; zeroForOne: boolean;
   amountIn: string; slippageBps: number; deadline: string; hookData: Hex }>;
 export type LaunchPlanFeeBindingV1 = Readonly<{ mode: "programmable_routed" | "pool_enforced"; obligationId: string;
-  policyVersion: typeof ROUTED_FEE_POLICY_V1; scope: "fee_on_programmable_routed_trades" | "fee_on_proven_pool_paths";
-  rateBps: 20; routedRateBps: 20 | 0; recipient: Address; base: "gross_output_credit" | "not_applicable"; rounding: "floor" | "not_applicable"; currency: Address;
+  policyVersion: typeof ROUTED_FEE_POLICY_V1 | typeof ROUTED_FEE_POLICY_V2; scope: "fee_on_programmable_routed_trades" | "fee_on_proven_pool_paths";
+  rateBps: 20 | 30; routedRateBps: 20 | 30 | 0; recipient: Address; base: "gross_output_credit" | "not_applicable"; rounding: "floor" | "not_applicable"; currency: Address;
   poolEnforcementWitness: unknown | null }>;
 export type LaunchPlanTradeTransactionV1 = Readonly<{ kind: "swap" | "token_approval" | "permit2_approval";
   chainId: "4663"; from: Address; to: Address; data: Hex; value: string; gasLimit: string }>;
@@ -76,6 +78,8 @@ export function launchPlanTradeBindingV1(projectionInput: LaunchProjectionV1, re
     || (poolKey.fee > 1_000_000 && poolKey.fee !== 0x800000)) return bad("MARKET_BINDING_CHANGED", "The exact V4 market binding is unavailable.");
   const feeClaims = projection.assuranceClaims.filter(claim => ["fee_on_programmable_routed_trades", "fee_on_proven_pool_paths"].includes(claim.claimType));
   let obligationId: string;
+  let policyVersion: typeof ROUTED_FEE_POLICY_V1 | typeof ROUTED_FEE_POLICY_V2 = ROUTED_FEE_POLICY_V1;
+  let routedRateBps: 20 | 30 = 20;
   if (feeClaims.length === 0) {
     const policies = projection.assuranceClaims.filter(claim => claim.claimType === "launch_admission_policy");
     const policy = policies[0];
@@ -87,9 +91,11 @@ export function launchPlanTradeBindingV1(projectionInput: LaunchProjectionV1, re
       || policy.witness.details.manifestDigest !== projection.manifestDigest) {
       return bad("FEE_POLICY_PENDING", "The market fee policy requires verification.");
     }
-    // Provenance admission selects the site's existing trade policy. It is not
+    // Provenance admission selects the site's current trade policy. It is not
     // a fee assurance claim or evidence that this pool already collects a fee.
-    obligationId = ROUTED_FEE_POLICY_V1;
+    policyVersion = poolFeeProof ? ROUTED_FEE_POLICY_V1 : ROUTED_FEE_POLICY_V2;
+    routedRateBps = poolFeeProof ? 20 : ROUTED_FEE_BPS_V2;
+    obligationId = policyVersion;
   } else {
     const matches = feeClaims.filter(claim => projectionObject(claim.observedValue)
       && Array.isArray(claim.observedValue.marketIds) && claim.observedValue.marketIds.includes(market.marketId));
@@ -114,8 +120,8 @@ export function launchPlanTradeBindingV1(projectionInput: LaunchProjectionV1, re
     policyVersion: ROUTED_FEE_POLICY_V1, scope: "fee_on_proven_pool_paths", rateBps: 20, routedRateBps: 0,
     recipient: ROUTED_FEE_RECIPIENT_V1, base: "not_applicable", rounding: "not_applicable", currency: outputCurrency,
     poolEnforcementWitness: poolFeeProof } : { mode: "programmable_routed", obligationId,
-    policyVersion: ROUTED_FEE_POLICY_V1, scope: "fee_on_programmable_routed_trades",
-    rateBps: 20, routedRateBps: 20, recipient: ROUTED_FEE_RECIPIENT_V1,
+    policyVersion, scope: "fee_on_programmable_routed_trades",
+    rateBps: routedRateBps, routedRateBps, recipient: ROUTED_FEE_RECIPIENT_V1,
     base: "gross_output_credit", rounding: "floor", currency: outputCurrency, poolEnforcementWitness: null };
   return { projection, poolKey, inputCurrency, outputCurrency, fee,
     projectionDigest: canonicalBrowserSha256V2("programmable.launch-plan-trade-projection.v1", projection) };
@@ -125,8 +131,8 @@ export function launchPlanTradeBindingV1(projectionInput: LaunchProjectionV1, re
  * output credit in the same unlock. It floors once in the output currency.
  * No caller-selected fee recipient, percentage, command, or external route.
  * https://github.com/Uniswap/v4-periphery/blob/main/src/V4Router.sol */
-export function launchPlanTradeAmountsV1(gross: bigint, rateBps: 20 | 0, slippageBps: number) {
-  if (gross <= 0n || gross > UINT128_MAX || ![0, 20].includes(rateBps) || !Number.isInteger(slippageBps) || slippageBps < 1 || slippageBps > 5000) return bad("INVALID_QUOTE", "The current quote is invalid.");
+export function launchPlanTradeAmountsV1(gross: bigint, rateBps: 20 | 30 | 0, slippageBps: number) {
+  if (gross <= 0n || gross > UINT128_MAX || ![0, 20, ROUTED_FEE_BPS_V2].includes(rateBps) || !Number.isInteger(slippageBps) || slippageBps < 1 || slippageBps > 5000) return bad("INVALID_QUOTE", "The current quote is invalid.");
   const fee = gross * BigInt(rateBps) / 10_000n, net = gross - fee;
   const netMinimum = net * BigInt(10_000 - slippageBps) / 10_000n;
   const grossMinimum = gross * BigInt(10_000 - slippageBps) / 10_000n;
@@ -143,7 +149,7 @@ export function buildLaunchPlanRoutedSwapV1(projection: LaunchProjectionV1, requ
   planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [{ poolKey: binding.poolKey, zeroForOne: request.zeroForOne, amountIn: request.amountIn,
     amountOutMinimum: amounts.grossAmountOutMinimum, minHopPriceX36: "0", hookData: request.hookData }], URVersion.V2_1_1);
   planner.addAction(Actions.SETTLE_ALL, [binding.inputCurrency, request.amountIn], URVersion.V2_1_1);
-  if (binding.fee.routedRateBps) planner.addAction(Actions.TAKE_PORTION, [binding.outputCurrency, ROUTED_FEE_RECIPIENT_V1, 20], URVersion.V2_1_1);
+  if (binding.fee.routedRateBps) planner.addAction(Actions.TAKE_PORTION, [binding.outputCurrency, ROUTED_FEE_RECIPIENT_V1, binding.fee.routedRateBps], URVersion.V2_1_1);
   planner.addAction(Actions.TAKE_ALL, [binding.outputCurrency, amounts.amountOutMinimum], URVersion.V2_1_1);
   const route = new RoutePlanner(); route.addCommand(CommandType.V4_SWAP, [planner.finalize()], false, UniversalRouterVersion.V2_1_1);
   // Partial input fills must not leave native funds in the Universal Router.

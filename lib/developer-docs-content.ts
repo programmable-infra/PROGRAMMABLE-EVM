@@ -470,6 +470,7 @@ export function buildProgrammableLlmsIndex(): string {
     `- Manifest: ${PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunchPlan.manifest}`,
     `- Agent setup: ${PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunchPlan.setup}`,
     `- Plan guide: ${PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunchPlan.guide}`,
+    `- Current Programmable-routed Custom trades charge ${PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunchPlan.tradeFee.ratePercent} (${PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunchPlan.tradeFee.rateBps} bps) of gross output in the output asset, rounded down once. The wallet review binds the exact fee and transfer. Historical signed fees and verified existing pool fees retain their original rates; no second route fee is added to a verified fee-bearing pool. External trades are outside this routed pricing policy.`,
     `- OpenAPI: ${PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunchPlan.openApi}`,
     `- Create or revoke API keys: ${apiKeysUrl}`,
     `- Finalized launch feed: ${PROGRAMMABLE_AGENT_ENTRY.workflows.customLaunchPlan.indexing.feed}`,

@@ -251,10 +251,10 @@ export default function CustomLaunchApiDocsPage() {
           </div>
         </dl>
         <p className={styles.bodyCopy}>
-          Robinhood Native20 charges <strong>20 bps (0.20%)</strong> for Programmable
-          per successful buy or sell. Creator and pool fees are additional. A zero
-          creator rate produces zero creator rewards while the platform fee still
-          accrues. Read the <a href="#fees">fee calculation and claim rules</a>.
+          Current Robinhood Custom Launch Plans use <strong>30 bps (0.30%)</strong>
+          {" "}for buys and sells prepared by Programmable. Creator and pool fees
+          are separate. Earlier Native20 pools retain their recorded fees. Read
+          the <a href="#fees">fee calculation and claim rules</a>.
         </p>
       </section>
 
@@ -795,20 +795,21 @@ export default function CustomLaunchApiDocsPage() {
         <div className={styles.sectionIntro}>
           <h2>Custom Launch fees</h2>
           <p>
-            On Robinhood Chain, Native20 charges <strong>20 bps (0.20%)</strong>{" "}
-            of the gross native ETH amount once per successful buy or sell,
-            rounded up to the next wei. The full platform fee belongs to
-            Programmable. Creator and pool LP fees are additional. A 1 ETH
-            gross trade credits 0.002 ETH to Programmable before separate
-            creator fees.
+            Current Robinhood Custom Launch Plans use <strong>30 bps (0.30%)</strong>{" "}
+            on the gross output of swaps prepared by Programmable. The fee is
+            deducted in the output asset and rounded down once. Creator and
+            pool LP fees are separate. A gross output of 1 ETH pays 0.003 ETH
+            to Programmable in the same transaction. External routes have
+            their own fee behavior.
           </p>
           <p>
             The fixed platform recipient is{" "}
             <code className={styles.breakableValue}>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>.
-            Fees accrue as PoolManager native claims. Anyone can trigger a claim,
-            but payment goes only to that recipient. Gas and liquidity deposits
-            are separate, and a claim does not create new revenue. Historical
-            launches retain their own fee contracts.
+            Current routed fees are transferred during the swap. Historical
+            signed fee obligations and Native20 pools keep their recorded 0.20%
+            model. A verified existing pool fee adds no second route fee.
+            Native20 uses PoolManager native claims payable only to its fixed
+            recipient. Gas and liquidity deposits are separate.
           </p>
           <p>
             The <a href="https://dune.com/programmablehq/analytics">Dune dashboard</a>{" "}
