@@ -309,6 +309,51 @@ function input(overrides = {}) {
     automationBypassSecret: BYPASS, sourceExpectations: EXPECTATIONS, nowMs: NOW, ...overrides };
 }
 
+const ROBINHOOD_PIN = "0xc60ba256b44334a0cd2c7242e98b88f031abb006";
+function pinnedFixture(totalItems, mutate = () => {}) {
+  return fixture(context => {
+    const { url, spec } = context;
+    if (url.pathname === "/api/explore/robinhood") {
+      const number = Number(url.searchParams.get("page"));
+      const rows = Array.from({ length: totalItems - 1 }, (_, index) => ({ ...robinhoodItem(),
+        tokenAddress: ADDRESS(200 + index), launchId: HASH(200 + index), transactionHash: HASH(200 + index) }));
+      spec.body.items = [{ ...robinhoodItem(), tokenAddress: ROBINHOOD_PIN }, ...rows.slice((number - 1) * 49, number * 49)];
+      const totalPages = Math.max(1, Math.ceil(rows.length / 49));
+      spec.body.page = { number, size: 50, totalItems, totalPages, hasMore: number < totalPages };
+      spec.body.presentations = [];
+    } else if (url.pathname === `/token/${ROBINHOOD_PIN}`) {
+      spec.text = spec.text.replaceAll(ADDRESS(100), ROBINHOOD_PIN);
+    }
+    mutate(context);
+  });
+}
+
+test("the Robinhood persistent pin is verified on every page and counted only once", async () => {
+  assert.ok(readFileSync("lib/robinhood-explore-policy.ts", "utf8").includes(`PINNED_ROBINHOOD_TOKEN = "${ROBINHOOD_PIN}"`));
+  for (const count of [1, 50, 61, 99, 100]) {
+    const f = pinnedFixture(count);
+    const result = await runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl }));
+    assert.equal(result.chains[1].totalItems, count);
+    assert.equal(result.chains[1].pages.length, Math.max(1, Math.ceil((count - 1) / 49)));
+  }
+});
+
+test("pin pagination still rejects missing, changed, repeated and miscounted rows", async () => {
+  for (const mutate of [
+    body => { body.items.pop(); },
+    body => { body.items[1] = { ...body.items[1], tokenAddress: ADDRESS(200) }; },
+    body => { body.items[0].transactionHash = HASH(999); },
+    body => { body.items[0].tokenAddress = ADDRESS(999); },
+    body => { body.page.totalItems += 1; },
+    body => { [body.items[0], body.items[1]] = [body.items[1], body.items[0]]; },
+  ]) {
+    const f = pinnedFixture(61, ({ url, spec }) => {
+      if (url.pathname === "/api/explore/robinhood" && spec.body.page.number === 2) mutate(spec.body);
+    });
+    await assert.rejects(runIndexedWebsiteReadSmoke(input({ fetchImpl: f.fetchImpl })), /pagination|duplicate launch|persistent pin/);
+  }
+});
+
 test("website read policy retains every legacy API and retired worker flag gate", () => {
   const contents = RELEASE_GATED_FLAG_NAMES.map(name => `${name}=false`).join("\n");
   const policy = evaluateIndexedWebsiteReadDeployPolicy(contents);
