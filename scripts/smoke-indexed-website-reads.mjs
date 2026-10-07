@@ -23,6 +23,10 @@ const HASH = /^0x(?!0{64}$)[0-9a-f]{64}$/iu;
 const DIGEST = /^sha256:[0-9a-f]{64}$/u;
 const BLOCK = /^(?:0|[1-9][0-9]{0,19})$/u;
 const PAGE_SIZE = 50;
+// The canonical Robinhood token occupies the first slot on every Explore page.
+const ROBINHOOD_PIN = "0xc60ba256b44334a0cd2c7242e98b88f031abb006";
+const hasPersistentPin = (body, route) => route.chainId === 4663 && typeof body.items?.[0]?.tokenAddress === "string" &&
+  body.items?.[0]?.tokenAddress?.toLowerCase() === ROBINHOOD_PIN;
 const MAXIMUM_ITEMS = 10_000;
 const MAXIMUM_RESPONSE_BYTES = 2 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 30_000;
@@ -251,10 +255,12 @@ export function validateIndexedWebsiteList({ body, response, route, pageNumber, 
     (route.chainId === 1 ? ["ready", "stale"] : ["ready", "stale", "syncing"]).includes(body.status) &&
     response.headers.get("x-programmable-indexing-status") === body.status &&
     response.headers.get("x-content-type-options") === "nosniff", `${route.slug} response status (${responseStatusSummary(body, response)})`);
+  const pinned = Number(hasPersistentPin(body, route));
+  const unpinnedSize = PAGE_SIZE - pinned;
   check(record(body.page) && body.page.number === pageNumber && body.page.size === PAGE_SIZE &&
     Number.isSafeInteger(body.page.totalItems) && body.page.totalItems > 0 && body.page.totalItems <= MAXIMUM_ITEMS &&
-    body.page.totalPages === Math.ceil(body.page.totalItems / PAGE_SIZE) && body.page.hasMore === (pageNumber < body.page.totalPages) &&
-    Array.isArray(body.items) && body.items.length === Math.min(PAGE_SIZE, body.page.totalItems - (pageNumber - 1) * PAGE_SIZE), "pagination");
+    body.page.totalPages === Math.max(pinned, Math.ceil((body.page.totalItems - pinned) / unpinnedSize)) && body.page.hasMore === (pageNumber < body.page.totalPages) &&
+    Array.isArray(body.items) && body.items.length === pinned + Math.min(unpinnedSize, body.page.totalItems - pinned - (pageNumber - 1) * unpinnedSize), "pagination");
   validateSources(body, route, expectations, nowMs);
   const identities = new Set();
   const addresses = new Set();
@@ -314,7 +320,12 @@ async function observeReads(input, target, headers, observedAt) {
       validateIndexedWebsiteList({ body, response: result.response, route, pageNumber: number, expectations, nowMs: Date.parse(observedAt) });
       first ??= body;
       check(body.page.totalItems === first.page.totalItems, "catalog changed during pagination; rerun smoke");
-      for (const item of body.items) {
+      check(hasPersistentPin(body, route) === hasPersistentPin(first, route), "persistent pin changed during pagination");
+      for (const [index, item] of body.items.entries()) {
+        if (number > 1 && index === 0 && hasPersistentPin(body, route)) {
+          check(canonicalJson(item) === canonicalJson(first.items[0]), "persistent pin identity changed during pagination");
+          continue;
+        }
         check(!identities.has(launchIdentity(item)), "duplicate launch across pages; rerun smoke");
         identities.add(launchIdentity(item));
       }
