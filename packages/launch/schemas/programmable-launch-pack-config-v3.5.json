@@ -1,25 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://programmable.market/schemas/custom-launch/v3.5/pack-config.json",
-  "title": "Programmable Custom Launch V3 pack config",
+  "title": "Programmable Custom Launch Ethereum Profile 3.5 pack config",
   "description": "Explicit Ethereum profile 3.5 request configuration. Requires the release-owned V2 settlement vault and authenticated server evidence before a wallet transaction is authorized.",
-  "x-programmable-status": "live-with-preparatory-profile",
-  "x-programmable-live-contract": {
-    "cliReleaseVersion": "3.3.9",
-    "profileVersion": "3.3.0"
-  },
-  "x-programmable-profile-3-4-contract": {
+  "x-programmable-status": "requires-current-server-availability",
+  "x-programmable-profile-3-5-contract": {
+    "profileVersion": "3.5.0",
+    "cliReleaseVersion": "4.1.3",
+    "capabilitiesUrl": "https://api.programmable.market/v3/capabilities",
     "minimumTargets": 4,
     "maximumTargets": 16,
-    "legacyProfile3_3MinimumTargets": 3,
     "canonicalSettlementFeeModule": {
-      "moduleId": "programmable:settlement-fee-vault:v1",
-      "releaseBindingSha256": "sha256:39ccdfdf8cd61620bf5c62bf07fb8428adbd66d2608b1cf3ad583343116d7ed9",
-      "sourceSha256": "sha256:0a01ee8c22d103343d14b1d3890902e3edeecef25ea84a0f03f23a3fe8f1042b",
-      "creationBytecodeSha256": "sha256:7b0d51612be90023839f36cf28ae56963d8146d28ff441dd2a20195d56238b81",
-      "creationBytecodeKeccak256": "0xdbc32e835739b50f33a101a8927008fc46af4c11604f7a5da006e5c56288b21e",
-      "runtimeBytecodeSha256": "sha256:980c0eec1017a7dbbd9010935107440125070a0b1fa4688bca92754e2bf1e649",
-      "runtimeBytecodeKeccak256": "0x92620fe3f83839334c9a264bea5bfcc819868ca5607cbd2260e5a9664dbd7554",
+      "moduleId": "programmable:settlement-fee-vault:v2",
+      "releaseBindingSha256": "sha256:6aeb8f26c2251e3492dbeb6eb2daab8e6e966ee40da7647d4579cce6be978ea1",
+      "sourceSha256": "sha256:58cf9561f5fdd51c3a158fbe9ed7c73c5bdf10dbcc7d59a5e5c074e3cd4c0320",
+      "creationBytecodeSha256": "sha256:f494403cb004547c6a8ae27d124c0cd695b76c45b7389d8c7751fd1871de208e",
+      "creationBytecodeKeccak256": "0x51a9b3fd49454a6f6f9913186e0d52e74f6028f5d5f7567035eba579731a38f2",
+      "runtimeBytecodeSha256": "sha256:f1b57e62b9f39f5f016882a33f90c8f404f43417542a982007bf6fd0c4a8b84c",
+      "runtimeBytecodeKeccak256": "0x6dfc6731166326aebbe152c67fa1560c164239de00f6033b0ba8ce52047a7d98",
       "compiler": "solc 0.8.26, EVM paris, optimizer 1000, viaIR false, metadata bytecodeHash none, appendCBOR false",
       "constructor": "graphFactory",
       "initializer": "bindRoute(address) with one exact route-target locator",
@@ -73,9 +71,9 @@
     },
     "targets": {
       "type": "array",
-      "minItems": 3,
+      "minItems": 4,
       "maxItems": 16,
-      "description": "Live profile 3.3.0 accepts three through sixteen direct targets. Explicit preparatory profile 3.4.0 requires four through sixteen targets inclusive of the canonical settlement fee vault.",
+      "description": "Profile 3.5.0 requires four through sixteen direct targets, including the canonical V2 settlement fee vault.",
       "items": {
         "$ref": "#/$defs/target"
       }
@@ -822,10 +820,10 @@
         },
         "platformFeeBindingTargetId": {
           "$ref": "#/$defs/identifier",
-          "description": "Must name the exact canonical programmable:settlement-fee-vault:v1 target. The applicant cannot substitute a hook or another fee recipient."
+          "description": "Must name the exact canonical programmable:settlement-fee-vault:v2 target. The applicant cannot substitute a hook or another fee recipient."
         }
       },
-      "description": "All four fresh profile 3.4.0 role IDs are distinct. The project-owned token, hook and initializer remain arbitrary exact-source targets; only the platform fee target is the frozen release module."
+      "description": "All four fresh profile 3.5.0 role IDs are distinct. The project-owned token, hook and initializer remain arbitrary exact-source targets; only the platform fee target is the frozen release module."
     },
     "liquidityAssessment": {
       "type": "object",

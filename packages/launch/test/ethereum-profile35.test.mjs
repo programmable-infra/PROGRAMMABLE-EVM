@@ -15,6 +15,23 @@ const directory = new URL("../contracts/settlement-fee-vault-v2/", import.meta.u
 const artifact = JSON.parse(readFileSync(new URL("EthereumSettlementFeeVaultV2.artifact.json", directory)));
 const compilerInput = readFileSync(new URL("EthereumSettlementFeeVaultV2.standard-json.json", directory));
 const zero = "0x0000000000000000000000000000000000000000";
+
+test("3.5 schema discovery points to the V2 artifact accepted by the packer", () => {
+  const schema = JSON.parse(readFileSync(new URL("../schemas/programmable-launch-pack-config-v3.5.json", import.meta.url)));
+  const discovery = schema["x-programmable-profile-3-5-contract"];
+  const feeModule = discovery.canonicalSettlementFeeModule;
+  const canonical = CANONICAL_SETTLEMENT_FEE_VAULT_V2;
+  assert.equal(schema.properties.profileVersion.const, "3.5.0");
+  assert.equal(schema.properties.targets.minItems, 4);
+  assert.equal(schema["x-programmable-profile-3-4-contract"], undefined);
+  assert.equal(feeModule.moduleId, canonical.moduleId);
+  assert.equal(feeModule.releaseBindingSha256, canonical.releaseBindingSha256);
+  assert.equal(feeModule.sourceSha256, canonical.source.sha256);
+  assert.equal(feeModule.creationBytecodeSha256, canonical.creationBytecode.sha256);
+  assert.equal(feeModule.creationBytecodeKeccak256, canonical.creationBytecode.keccak256);
+  assert.equal(feeModule.runtimeBytecodeSha256, canonical.runtimeBytecode.sha256);
+  assert.equal(feeModule.runtimeBytecodeKeccak256, canonical.runtimeBytecode.keccak256);
+});
 const selection = { schemaVersion: "programmable.direct-native-hook-graph-profile-selection.v3", profileId: "programmable.direct-native-hook-graph.v1",
   profileRevision: 3, targetRoles: { tokenTargetId: "token", hookTargetId: "custom-hook", initializerTargetId: "initializer", platformFeeBindingTargetId: "vault" },
   fundingMode: "none", accountingMode: "inclusive-selected-total", assessmentBase: "executed-gross-declared-quote", feeCurrency: "declared-quote-currency",
