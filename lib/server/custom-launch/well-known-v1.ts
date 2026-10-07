@@ -31,7 +31,11 @@ const ETHEREUM_PROFILE_SELECTION = Object.freeze({
   requiresCliForDirectHttp: false as const,
   cli: Object.freeze({
     sourceCandidateVersion: "4.1.3" as const,
-    publicationVerified: false as const,
+    publicationVerified: null,
+    publicationAuthority: "immutable-github-release" as const,
+    releaseUrl: "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v4.1.3",
+    releaseTag: "programmable-launch-v4.1.3" as const,
+    publishedReleaseAndArtifactVerificationRequired: true as const,
     freshUnversionedPackSelection: "server-capabilities" as const,
     offlineBuilderDefaultProfileVersion: "3.3.0" as const,
     publicationRequiresActiveBackendProfile: "3.6.0" as const,

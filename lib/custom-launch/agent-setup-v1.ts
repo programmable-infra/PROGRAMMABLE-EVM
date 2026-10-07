@@ -229,7 +229,7 @@ export function buildProgrammableAgentSetupTextV1(profileVersion = "4.0.0") {
     `Pack-config schema: ${links.packConfigSchema}`,
     "For Ethereum, fetch discovery and public GET /v3/capabilities first. Select its exact profile.profileVersion only when profile.productionLaunchAuthorized is true. Discovery support and historical release pins do not activate a profile; unavailable or unknown capabilities stop fresh preparation.",
     "Read customLaunchApi.agentIntegration, then follow its remediation catalog, guide, OpenAPI and pinned CLI release before changing the project.",
-    "Install only an independently published and checksum-verified CLI release that supports the selected capabilities profile. CLI 4.1.3 is a source candidate until its separate immutable release is verified; publish it only after backend profile 3.6.0 activation.",
+    "Install only an independently published and checksum-verified CLI release that supports the selected capabilities profile. Verify the immutable CLI 4.1.3 release at https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v4.1.3 and its artifact attestations before installation. A missing release means the source candidate is not installable; discovery alone does not establish publication. Its publication requires active backend profile 3.6.0.",
     `Historical Ethereum CLI 3.3.9 release asset (profile 3.3 support): ${links.cli}`,
     `Guide: ${links.guide}`,
     `Public V3 OpenAPI: ${links.openApi}`,

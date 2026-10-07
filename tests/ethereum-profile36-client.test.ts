@@ -62,7 +62,10 @@ describe("additive Ethereum 3.6 public client", () => {
     expect(api.ethereumProfileSelection).toMatchObject({ capabilitiesUrl: api.capabilitiesUrl,
       selectionRequiredBeforePacking: true, discoveryIsActivationEvidence: false,
       supportedActiveProfileVersions: ["3.3.0", "3.6.0"], unknownProfileDisposition: "fail-closed",
-      cli: { sourceCandidateVersion: "4.1.3", publicationVerified: false },
+      cli: { sourceCandidateVersion: "4.1.3", publicationVerified: null,
+        publicationAuthority: "immutable-github-release",
+        releaseTag: "programmable-launch-v4.1.3",
+        publishedReleaseAndArtifactVerificationRequired: true },
       profile36: { openApiUrl: "https://programmable.market/openapi/custom-launch-v3.6.json",
         behaviorScenarioInputsRequired: false, mandatoryCanonicalFeeVaultTarget: false,
         launchAdmissionEstablishesFeeCollection: false, applicantWaiverAssertionsAccepted: false } });
