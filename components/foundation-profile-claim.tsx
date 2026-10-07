@@ -95,10 +95,11 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
   const ready = session.availability.status === "ready" && !balanceError && balance !== null;
   return <div className={styles.claimArea}>
     {session.walletAction ? <button type="button" disabled={session.walletAction.busy} onClick={session.walletAction.onClick}>
-      {session.walletAction.label}</button> : session.availability.status === "unavailable" || balanceError
-      ? <button type="button" onClick={() => { setBalanceError(""); session.retryAvailability(); setRefresh(value => value + 1); }}>Retry fee check</button>
-      : <button type="button" disabled={!ready || balance!.amount === 0n || busy || Boolean(claimBlocked)} onClick={() => void claim()}>
-        {busy ? "Claiming…" : "Claim Rewards"}</button>}
+      {session.walletAction.label}</button> : null}
+    {session.availability.status === "unavailable" || balanceError
+      ? <button type="button" onClick={() => { setBalanceError(""); session.retryAvailability(); setRefresh(value => value + 1); }}>Retry fee check</button> : null}
+    <button type="button" disabled={!ready || balance!.amount === 0n || busy || Boolean(claimBlocked) || Boolean(session.walletAction)} onClick={() => void claim()}>
+      {busy ? "Claiming…" : "Claim Rewards"}</button>
     <span className={styles.claimStatus}>{balanceError || session.availability.status === "unavailable" ? balanceError || "Fee claims are temporarily unavailable"
       : !ready ? "Checking rewards…" : `${formatUnits(balance.amount, balance.decimals)} ${balance.symbol} available`}</span>
     {ready && balance.wrappedEth ? <span className={styles.claimStatus}>Paid to your wallet as wrapped ETH.</span> : null}

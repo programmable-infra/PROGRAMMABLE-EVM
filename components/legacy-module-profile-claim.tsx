@@ -74,10 +74,10 @@ export function LegacyModuleProfileClaim({ launch, account }: { launch: LegacyPr
   return <div className={styles.claimArea}>
     {step !== "prepare" ? <button type="button" disabled={busy || wallet.connecting || wallet.switchingNetwork}
       onClick={() => void Promise.resolve().then(() => step === "connect" ? wallet.openWallet() : switchModuleModeNetwork(wallet.switchNetwork)).catch(cause => setMessage(String(cause)))}>
-      {step === "connect" ? "Connect wallet" : "Switch to Robinhood"}</button>
-      : error ? <button type="button" onClick={() => setRefresh(value => value + 1)}>Retry fee check</button>
-      : <button type="button" disabled={busy || saved.blocked || requestPending || !balance || balance.amount <= 0n} onClick={() => void claim()}>
-        {busy ? "Claiming…" : "Claim Rewards"}</button>}
+      {step === "connect" ? "Connect wallet" : "Switch to Robinhood"}</button> : null}
+    {error ? <button type="button" onClick={() => setRefresh(value => value + 1)}>Retry fee check</button> : null}
+    <button type="button" disabled={step !== "prepare" || busy || saved.blocked || requestPending || !balance || balance.amount <= 0n} onClick={() => void claim()}>
+      {busy ? "Claiming…" : "Claim Rewards"}</button>
     <span className={styles.claimStatus}>{error || (balance ? `${formatUnits(balance.amount, balance.decimals)} ${balance.symbol} available · Shared fee balance` : "Checking rewards…")}</span>
     {saved.blocked ? <span className={styles.claimStatus}>{saved.operation ? <a href={moduleModeOperationPath(saved.operation)}>Check pending transaction</a> : saved.error}</span> : null}
     {message ? <p className={styles.claimMessage} role="status">{message}{hash ? <> <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${hash}`} target="_blank" rel="noreferrer">View transaction</a></> : null}</p> : null}

@@ -22,6 +22,11 @@ it.each([1, 4663] as const)("keeps Claim Rewards visible and binds the wallet se
   expect(html).toContain("Claim Rewards");
   expect(html).toContain("Checking rewards");
   expect(session).toHaveBeenCalledWith(token, chainId);
+  session.mockReturnValue({ account, contextKey: "switch", availability: { status: "checking" },
+    walletAction: { label: "Switch network", busy: false, onClick: () => {} } });
+  const switching = renderToStaticMarkup(<FoundationProfileClaim account={account} launch={launch} chainId={chainId} />);
+  expect(switching).toContain("Claim Rewards");
+  expect(switching).toContain("Switch network");
   session.mockReturnValue({ account: token, contextKey: "other", availability: { status: "checking" } });
   expect(renderToStaticMarkup(<FoundationProfileClaim account={account} launch={launch} chainId={chainId} />)).toBe("");
 });
