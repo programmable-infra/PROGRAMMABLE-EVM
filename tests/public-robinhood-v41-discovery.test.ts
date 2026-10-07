@@ -31,10 +31,23 @@ describe("profile selected public Robinhood API contract", () => {
     const previous = JSON.parse(JSON.stringify(actual));
     previous.info.version = "1.15.0";
     previous.components.schemas.EthereumExplorePage.properties.presentations.items.properties.market = { type: "null" };
+    for (const kind of ["classic", "custom"]) {
+      const source = previous.components.schemas.EthereumExplorePage.properties.sourceEvidence.properties[kind].anyOf[0].properties;
+      expect(source.source).toEqual({ enum: ["codex-classic-launches", "canonical-launch-stamp-router"] });
+      expect(source.releaseDigest).toEqual({ $ref: "#/components/schemas/Sha256Digest" });
+      expect(source.provider).toEqual({ const: "codex" });
+      expect(source.observedAt).toEqual({ type: "string", format: "date-time" });
+      source.source = { enum: ["envio-classic-v3", "canonical-launch-stamp-router"] };
+      delete source.releaseDigest;
+      delete source.provider;
+      delete source.observedAt;
+      source.deployment = { type: "string" };
+      source.sourceCommit = { type: "string" };
+    }
     const serialized = JSON.stringify(previous);
     const sources = '"enum":["codex","dexscreener","uniswap-v4"]';
     expect(serialized).toContain(sources);
-    // Only the website version, Ethereum market observations and added source may differ.
+    // Only website version, market observations and the verified Codex source migration may differ.
     const historical = serialized.replace(sources, '"enum":["dexscreener","uniswap-v4"]');
     const expectedDigest = readFileSync(new URL("./fixtures/public-openapi-v40-website-v115.sha256", import.meta.url), "utf8").trim();
     expect(createHash("sha256").update(historical).digest("hex")).toBe(expectedDigest);
