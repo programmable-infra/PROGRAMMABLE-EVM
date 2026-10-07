@@ -14,6 +14,7 @@ import styles from "./studio.module.css";
 
 export interface FoundationStudioProps {
   previousLaunchAction?: ReactNode;
+  recoveryAction?: ReactNode;
   networkControl?: ReactNode;
   draft: FoundationStudioDraft;
   catalog: readonly FoundationModuleDescriptor[];
@@ -215,6 +216,7 @@ export function FoundationStudio({ formRef, imageInput, ...props }: FoundationSt
           }}><X size={16} /> Remove {selected?.name ?? "module"}</button> : null}
         </div>
         <div className={styles.inspectorAction}>
+          {props.recoveryAction}
           <button type="submit" className={styles.launch} disabled={props.actionDisabled || disabled} aria-busy={props.busy}>{props.actionLabel}<ArrowRight size={19} /></button>
           {props.error || props.status || props.onRetryAvailability ? <div className={styles.actionStatus} role={props.error ? "alert" : "status"}>{props.error ? <span className={styles.error}>{props.error}</span> : props.status ? <span>{props.status}</span> : null}{props.onRetryAvailability ? <button type="button" onClick={props.onRetryAvailability} disabled={props.busy}>Retry</button> : null}</div> : null}
         </div>

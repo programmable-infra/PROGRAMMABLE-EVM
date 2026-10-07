@@ -259,7 +259,9 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
       </button>
       {savedLaunchError === session.resolution.operationId ? <p role="alert">Your previous launch could not be checked yet. Try opening it again.</p> : null}
     </> : null;
-  return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}<FoundationSessionStatus session={session} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />
+  const inlineRecovery = layout === "studio" && session.pending !== "null";
+  const sessionStatus = <FoundationSessionStatus key={`${session.account}:${chainId}`} session={session} inline={inlineRecovery} editingNewLaunch={completedDraft !== draftKey} showProgress={false} hideSuccessfulLaunch />;
+  return <div className={layout === "studio" ? studioStyles.launchPage : undefined}>{layout === "studio" ? <StudioAtmosphere /> : null}{inlineRecovery ? null : sessionStatus}
     {layout !== "studio" && previousLaunchAction ? <div className={`${styles.page} ${styles.sessionStatus}`}>{previousLaunchAction}</div> : null}
     <ModuleFoundationBuilder key={`${chainId}:${session.resultGeneration}`} persistDraft layout={layout} networkControl={
       <fieldset className={styles.networkChoice} disabled={Boolean(session.progress) || launchBusy || changingNetwork} aria-busy={changingNetwork}>
@@ -271,7 +273,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
             <span><span aria-hidden="true"><ChainMark chainId={network.id} /></span>{network.name}</span>
           </label>)}
       </fieldset>
-    } previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
+    } recoveryAction={inlineRecovery ? sessionStatus : undefined} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
     catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
     onWarmLaunch={session.account && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}

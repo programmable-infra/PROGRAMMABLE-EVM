@@ -9,6 +9,10 @@ export async function createModuleStudioServer() {
   const entry = `
     import React, {useEffect, useRef, useState} from 'react';
     import {createRoot} from 'react-dom/client';
+    import {FoundationSessionStatus as RealSessionStatus} from './components/module-foundation-session';
+    import {FOUNDATION_PENDING_EVENT,readFoundationPending} from './lib/module-foundation/wallet';
+    import {FOUNDATION_RESOLUTION_EVENT,readFoundationResolution,acknowledgeFoundationResolution} from './lib/module-foundation/result-store';
+    import {keccak256} from 'viem';
     import {FoundationStudio} from './components/module-studio/studio';
     import {ModuleFoundationLaunchHost} from './components/module-foundation-launch-host';
     import {ModuleFoundationBuilder} from './components/module-foundation-builder';
@@ -38,6 +42,38 @@ export async function createModuleStudioServer() {
           onUploadImage={async()=>{throw new Error('No upload needed');}}
           onPrepareLaunch={async()=>{throw new Error('No transaction in navigation fixture');}}
           onConfirmLaunch={async()=>{throw new Error('No transaction in navigation fixture');}}/></>;
+    }
+    function PendingRecoveryFixture() {
+      const account='0x'+'11'.repeat(20), to='0x'+'22'.repeat(20), hash='0x'+'33'.repeat(32), blockHash='0x'+'44'.repeat(32);
+      const key='programmable:foundation-pending:v1:'+chainId+':'+account;
+      const [ready,setReady]=useState(false), [,setVersion]=useState(0);
+      const [cleared,setCleared]=useState(false);
+      useEffect(()=>{
+        localStorage.setItem(key,JSON.stringify({schemaVersion:'programmable.foundation.pending.v1',chainId,account,to,
+          releaseDigest:hash,calldataHash:keccak256('0x1234'),value:'0x0',nonce:7,startBlock:'100',createdAt:1,
+          operationId:'11111111-1111-4111-8111-111111111111',transactionHash:null,walletPhase:'requested',
+          metadata:{operationKind:'launch',stepKind:'launch',token:to}}));
+        const update=()=>setVersion(v=>v+1);
+        window.addEventListener(FOUNDATION_PENDING_EVENT,update);window.addEventListener(FOUNDATION_RESOLUTION_EVENT,update);
+        setReady(true);return()=>{window.removeEventListener(FOUNDATION_PENDING_EVENT,update);window.removeEventListener(FOUNDATION_RESOLUTION_EVENT,update);};
+      },[]);
+      if(!ready)return null;
+      const pending=readFoundationPending(account,chainId), resolution=readFoundationResolution(account,chainId);
+      const tx={hash,from:account,to,input:'0x1234',value:0n,nonce:7,chainId,blockNumber:101n,blockHash};
+      const client={chain:{id:chainId},getChainId:async()=>chainId,
+        getTransactionCount:async({blockNumber})=>blockNumber<101n?7:8,
+        getBlock:async({blockNumber,includeTransactions})=>({number:blockNumber??120n,hash:blockHash,transactions:includeTransactions?[tx]:[]}),
+        getTransaction:async()=>tx,getTransactionReceipt:async()=>({...tx,transactionHash:hash,status:'success'})};
+      const session={client,account,profile:{explorer:'https://example.invalid'},pending:JSON.stringify(pending),
+        pendingTransactionHash:pending?.transactionHash,resolution,resolutionState:JSON.stringify(resolution),progress:'',
+        acknowledgeResult:async id=>{await acknowledgeFoundationResolution(account,id,chainId);setCleared(true);}};
+      return <div className={styles.launchPage}><ModuleFoundationBuilder layout="studio" contextKey={'recovery:'+chainId}
+        initialDraft={{name:'BRUNO',symbol:'BRUNO',initialBuy:'0'}}
+        availability={{status:'ready',chainId,chainName:chainId===1?'Ethereum':'Robinhood Chain'}} catalog={catalog} quoteAssets={[quote]}
+        submissionBlocked={pending?'Previous transaction needs checking':undefined}
+        recoveryAction={!cleared?<RealSessionStatus inline session={session} editingNewLaunch/>:undefined}
+        onUploadImage={async()=>{throw new Error('Disabled');}} onPrepareLaunch={async()=>{throw new Error('Fixture: no launch sent');}}
+        onConfirmLaunch={async()=>{throw new Error('Fixture: no launch sent');}}/></div>;
     }
     function LaunchSpeedFixture() {
       const [context,setContext] = useState('wallet:'+chainId+':release');
@@ -72,6 +108,7 @@ export async function createModuleStudioServer() {
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
+      if(mode==='pending-recovery') return <PendingRecoveryFixture/>;
       if(mode==='draft-navigation') return <DraftNavigationFixture/>;
       if(mode==='launch-speed'||mode==='open-quote'||mode==='wallet-recovery'||mode==='availability') return <LaunchSpeedFixture/>;
       if(mode==='restored-launch') return <ModuleFoundationLaunchHost layout="studio"/>;

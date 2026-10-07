@@ -437,3 +437,9 @@
 .networkChoice input:focus-visible + span { outline: 2px solid #88cba3; outline-offset: 2px; }
 .networkChoice:disabled label { opacity: .6; cursor: wait; }
 @media (prefers-reduced-motion: reduce) { .networkChoice label > span { transition: none; } }
+
+.inlineRecovery { font-size: 12px; line-height: 1.5; max-height: 240px; overflow: auto; padding-bottom: 12px; }
+.inlineRecovery .savedResult { margin: 0; padding: 12px; }
+.inlineRecovery .savedResult summary { min-height: 32px; font-size: 13px; }
+.inlineRecovery .savedResult p { margin: 8px 0; }
+.inlineRecovery button { width: 100%; min-height: 44px; }

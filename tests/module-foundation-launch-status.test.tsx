@@ -36,8 +36,8 @@ describe("compact completed-launch status", () => {
 
   it("keeps unresolved recovery visible even beside a successful saved launch", () => {
     const html = render({ pending: "unreadable" });
-    expect(html).toContain("Finish your previous transaction");
-    expect(html).toContain("Check confirmation");
+    expect(html).toContain("Check previous wallet transaction");
+    expect(html).toContain("Check wallet activity");
     expect(html).toContain("Your transaction is confirmed");
   });
 
@@ -47,6 +47,19 @@ describe("compact completed-launch status", () => {
       expect(render({ resolution: { ...resolution, metadata: { operationKind: "launch", stepKind } } })).toContain("Your transaction is confirmed");
     }
     expect(render({ resolution: null, resolutionState: "unreadable" })).toContain("saved transaction result could not be read");
+  });
+
+  it("explains a replaced transaction without describing it as a successful launch", () => {
+    const html = render({ resolution: { ...resolution, status: "replaced" } });
+    expect(html).toContain("Your transaction was replaced");
+    expect(html).not.toContain("View Coin");
+  });
+
+  it("can render recovery inside the launch form without nesting another form", () => {
+    const html = renderToStaticMarkup(<form><FoundationSessionStatus inline session={{ ...session, pending: "unknown", resolution: null }} /></form>);
+    expect(html.match(/<form/g)).toHaveLength(1);
+    expect(html).toContain('type="button"');
+    expect(html).not.toContain("required");
   });
 
   it("preserves active wallet progress", () => {
