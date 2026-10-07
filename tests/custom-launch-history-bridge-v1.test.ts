@@ -1035,6 +1035,23 @@ describe("developer launch history same-origin bridge", () => {
       .toBe("First line\nSecond line");
   });
 
+  it.each([true, false])("reads profile 3.5.0 only when its metadata binding is valid: %s", async (valid) => {
+    const resource = {
+      ...launchV3(),
+      launchProfileVersion: "3.5.0",
+      projectMetadataHash: valid ? PROJECT_METADATA_HASH : `sha256:${"ff".repeat(32)}`,
+    };
+    fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    const response = await bridge().get(new Request(
+      `https://programmable.market/api/developer/custom-launches/${V3_LAUNCH_ID}?walletAddress=${WALLET}&version=v3`,
+    ), V3_LAUNCH_ID);
+    expect(response.status).toBe(valid ? 200 : 503);
+    if (valid) expect(await response.json()).toEqual(resource);
+  });
+
   it.each(["2.0.0", "3.0.0", "3.1.0"] as const)(
     "keeps legacy V3 %s metadata absence readable only as an explicit null pair",
     async (launchProfileVersion) => {

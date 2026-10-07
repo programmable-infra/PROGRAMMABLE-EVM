@@ -2,7 +2,7 @@ import "server-only";
 import { decodeFunctionData, decodeFunctionResult, encodeFunctionData, getAddress, keccak256, parseAbi, toHex, type Address, type Hex } from "viem";
 import type { LaunchProjectionV1 } from "@/lib/custom-launch/launch-plan-v1";
 import { canonicalBrowserSha256V2 } from "@/lib/custom-launch/browser-authority-v2";
-import { buildLaunchPlanRoutedSwapV1, buildLaunchPlanTradeApprovalV1, launchPlanTradeAmountsV1, launchPlanTradeBindingV1,
+import { buildLaunchPlanRoutedSwapV1, buildLaunchPlanTradeApprovalV1, launchPlanTradeApprovalExpirationV1, launchPlanTradeAmountsV1, launchPlanTradeBindingV1,
   launchPlanTradePreparationDigestV1, LaunchPlanTradeErrorV1, parseLaunchPlanTradeRequestV1, ROUTED_TRADE_CONTRACTS_V1,
   ROUTED_TRADE_PERMIT2_ABI_V1, ROUTED_TRADE_RESPONSE_V1, ROUTED_TRADE_TOKEN_ABI_V1,
   type LaunchPlanTradePreparationV1, type LaunchPlanTradeTransactionV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
@@ -10,8 +10,8 @@ import { indexStore } from "@/lib/server/robinhood-index/store";
 import { snapshotLaunches } from "@/lib/server/robinhood-index/model";
 import { agreedTradeRpcV1, bytesV1, pendingTradeV1, productionTradeRpcsV1, quantityV1, readTradeCheckpointV1, readAgreedTradeTraceV1, readTradeGasEstimateV1, readTradePostStateCallV1, successfulTradeFramesV1,
   tradeBlockV1, tradePostStateV1, type TradeRpcV1 } from "./routed-trade-rpc-v1";
-import { immutablePoolFeeRequiredAddressesV1, proveImmutablePoolFeeRuntimeV1,
-  type ImmutablePoolFeeMarketV1 } from "@/lib/custom-launch/immutable-pool-fee-runtime-custom-launch-plan-v1";
+import type { ImmutablePoolFeeMarketV1 } from "@/lib/custom-launch/immutable-pool-fee-runtime-custom-launch-plan-v1";
+import { immutablePoolFeeRequiredAddresses, proveImmutablePoolFeeRuntime } from "@/lib/custom-launch/immutable-pool-fee-runtime";
 import { proveImmutablePoolFeeTradeAccrualV1 } from "./immutable-pool-fee-trade-v1";
 
 const ZERO = "0x0000000000000000000000000000000000000000" as Address;
@@ -60,13 +60,13 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
     runtimeCodes[address.toLowerCase()] = code;
   }));
   const feeMarket: ImmutablePoolFeeMarketV1 = { chainId: "4663", poolManager: getAddress(ROUTED_TRADE_CONTRACTS_V1.poolManager.address), ...binding.poolKey };
-  const requiredFeeRuntimes = immutablePoolFeeRequiredAddressesV1(feeMarket, runtimeCodes[binding.poolKey.hooks.toLowerCase()] ?? "0x");
+  const requiredFeeRuntimes = immutablePoolFeeRequiredAddresses(feeMarket, runtimeCodes[binding.poolKey.hooks.toLowerCase()] ?? "0x");
   if (requiredFeeRuntimes) await Promise.all(requiredFeeRuntimes.filter(address => runtimeCodes[address.toLowerCase()] === undefined).map(async address => {
     const code = await rpc("eth_getCode", [address, reference], bytesV1);
     runtimeCodes[address.toLowerCase()] = code;
     runtimeBindings.push({ address, runtimeCodeHash: keccak256(code) });
   }));
-  const poolFeeProof = requiredFeeRuntimes ? proveImmutablePoolFeeRuntimeV1(feeMarket, runtimeCodes) ?? undefined : undefined;
+  const poolFeeProof = requiredFeeRuntimes ? proveImmutablePoolFeeRuntime(feeMarket, runtimeCodes) ?? undefined : undefined;
   if (requiredFeeRuntimes && !poolFeeProof) return pendingTradeV1("IMMUTABLE_POOL_FEE_RUNTIME_PENDING");
   if (poolFeeProof) binding = launchPlanTradeBindingV1(projection, request, poolFeeProof);
   runtimeBindings.sort((a, b) => a.address.toLowerCase().localeCompare(b.address.toLowerCase()));
@@ -185,7 +185,7 @@ export async function prepareLaunchPlanTradeV1(input: unknown, dependencies: {
     const raw = await call(getAddress(ROUTED_TRADE_CONTRACTS_V1.permit2.address), encodeFunctionData({ abi: ROUTED_TRADE_PERMIT2_ABI_V1,
       functionName: "allowance", args: [request.owner, binding.inputCurrency, getAddress(ROUTED_TRADE_CONTRACTS_V1.universalRouter.address)] }), post);
     const [amount, expiration] = decodeFunctionResult({ abi: ROUTED_TRADE_PERMIT2_ABI_V1, functionName: "allowance", data: raw });
-    if (amount !== BigInt(request.amountIn) || BigInt(expiration) !== BigInt(request.deadline)) return pendingTradeV1("EXACT_APPROVAL_UNPROVEN");
+    if (amount !== BigInt(request.amountIn) || BigInt(expiration) !== launchPlanTradeApprovalExpirationV1(request.deadline)) return pendingTradeV1("EXACT_APPROVAL_UNPROVEN");
   }
   const unchanged = await rpc("eth_getBlockByNumber", [tag, false], tradeBlockV1);
   if (unchanged.hash !== block.hash) return pendingTradeV1("TRADE_CHECKPOINT_CHANGED");

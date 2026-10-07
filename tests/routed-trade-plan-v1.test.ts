@@ -9,15 +9,18 @@ vi.mock("@/contracts/spec/robinhood-custom-launch/chain-4663.v1.json", async imp
   return { default: value };
 });
 import { projectionFixture, controller, component, runtime, runtimeHash, hash, now, nowIso } from "./fixtures/universal-launch-v1";
-import { buildLaunchPlanRoutedSwapV1, launchPlanTradeAmountsV1, launchPlanTradeBindingV1, launchPlanTradePreparationDigestV1,
+import { buildLaunchPlanRoutedSwapV1, buildLaunchPlanTradeApprovalV1, launchPlanTradeApprovalExpirationV1, launchPlanTradeAmountsV1, launchPlanTradeBindingV1, launchPlanTradePreparationDigestV1,
   parseLaunchPlanTradeRequestV1, ROUTED_FEE_POLICY_V2, ROUTED_FEE_RECIPIENT_V1, ROUTED_TRADE_CONTRACTS_V1, ROUTED_TRADE_REQUEST_V1, ROUTED_TRADE_ROUTER_ABI_V1,
-  ROUTED_TRADE_TOKEN_ABI_V1, validateLaunchPlanTradePreparationV1, type LaunchPlanTradeRequestV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
+  ROUTED_TRADE_TOKEN_ABI_V1, ROUTED_TRADE_PERMIT2_ABI_V1, validateLaunchPlanTradePreparationV1, type LaunchPlanTradeRequestV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
 import { prepareLaunchPlanTradeV1 } from "@/lib/server/custom-launch/routed-trade-plan-v1";
 import { productionTradeRpcsV1, tradePostStateV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
 import { prepareLaunchPlanTradeWalletV1 } from "@/lib/custom-launch/routed-trade-wallet-v1";
 import sdkVector from "@/tests/fixtures/routed-trade-fee-vnext-vector-v211.json";
 import feeVectors from "@/contracts/spec/immutable-pool-fee-runtime-vectors-v1.json";
-import { rebuildImmutablePoolFeeRuntimeProofV1, materializeImmutableFeeRuntimeWordsV1,
+import native30Vector from "./fixtures/immutable-pool-fee-runtime-v2.json";
+import { rebuildImmutablePoolFeeRuntimeProof } from "@/lib/custom-launch/immutable-pool-fee-runtime";
+import { IMMUTABLE_POOL_FEE_RECIPES_V2 as feeRecipesV2 } from "@/lib/custom-launch/immutable-pool-fee-recipes-custom-launch-plan-v2";
+import { materializeImmutableFeeRuntimeWordsV1,
   type ImmutablePoolFeeRuntimeProofV1 } from "@/lib/custom-launch/immutable-pool-fee-runtime-custom-launch-plan-v1";
 import { IMMUTABLE_POOL_FEE_RECIPES_V1 as feeRecipes } from "@/lib/custom-launch/immutable-pool-fee-recipes-custom-launch-plan-v1";
 import { CUSTOM_LAUNCH_OPEN_PROVENANCE_POLICY_V1, type LaunchClaimV1, type LaunchProjectionV1 } from "@/lib/custom-launch/launch-plan-v1";
@@ -81,12 +84,14 @@ function fixtureRpc(options: { revert?: boolean; missingFee?: boolean; underpaid
 const prepared = async (options: Parameters<typeof fixtureRpc>[0] = {}) => prepareLaunchPlanTradeV1(request(), {
   loadProjection: async () => projection(), rpcs: [fixtureRpc(options), fixtureRpc(options)], now: () => now });
 
-function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAccrual?: boolean; missingRecord?: boolean; missingVault?: boolean; sell?: boolean; provenance?: boolean } = {}) {
-  const vector = feeVectors.proofs[index]! as unknown as ImmutablePoolFeeRuntimeProofV1;
-  const proof = rebuildImmutablePoolFeeRuntimeProofV1(vector, vector.market), recipes = feeRecipes[proof.recipeId];
+function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAccrual?: boolean; missingRecord?: boolean; missingVault?: boolean; sell?: boolean; provenance?: boolean; native30?: boolean; permitExpiration?: number } = {}) {
+  const vector = (options.native30 ? native30Vector : feeVectors.proofs[index]!) as unknown as ImmutablePoolFeeRuntimeProofV1;
+  const proof = rebuildImmutablePoolFeeRuntimeProof(vector, vector.market);
+  const recipes = proof.schemaVersion === "programmable.immutable-pool-fee-runtime-proof.v2" ? feeRecipesV2[proof.recipeId] : feeRecipes[proof.recipeId];
+  const platform = BigInt(proof.rateBps) * 10n;
   const tradeRequest = { ...request(), zeroForOne: !options.sell };
   const creatorAmount = proof.recipeId === "native_fee_kernel_v1" ? options.sell ? 250n : 150n : 0n;
-  const quoteAmount = options.sell ? proof.recipeId === "blob_fee_controller_v2" ? 84800n : 99800n - creatorAmount : 50001n;
+  const quoteAmount = options.sell ? proof.recipeId === "blob_fee_controller_v2" ? 84800n : 100000n - platform - creatorAmount : 50001n;
   const codes = Object.fromEntries(proof.runtimeBindings.filter(b => b.role !== "module").map(binding => [binding.address.toLowerCase(),
     materializeImmutableFeeRuntimeWordsV1((binding.role === "controller" && "controller" in recipes ? recipes.controller
       : binding.role === "hook" ? recipes.hook : recipes.vault), binding.immutableWords!)]));
@@ -109,11 +114,11 @@ function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAcc
     }
     const tx=params[0] as {from:string;to:string;data:Hex;value:Hex};
     if (method === "eth_call" && tx.to.toLowerCase() === ROUTED_TRADE_CONTRACTS_V1.v4Quoter.address.toLowerCase()) return encodeAbiParameters([{type:"uint256"},{type:"uint256"}],[quoteAmount,100000n]);
-    if (method === "eth_call" && tx.to.toLowerCase() === ROUTED_TRADE_CONTRACTS_V1.permit2.address.toLowerCase()) return encodeAbiParameters([{type:"uint160"},{type:"uint48"},{type:"uint48"}],[100000n,Number(BigInt(tradeRequest.deadline)),0]);
+    if (method === "eth_call" && tx.to.toLowerCase() === ROUTED_TRADE_CONTRACTS_V1.permit2.address.toLowerCase()) return encodeAbiParameters([{type:"uint160"},{type:"uint48"},{type:"uint48"}],[100000n,options.permitExpiration ?? Number(BigInt(tradeRequest.deadline)),0]);
     if (method === "eth_call" && [proof.feeVault.toLowerCase(),proof.market.poolManager.toLowerCase()].includes(tx.to.toLowerCase())) {
       const name=decodeFunctionData({abi:LEDGER,data:tx.data}).functionName,post=!!params[2];
-      return toHex(name==="platformAccrued"?1000n+(post?(options.wrongAccrual?199n:200n):0n)
-        :name==="creatorAccrued"?500n+(post?creatorAmount:0n):1500n+(post?(options.unbacked?199n:200n)+creatorAmount:0n),{size:32});
+      return toHex(name==="platformAccrued"?1000n+(post?(options.wrongAccrual?platform-1n:platform):0n)
+        :name==="creatorAccrued"?500n+(post?creatorAmount:0n):1500n+(post?(options.unbacked?platform-1n:platform)+creatorAmount:0n),{size:32});
     }
     if(method==="eth_call" && tx.to.toLowerCase()===proof.market.currency1.toLowerCase()){
       const decoded=decodeFunctionData({abi:ROUTED_TRADE_TOKEN_ABI_V1,data:tx.data});
@@ -126,8 +131,8 @@ function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAcc
       const frame=(from:string,to:string,input:Hex)=>({type:"CALL",from,to,input,output:"0x",value:"0x0",gasUsed:"0x2710"});
       return {type:"CALL",from:tx.from,to:tx.to,input:tx.data,value:tx.value,output:"0x",gasUsed:"0x186a0",calls:[
         frame(proof.market.poolManager,proof.market.hooks,encodeFunctionData({abi:CALLBACK,functionName:"beforeSwap",args:[ROUTED_TRADE_CONTRACTS_V1.universalRouter.address as Hex,key,parameters,tradeRequest.hookData]})),
-        frame(proof.market.poolManager,proof.market.hooks,encodeFunctionData({abi:CALLBACK,functionName:"afterSwap",args:[ROUTED_TRADE_CONTRACTS_V1.universalRouter.address as Hex,key,parameters,options.sell?(100000n<<128n)+(1n<<128n)-100000n:((-99800n-creatorAmount)<<128n)+quoteAmount,tradeRequest.hookData]})),
-        ...(options.missingRecord?[]:[frame(proof.feeRecorder,proof.feeVault,encodeFunctionData({abi:LEDGER,functionName:"recordFees",args:[200n,creatorAmount]}))]),
+        frame(proof.market.poolManager,proof.market.hooks,encodeFunctionData({abi:CALLBACK,functionName:"afterSwap",args:[ROUTED_TRADE_CONTRACTS_V1.universalRouter.address as Hex,key,parameters,options.sell?(100000n<<128n)+(1n<<128n)-100000n:((-100000n+platform-creatorAmount)<<128n)+quoteAmount,tradeRequest.hookData]})),
+        ...(options.missingRecord?[]:[frame(proof.feeRecorder,proof.feeVault,encodeFunctionData({abi:LEDGER,functionName:"recordFees",args:[platform,creatorAmount]}))]),
         frame(ROUTED_TRADE_CONTRACTS_V1.universalRouter.address,proof.market.poolManager,encodeFunctionData({abi:TAKE,functionName:"take",args:[options.sell?ZERO:proof.market.currency1,controller,quoteAmount]})),
       ]};
     }
@@ -137,6 +142,25 @@ function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAcc
 }
 
 describe("generic vNext routed swap", () => {
+  it("reuses the exact-amount Permit2 approval after mining and refreshing a sell quote", async () => {
+    const original = { ...request(), zeroForOne: false };
+    const approval = buildLaunchPlanTradeApprovalV1(original, component, "permit2_approval");
+    const decoded = decodeFunctionData({ abi: ROUTED_TRADE_PERMIT2_ABI_V1, data: approval.data });
+    if (decoded.functionName !== "approve") throw new Error("Expected exact-amount approval");
+    expect(decoded.args.slice(0, 3)).toEqual([component, ROUTED_TRADE_CONTRACTS_V1.universalRouter.address, BigInt(original.amountIn)]);
+    expect(BigInt(decoded.args[3])).toBe(BigInt(original.deadline) + 300n);
+    const fixture = immutablePoolFixture(0, { native30: true, provenance: true, sell: true, permitExpiration: Number(decoded.args[3]) });
+    fixture.request.deadline = (BigInt(original.deadline) + 60n).toString();
+    const refreshed = await fixture.prepare();
+    expect(refreshed.status).toBe("ready");
+    expect(refreshed.transaction.kind).toBe("swap");
+    expect(validateLaunchPlanTradePreparationV1(refreshed, fixture.projection, fixture.request, now)).toEqual(refreshed);
+  });
+  it("keeps the Permit2 expiry within uint48 including its bounded refresh window", () => {
+    const maximum = (1n << 48n) - 1n;
+    expect(launchPlanTradeApprovalExpirationV1((maximum - 300n).toString())).toBe(maximum);
+    expect(() => launchPlanTradeApprovalExpirationV1((maximum - 299n).toString())).toThrow();
+  });
   it("charges 30 bps for current provenance trades and binds the same fee in the wallet transaction", async () => {
     const value = provenanceProjection(), original = structuredClone(value);
     const binding = launchPlanTradeBindingV1(value, request());
@@ -225,6 +249,24 @@ describe("generic vNext routed swap", () => {
       const decoded=decodeFunctionData({abi:ROUTED_TRADE_ROUTER_ABI_V1,data:value.transaction.data});
       expect(decodeAbiParameters([{type:"bytes"},{type:"bytes[]"}],decoded.args[1][0]!)[0]).toBe("0x060c0f");
     }
+  });
+  it("proves Native30 buy and sell accrual without charging a second route fee", async () => {
+    for (const sell of [false, true]) {
+      const fixture = immutablePoolFixture(0, { native30: true, provenance: true, sell });
+      const value = await fixture.prepare();
+      expect(value.fee).toMatchObject({ policyVersion: ROUTED_FEE_POLICY_V2, rateBps: 30, routedRateBps: 0 });
+      expect(value.evidence.feeTransfer).toMatchObject({ routedFeeAmount: "0",
+        poolFeeAccrual: { rateBps: 30, grossNativeAmount: "100000", platformAccruedIncrease: "300" } });
+      expect(validateLaunchPlanTradePreparationV1(value, fixture.projection, fixture.request, now)).toEqual(value);
+      const decoded = decodeFunctionData({ abi: ROUTED_TRADE_ROUTER_ABI_V1, data: value.transaction.data });
+      expect(decodeAbiParameters([{ type: "bytes" }, { type: "bytes[]" }], decoded.args[1][0]!)[0]).toBe("0x060c0f");
+      expect(() => buildLaunchPlanRoutedSwapV1(fixture.projection, fixture.request, 50001n, structuredClone(fixture.proof))).toThrow();
+    }
+    for (const options of [{ unbacked: true }, { wrongAccrual: true }, { missingRecord: true }, { missingVault: true }]) {
+      await expect(immutablePoolFixture(0, { ...options, native30: true, provenance: true }).prepare()).rejects.toMatchObject({ status: 503 });
+    }
+    const conflicting = immutablePoolFixture(0, { native30: true });
+    await expect(conflicting.prepare()).rejects.toMatchObject({ code: "FEE_POLICY_PENDING" });
   });
   it("never suppresses routing from an unbacked, under-accrued, absent-vault or copied source witness", async()=>{
     for(const options of [{unbacked:true},{wrongAccrual:true},{missingRecord:true},{missingVault:true}]) await expect(immutablePoolFixture(0,options).prepare()).rejects.toMatchObject({status:503});

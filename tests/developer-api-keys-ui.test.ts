@@ -634,7 +634,7 @@ describe("developer API key interface", () => {
     expect(parseApiKeyMutationResult(rotated, 200, "old", "custom-launches")).toBeNull();
   });
 
-  it("offers only Custom Hook access and copies Robinhood setup without module submission steps", () => {
+  it("offers Custom Hook access and copies chain-aware setup without module submission steps", () => {
     expect(apiKeysSource).not.toContain("ApiKeyPurposeChoice");
     expect(apiKeysSource).not.toContain('href="/developers/modules"');
     expect(apiKeysSource).not.toContain('setPurpose(');
@@ -644,7 +644,9 @@ describe("developer API key interface", () => {
     expect(instructions).toContain("Wallet signing remains a separate action");
     expect(instructions).not.toContain("submit-module");
     expect(instructions).not.toContain("/v1/modules/");
-    expect(instructions).not.toContain("Ethereum");
+    expect(instructions).toContain("Ethereum Mainnet (1)");
+    expect(instructions).toContain("/v3/capabilities");
+    expect(instructions).toContain("/v4/chains/4663/custom-launch-capabilities");
   });
 
   it("preserves wallet authority and one-time secret handling", () => {

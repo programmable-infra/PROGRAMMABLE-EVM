@@ -164,3 +164,5 @@ export {
   ROBINHOOD_LAUNCH_COVERAGE_URL_V1,
   ROBINHOOD_LAUNCH_COVERAGE_SCHEMA_V1,
 } from "./launch-coverage-v1.mjs";
+
+export { CANONICAL_SETTLEMENT_FEE_VAULT_V2, validateCanonicalSettlementFeeVaultV2Graph, validateCanonicalSettlementFeeVaultV2Build } from "./canonical-settlement-fee-vault-v2.mjs";

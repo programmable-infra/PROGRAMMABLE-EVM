@@ -1,6 +1,6 @@
 import "server-only";
 import { decodeFunctionData, encodeFunctionData, parseAbi, type Address, type Hex } from "viem";
-import type { ImmutablePoolFeeRuntimeProofV1 } from "@/lib/custom-launch/immutable-pool-fee-runtime-custom-launch-plan-v1";
+import type { ImmutablePoolFeeRuntimeProof } from "@/lib/custom-launch/immutable-pool-fee-runtime";
 import type { LaunchPlanTradeRequestV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
 import { canonicalBrowserSha256V2 } from "@/lib/custom-launch/browser-authority-v2";
 import { pendingTradeV1, successfulTradeFramesV1, type TradeTraceV1 } from "./routed-trade-rpc-v1";
@@ -17,7 +17,7 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 /** Trace arguments fix the gross native fee base; exact vault and ERC-6909
  * post-state readbacks establish both the liability and its actual backing. */
 export async function proveImmutablePoolFeeTradeAccrualV1(input: Readonly<{
-  proof: ImmutablePoolFeeRuntimeProofV1; request: LaunchPlanTradeRequestV1; router: Address; trace: TradeTraceV1;
+  proof: ImmutablePoolFeeRuntimeProof; request: LaunchPlanTradeRequestV1; router: Address; trace: TradeTraceV1;
   post: Record<string, Record<string, unknown>>;
   call(to: Address, data: Hex, overrides?: Record<string, Record<string, unknown>>): Promise<Hex>;
 }>) {
@@ -43,7 +43,7 @@ export async function proveImmutablePoolFeeTradeAccrualV1(input: Readonly<{
   const nativeDelta = BigInt.asIntN(128, afterDecoded.args[3] >> 128n);
   if (request.zeroForOne ? nativeDelta >= 0n : nativeDelta <= 0n) return pendingTradeV1("POOL_FEE_BASE_UNPROVEN");
   const grossNative = request.zeroForOne ? BigInt(request.amountIn) : nativeDelta < 0n ? -nativeDelta : nativeDelta;
-  const platform = (grossNative * 20n + 9999n) / 10000n;
+  const platform = (grossNative * BigInt(proof.rateBps) + 9999n) / 10000n;
   if (grossNative <= 0n || platform <= 0n) return pendingTradeV1("POOL_FEE_BASE_UNPROVEN");
   const recorded = frames.filter(frame => frame.type === "CALL" && frame.to && same(frame.to, proof.feeVault)
     && same(frame.from, proof.feeRecorder)).flatMap(frame => {
@@ -62,7 +62,7 @@ export async function proveImmutablePoolFeeTradeAccrualV1(input: Readonly<{
   if (platformAfter - platformBefore !== platform || creatorAfter - creatorBefore !== recorded[0]!.args[1]
     || backingAfter - backingBefore !== platform + recorded[0]!.args[1]
     || backingBefore < platformBefore + creatorBefore || backingAfter < platformAfter + creatorAfter) return pendingTradeV1("POOL_FEE_BACKING_UNPROVEN");
-  return { proofDigest: proof.proofDigest, vault: proof.feeVault, currency: ZERO, recipient: proof.recipient, rateBps: 20,
+  return { proofDigest: proof.proofDigest, vault: proof.feeVault, currency: ZERO, recipient: proof.recipient, rateBps: proof.rateBps,
     assessmentBase: "gross_native_leg", rounding: "ceil_per_trade", grossNativeAmount: grossNative.toString(),
     nativePoolDelta: nativeDelta.toString(), platformAccruedIncrease: platform.toString(),
     platformAccruedBefore: platformBefore.toString(), platformAccruedAfter: platformAfter.toString(),

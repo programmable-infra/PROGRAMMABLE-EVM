@@ -1,0 +1,1241 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://programmable.market/schemas/custom-launch/v3.5/pack-config.json",
+  "title": "Programmable Custom Launch Ethereum Profile 3.5 pack config",
+  "description": "Explicit Ethereum profile 3.5 request configuration. Requires the release-owned V2 settlement vault and authenticated server evidence before a wallet transaction is authorized.",
+  "x-programmable-status": "requires-current-server-availability",
+  "x-programmable-profile-3-5-contract": {
+    "profileVersion": "3.5.0",
+    "cliReleaseVersion": "4.1.3",
+    "capabilitiesUrl": "https://api.programmable.market/v3/capabilities",
+    "minimumTargets": 4,
+    "maximumTargets": 16,
+    "canonicalSettlementFeeModule": {
+      "moduleId": "programmable:settlement-fee-vault:v2",
+      "releaseBindingSha256": "sha256:6aeb8f26c2251e3492dbeb6eb2daab8e6e966ee40da7647d4579cce6be978ea1",
+      "sourceSha256": "sha256:58cf9561f5fdd51c3a158fbe9ed7c73c5bdf10dbcc7d59a5e5c074e3cd4c0320",
+      "creationBytecodeSha256": "sha256:f494403cb004547c6a8ae27d124c0cd695b76c45b7389d8c7751fd1871de208e",
+      "creationBytecodeKeccak256": "0x51a9b3fd49454a6f6f9913186e0d52e74f6028f5d5f7567035eba579731a38f2",
+      "runtimeBytecodeSha256": "sha256:f1b57e62b9f39f5f016882a33f90c8f404f43417542a982007bf6fd0c4a8b84c",
+      "runtimeBytecodeKeccak256": "0x6dfc6731166326aebbe152c67fa1560c164239de00f6033b0ba8ce52047a7d98",
+      "compiler": "solc 0.8.26, EVM paris, optimizer 1000, viaIR false, metadata bytecodeHash none, appendCBOR false",
+      "constructor": "graphFactory",
+      "initializer": "bindRoute(address) with one exact route-target locator",
+      "reciprocalRoute": "exactly one constructor or initializer locator from that route target back to the vault; settlementFeeVault() behavior remains server-evidence authority"
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "launchWallet",
+    "chainId",
+    "nonce",
+    "source",
+    "compilationUnits",
+    "targets",
+    "pool",
+    "projectMetadata",
+    "launchProfile",
+    "permitWindow",
+    "agentAttestation",
+    "profileVersion"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "programmable.launch-pack-config.v3"
+    },
+    "profileVersion": {
+      "const": "3.5.0",
+      "description": "Profile 3.5.0 is explicit. Read current server availability from capabilities."
+    },
+    "launchWallet": {
+      "$ref": "#/$defs/address"
+    },
+    "chainId": {
+      "const": "1"
+    },
+    "nonce": {
+      "$ref": "#/$defs/nonzeroBytes32"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "compilationUnits": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/compilationUnit"
+      }
+    },
+    "targets": {
+      "type": "array",
+      "minItems": 4,
+      "maxItems": 16,
+      "description": "Profile 3.5.0 requires four through sixteen direct targets, including the canonical V2 settlement fee vault.",
+      "items": {
+        "$ref": "#/$defs/target"
+      }
+    },
+    "pool": {
+      "$ref": "#/$defs/pool"
+    },
+    "projectMetadata": {
+      "$ref": "#/$defs/projectMetadata"
+    },
+    "behaviorScenarioInputs": {
+      "$ref": "#/$defs/behaviorScenarioInputs"
+    },
+    "launchProfile": {
+      "$ref": "#/$defs/launchProfile"
+    },
+    "permitWindow": {
+      "$ref": "#/$defs/permitWindow"
+    },
+    "fundingAuthorization": {
+      "$ref": "#/$defs/fundingAuthorization"
+    },
+    "fundingSignaturePatch": {
+      "$ref": "#/$defs/fundingAuthorizationPatchV2"
+    },
+    "agentAttestation": {
+      "$ref": "#/$defs/agentAttestation"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "profileVersion": {
+            "const": "3.5.0"
+          }
+        },
+        "required": [
+          "profileVersion"
+        ]
+      },
+      "then": {
+        "properties": {
+          "targets": {
+            "type": "array",
+            "minItems": 4
+          }
+        },
+        "required": [
+          "behaviorScenarioInputs"
+        ]
+      },
+      "else": {
+        "not": {
+          "properties": {
+            "behaviorScenarioInputs": {}
+          },
+          "required": [
+            "behaviorScenarioInputs"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "launchProfile": {
+            "type": "object",
+            "properties": {
+              "fundingMode": {
+                "const": "eip-3009-receive-with-authorization"
+              }
+            },
+            "required": [
+              "fundingMode"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "fundingAuthorization": {},
+          "fundingSignaturePatch": {}
+        },
+        "required": [
+          "fundingAuthorization",
+          "fundingSignaturePatch"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "properties": {
+                "fundingAuthorization": {}
+              },
+              "required": [
+                "fundingAuthorization"
+              ]
+            },
+            {
+              "properties": {
+                "fundingSignaturePatch": {}
+              },
+              "required": [
+                "fundingSignaturePatch"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "address": {
+      "type": "string",
+      "pattern": "^0x[0-9a-fA-F]{40}$"
+    },
+    "bytes32": {
+      "type": "string",
+      "pattern": "^0x[0-9a-f]{64}$"
+    },
+    "nonzeroBytes32": {
+      "type": "string",
+      "pattern": "^0x(?!0{64}$)[0-9a-f]{64}$"
+    },
+    "uintString": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "nonzeroUintString": {
+      "type": "string",
+      "pattern": "^[1-9][0-9]*$"
+    },
+    "grindAttemptsString": {
+      "type": "string",
+      "pattern": "^(?:[1-9][0-9]{0,5}|1000000)$"
+    },
+    "feeUintString": {
+      "type": "string",
+      "pattern": "^(?:0|[1-9][0-9]{0,4}|100000)$"
+    },
+    "additiveFeeUintString": {
+      "$ref": "#/$defs/feeUintString"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/+\\-]{0,255}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.{1,2}(?:/|$))(?!.*\\\\)[^\\u0000]+$"
+    },
+    "projectMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "token",
+        "presentation"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.project-metadata-input.v1"
+        },
+        "token": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "symbol"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "description": "Canonical NFC token name, already trimmed, at most 64 UTF-8 bytes."
+            },
+            "symbol": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 16,
+              "description": "Canonical NFC token symbol without whitespace, at most 16 UTF-8 bytes."
+            }
+          }
+        },
+        "presentation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "description",
+            "image",
+            "links"
+          ],
+          "properties": {
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096,
+              "x-programmable-minUtf8Bytes": 20,
+              "x-programmable-minUnicodeLettersOrNumbers": 8,
+              "description": "Canonical NFC public description with at least 20 UTF-8 bytes and 8 Unicode letters or numbers, already trimmed, at most 4,096 UTF-8 bytes. The packer enforces byte and useful-text bounds that generic JSON Schema validators cannot express exactly."
+            },
+            "image": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sourcePath",
+                "uri"
+              ],
+              "properties": {
+                "sourcePath": {
+                  "$ref": "#/$defs/relativePath"
+                },
+                "uri": {
+                  "type": "string",
+                  "format": "uri",
+                  "maxLength": 2048,
+                  "pattern": "^(?:https|ipfs|ar):"
+                }
+              },
+              "description": "Required local PNG, JPEG, WebP, or GIF bytes and their stable public URI. The packer computes and binds the exact byte digest, length, media type, and dimensions."
+            },
+            "links": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 32,
+              "uniqueItems": true,
+              "allOf": [
+                {
+                  "contains": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "website"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "minContains": 1,
+                  "maxContains": 1
+                },
+                {
+                  "contains": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "const": "x"
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  },
+                  "minContains": 1,
+                  "maxContains": 1
+                }
+              ],
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "kind",
+                  "uri"
+                ],
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "website",
+                      "documentation",
+                      "x",
+                      "telegram",
+                      "discord",
+                      "github",
+                      "other"
+                    ]
+                  },
+                  "uri": {
+                    "type": "string",
+                    "format": "uri",
+                    "maxLength": 2048,
+                    "pattern": "^https://"
+                  }
+                },
+                "allOf": [
+                  {
+                    "if": {
+                      "properties": {
+                        "kind": {
+                          "const": "x"
+                        }
+                      },
+                      "required": [
+                        "kind"
+                      ]
+                    },
+                    "then": {
+                      "properties": {
+                        "uri": {
+                          "type": "string",
+                          "pattern": "^https://x\\.com/[A-Za-z0-9_]{1,64}$"
+                        }
+                      }
+                    }
+                  }
+                ]
+              },
+              "description": "Exactly one website link and one canonical X profile link are required. Up to 30 additional public HTTPS links are optional."
+            }
+          }
+        }
+      }
+    },
+    "behaviorScenarioInputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "steps"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.custom-launch-behavior-scenario-inputs.v1"
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 128,
+          "x-programmable-order": "caller-declared-and-hash-bound",
+          "x-programmable-aggregateCalldataAndHookDataMaximumBytes": 1048576,
+          "items": {
+            "$ref": "#/$defs/behaviorScenarioStep"
+          }
+        }
+      },
+      "description": "Declarative server-runner inputs only. Scripts, URLs, assertions, expected results, statuses and runner parameters are not accepted. The packer validates exact prepared-target references and derives the hash-bound request object."
+    },
+    "behaviorScenarioStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stepId",
+        "phase",
+        "actor",
+        "target",
+        "valueWei",
+        "calldata",
+        "hookData"
+      ],
+      "properties": {
+        "stepId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "phase": {
+          "enum": [
+            "seed",
+            "swap",
+            "liquidity",
+            "claim",
+            "custom-accounting"
+          ]
+        },
+        "actor": {
+          "enum": [
+            "launch-wallet",
+            "secondary-user",
+            "unauthorized-claimer"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/behaviorScenarioTarget"
+        },
+        "valueWei": {
+          "$ref": "#/$defs/uintString"
+        },
+        "calldata": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-f]{2})*$",
+          "maxLength": 131074,
+          "x-programmable-maximumBytes": 65536
+        },
+        "hookData": {
+          "type": "string",
+          "pattern": "^0x(?:[0-9a-f]{2})*$",
+          "maxLength": 32770,
+          "x-programmable-maximumBytes": 16384
+        }
+      }
+    },
+    "behaviorScenarioTarget": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "targetId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "prepared-target"
+            },
+            "targetId": {
+              "$ref": "#/$defs/identifier"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "binding"
+          ],
+          "properties": {
+            "kind": {
+              "const": "chain-binding"
+            },
+            "binding": {
+              "const": "poolManager"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "harness"
+          ],
+          "properties": {
+            "kind": {
+              "const": "runner-harness"
+            },
+            "harness": {
+              "const": "v4-actions-v1"
+            }
+          }
+        }
+      ]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "paths",
+        "sourceLineageNonce",
+        "publicOrigin"
+      ],
+      "properties": {
+        "root": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/relativePath"
+          }
+        },
+        "sourceLineageNonce": {
+          "$ref": "#/$defs/uintString"
+        },
+        "publicOrigin": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "revision"
+          ],
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https://"
+            },
+            "revision": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+            }
+          }
+        }
+      }
+    },
+    "compilationUnit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compilationUnitId",
+        "standardJson"
+      ],
+      "properties": {
+        "compilationUnitId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "standardJson": {
+          "$ref": "#/$defs/relativePath"
+        }
+      }
+    },
+    "applicantSalt": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/bytes32"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode",
+            "start",
+            "maxAttempts"
+          ],
+          "properties": {
+            "mode": {
+              "const": "deterministic-hook-permission-grind-v1"
+            },
+            "start": {
+              "$ref": "#/$defs/uintString"
+            },
+            "maxAttempts": {
+              "$ref": "#/$defs/grindAttemptsString"
+            }
+          }
+        }
+      ]
+    },
+    "initializer": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "function",
+            "arguments"
+          ],
+          "properties": {
+            "function": {
+              "$ref": "#/$defs/identifier"
+            },
+            "arguments": {
+              "type": "array"
+            }
+          }
+        }
+      ]
+    },
+    "runtimeImmutable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "immutableId",
+        "abiType"
+      ],
+      "properties": {
+        "immutableId": {
+          "type": "string",
+          "pattern": "^(0|[1-9][0-9]*)$"
+        },
+        "abiType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "literal": {},
+        "target": {
+          "$ref": "#/$defs/identifier"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "literal"
+          ],
+          "not": {
+            "required": [
+              "target"
+            ]
+          }
+        },
+        {
+          "required": [
+            "target"
+          ],
+          "not": {
+            "required": [
+              "literal"
+            ]
+          }
+        }
+      ]
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetId",
+        "compilationUnitId",
+        "artifact",
+        "applicantSalt",
+        "constructorArguments",
+        "initializer",
+        "deploymentValueWei",
+        "initializerValueWei",
+        "componentKind",
+        "declaredHookPermissions",
+        "runtimeImmutables"
+      ],
+      "properties": {
+        "targetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "compilationUnitId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "artifact": {
+          "$ref": "#/$defs/relativePath"
+        },
+        "applicantSalt": {
+          "$ref": "#/$defs/applicantSalt"
+        },
+        "constructorArguments": {
+          "type": "array"
+        },
+        "initializer": {
+          "$ref": "#/$defs/initializer"
+        },
+        "deploymentValueWei": {
+          "$ref": "#/$defs/uintString"
+        },
+        "initializerValueWei": {
+          "$ref": "#/$defs/uintString"
+        },
+        "componentKind": {
+          "enum": [
+            "token",
+            "hook",
+            "other"
+          ]
+        },
+        "declaredHookPermissions": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "beforeInitialize",
+                  "afterInitialize",
+                  "beforeAddLiquidity",
+                  "afterAddLiquidity",
+                  "beforeRemoveLiquidity",
+                  "afterRemoveLiquidity",
+                  "beforeSwap",
+                  "afterSwap",
+                  "beforeDonate",
+                  "afterDonate",
+                  "beforeSwapReturnDelta",
+                  "afterSwapReturnDelta",
+                  "afterAddLiquidityReturnDelta",
+                  "afterRemoveLiquidityReturnDelta"
+                ]
+              }
+            }
+          ]
+        },
+        "runtimeImmutables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/runtimeImmutable"
+          }
+        }
+      }
+    },
+    "pool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokenTargetId",
+        "hookTargetId",
+        "fee",
+        "tickSpacing",
+        "quoteCurrency"
+      ],
+      "properties": {
+        "tokenTargetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "hookTargetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "fee": {
+          "oneOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 999999
+            },
+            {
+              "const": 8388608
+            }
+          ]
+        },
+        "tickSpacing": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 32767
+        },
+        "quoteCurrency": {
+          "$ref": "#/$defs/address"
+        }
+      }
+    },
+    "targetRoles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tokenTargetId",
+        "hookTargetId",
+        "initializerTargetId",
+        "platformFeeBindingTargetId"
+      ],
+      "properties": {
+        "tokenTargetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "hookTargetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "initializerTargetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "platformFeeBindingTargetId": {
+          "$ref": "#/$defs/identifier",
+          "description": "Must name the exact canonical programmable:settlement-fee-vault:v2 target. The applicant cannot substitute a hook or another fee recipient."
+        }
+      },
+      "description": "All four fresh profile 3.5.0 role IDs are distinct. The project-owned token, hook and initializer remain arbitrary exact-source targets; only the platform fee target is the frozen release module."
+    },
+    "liquidityAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "status",
+        "requestClaimsExecution",
+        "requiredVectorIds"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.direct-native-liquidity-model-assessment.v1"
+        },
+        "status": {
+          "const": "required"
+        },
+        "requestClaimsExecution": {
+          "const": false
+        },
+        "requiredVectorIds": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 4,
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "liquidityModel": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "model",
+            "declaredLaunchState"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": "programmable.direct-native-liquidity-model-intent.v1"
+            },
+            "model": {
+              "const": "external-concentrated-liquidity"
+            },
+            "declaredLaunchState": {
+              "const": "liquidity_required"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "model",
+            "declaredLaunchState",
+            "liquidityTargetId",
+            "assessment"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": "programmable.direct-native-liquidity-model-intent.v1"
+            },
+            "model": {
+              "const": "launch-seeded-concentrated-liquidity"
+            },
+            "declaredLaunchState": {
+              "const": "assessment_required"
+            },
+            "liquidityTargetId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "assessment": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/liquidityAssessment"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "requiredVectorIds": {
+                      "const": [
+                        "liquidity.seeded.pool-active-liquidity",
+                        "liquidity.seeded.position-custody-and-withdrawal",
+                        "liquidity.seeded.buy-and-sell"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "schemaVersion",
+            "model",
+            "declaredLaunchState",
+            "inventoryTargetId",
+            "assessment"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": "programmable.direct-native-liquidity-model-intent.v1"
+            },
+            "model": {
+              "const": "hook-inventory-custom-accounting"
+            },
+            "declaredLaunchState": {
+              "const": "assessment_required"
+            },
+            "inventoryTargetId": {
+              "$ref": "#/$defs/identifier"
+            },
+            "assessment": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/liquidityAssessment"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "requiredVectorIds": {
+                      "const": [
+                        "liquidity.hook-inventory.buy-settlement",
+                        "liquidity.hook-inventory.sell-settlement",
+                        "liquidity.hook-inventory.delta-solvency",
+                        "liquidity.hook-inventory.backing-and-withdrawal"
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "launchProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "profileId",
+        "profileRevision",
+        "targetRoles",
+        "liquidityModel",
+        "fundingMode",
+        "accountingMode",
+        "assessmentBase",
+        "feeCurrency",
+        "claimMode",
+        "applicantSelectedBuyHundredthsOfBip",
+        "applicantSelectedSellHundredthsOfBip"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.direct-native-hook-graph-profile-selection.v3"
+        },
+        "profileId": {
+          "const": "programmable.direct-native-hook-graph.v1"
+        },
+        "profileRevision": {
+          "const": 3
+        },
+        "targetRoles": {
+          "$ref": "#/$defs/targetRoles"
+        },
+        "liquidityModel": {
+          "$ref": "#/$defs/liquidityModel"
+        },
+        "fundingMode": {
+          "enum": [
+            "none",
+            "wallet-transaction-value",
+            "eip-3009-receive-with-authorization"
+          ]
+        },
+        "accountingMode": {
+          "enum": [
+            "additive-platform-share",
+            "inclusive-selected-total"
+          ]
+        },
+        "assessmentBase": {
+          "enum": [
+            "executed-gross-declared-quote",
+            "settled-input-before-platform-fee"
+          ]
+        },
+        "feeCurrency": {
+          "enum": [
+            "declared-quote-currency",
+            "input-currency"
+          ]
+        },
+        "claimMode": {
+          "enum": [
+            "immutable-payout-recipient",
+            "claim-authority-selected-recipient"
+          ]
+        },
+        "payoutRecipient": {
+          "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+        },
+        "applicantSelectedBuyHundredthsOfBip": {
+          "$ref": "#/$defs/feeUintString"
+        },
+        "applicantSelectedSellHundredthsOfBip": {
+          "$ref": "#/$defs/feeUintString"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "claimMode": {
+                "const": "immutable-payout-recipient"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "payoutRecipient": {}
+            },
+            "required": [
+              "payoutRecipient"
+            ]
+          },
+          "else": {
+            "not": {
+              "properties": {
+                "payoutRecipient": {}
+              },
+              "required": [
+                "payoutRecipient"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "assessmentBase": {
+                "const": "executed-gross-declared-quote"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "feeCurrency": {
+                "const": "declared-quote-currency"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "feeCurrency": {
+                "const": "input-currency"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "type": "object",
+            "properties": {
+              "accountingMode": {
+                "const": "additive-platform-share"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "applicantSelectedBuyHundredthsOfBip": {
+                "$ref": "#/$defs/additiveFeeUintString"
+              },
+              "applicantSelectedSellHundredthsOfBip": {
+                "$ref": "#/$defs/additiveFeeUintString"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "permitWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "validAfter",
+        "deadline"
+      ],
+      "properties": {
+        "validAfter": {
+          "$ref": "#/$defs/uintString"
+        },
+        "deadline": {
+          "$ref": "#/$defs/nonzeroUintString"
+        }
+      }
+    },
+    "fundingAuthorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "method",
+        "value",
+        "validAfter",
+        "validBefore"
+      ],
+      "properties": {
+        "schemaVersion": {
+          "const": "programmable.funding-authorization-input.v1"
+        },
+        "method": {
+          "const": "eip-3009-receive-with-authorization"
+        },
+        "value": {
+          "$ref": "#/$defs/nonzeroUintString"
+        },
+        "validAfter": {
+          "$ref": "#/$defs/uintString"
+        },
+        "validBefore": {
+          "$ref": "#/$defs/nonzeroUintString"
+        }
+      }
+    },
+    "argumentPath": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 255
+      }
+    },
+    "fundingAuthorizationPatchV2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetId",
+        "nonceArgumentPath",
+        "rArgumentPath",
+        "sArgumentPath",
+        "vArgumentPath"
+      ],
+      "properties": {
+        "targetId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "nonceArgumentPath": {
+          "$ref": "#/$defs/argumentPath"
+        },
+        "rArgumentPath": {
+          "$ref": "#/$defs/argumentPath"
+        },
+        "sArgumentPath": {
+          "$ref": "#/$defs/argumentPath"
+        },
+        "vArgumentPath": {
+          "$ref": "#/$defs/argumentPath"
+        }
+      }
+    },
+    "agentAttestation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agentId",
+        "checkedAt",
+        "checks"
+      ],
+      "properties": {
+        "agentId": {
+          "$ref": "#/$defs/identifier"
+        },
+        "checkedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "checks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "checkId",
+              "evidence"
+            ],
+            "properties": {
+              "checkId": {
+                "$ref": "#/$defs/identifier"
+              },
+              "evidence": {
+                "$ref": "#/$defs/relativePath"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

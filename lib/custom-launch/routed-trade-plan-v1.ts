@@ -5,8 +5,8 @@ import chainProfile from "@/contracts/spec/robinhood-custom-launch/chain-4663.v1
 import { CUSTOM_LAUNCH_OPEN_PROVENANCE_POLICY_V1, type LaunchProjectionV1 } from "./launch-plan-v1";
 import { parseLaunchProjectionV1, projectionObject, resolveProjectionAddress } from "./launch-projection-v1";
 import { canonicalBrowserJsonV2, canonicalBrowserSha256V2 } from "./browser-authority-v2";
-import { assertIssuedImmutablePoolFeeRuntimeProofV1, rebuildImmutablePoolFeeRuntimeProofV1,
-  type ImmutablePoolFeeRuntimeProofV1 } from "./immutable-pool-fee-runtime-custom-launch-plan-v1";
+import { assertIssuedImmutablePoolFeeRuntimeProof, rebuildImmutablePoolFeeRuntimeProof,
+  type ImmutablePoolFeeRuntimeProof } from "./immutable-pool-fee-runtime";
 import { ROUTED_FEE_BPS_V2, ROUTED_FEE_POLICY_V2 } from "./routed-fee-policy-v2";
 export { ROUTED_FEE_BPS_V2, ROUTED_FEE_POLICY_V2 } from "./routed-fee-policy-v2";
 
@@ -18,6 +18,7 @@ export const ROUTED_TRADE_CONTRACTS_V1 = chainProfile.contracts.uniswap;
 export const ROUTED_TRADE_ROUTER_ABI_V1 = parseAbi(["function execute(bytes commands,bytes[] inputs,uint256 deadline) payable"]);
 export const ROUTED_TRADE_TOKEN_ABI_V1 = parseAbi(["function balanceOf(address) view returns(uint256)", "function allowance(address,address) view returns(uint256)", "function approve(address,uint256) returns(bool)", "function decimals() view returns(uint8)"]);
 export const ROUTED_TRADE_PERMIT2_ABI_V1 = parseAbi(["function allowance(address,address,address) view returns(uint160,uint48,uint48)", "function approve(address,address,uint160,uint48)"]);
+export const ROUTED_TRADE_APPROVAL_GRACE_SECONDS_V1 = 300n;
 const ZERO = "0x0000000000000000000000000000000000000000" as Address;
 const SENDER = "0x0000000000000000000000000000000000000001" as Address;
 const UINT128_MAX = (1n << 128n) - 1n;
@@ -65,7 +66,7 @@ export function parseLaunchPlanTradeRequestV1(value: unknown): LaunchPlanTradeRe
 }
 
 export function launchPlanTradeBindingV1(projectionInput: LaunchProjectionV1, request: LaunchPlanTradeRequestV1,
-  poolFeeProof?: ImmutablePoolFeeRuntimeProofV1) {
+  poolFeeProof?: ImmutablePoolFeeRuntimeProof) {
   const projection = parseLaunchProjectionV1(projectionInput);
   if (projection.sourceVersion !== "custom_launch_plan_v1" || projection.chainId !== request.chainId || projection.finality.status !== "final"
     || projection.launchId !== request.launchId || projection.planHash !== request.planHash) return bad("LAUNCH_BINDING_CHANGED", "Refresh the finalized launch before trading.");
@@ -93,8 +94,8 @@ export function launchPlanTradeBindingV1(projectionInput: LaunchProjectionV1, re
     }
     // Provenance admission selects the site's current trade policy. It is not
     // a fee assurance claim or evidence that this pool already collects a fee.
-    policyVersion = poolFeeProof ? ROUTED_FEE_POLICY_V1 : ROUTED_FEE_POLICY_V2;
-    routedRateBps = poolFeeProof ? 20 : ROUTED_FEE_BPS_V2;
+    policyVersion = poolFeeProof?.rateBps === 20 ? ROUTED_FEE_POLICY_V1 : ROUTED_FEE_POLICY_V2;
+    routedRateBps = poolFeeProof?.rateBps ?? ROUTED_FEE_BPS_V2;
     obligationId = policyVersion;
   } else {
     const matches = feeClaims.filter(claim => projectionObject(claim.observedValue)
@@ -112,12 +113,15 @@ export function launchPlanTradeBindingV1(projectionInput: LaunchProjectionV1, re
     }
     obligationId = obligation.obligationId;
   }
-  if (poolFeeProof) assertIssuedImmutablePoolFeeRuntimeProofV1(poolFeeProof, {
+  if (poolFeeProof) assertIssuedImmutablePoolFeeRuntimeProof(poolFeeProof, {
     chainId: "4663", poolManager: market.poolManager, ...poolKey });
+  if (poolFeeProof && feeClaims.length > 0 && poolFeeProof.rateBps !== routedRateBps) {
+    return bad("FEE_POLICY_PENDING", "The pool fee differs from its recorded fee policy.");
+  }
   const inputCurrency = request.zeroForOne ? poolKey.currency0 : poolKey.currency1;
   const outputCurrency = request.zeroForOne ? poolKey.currency1 : poolKey.currency0;
   const fee: LaunchPlanFeeBindingV1 = poolFeeProof ? { mode: "pool_enforced", obligationId,
-    policyVersion: ROUTED_FEE_POLICY_V1, scope: "fee_on_proven_pool_paths", rateBps: 20, routedRateBps: 0,
+    policyVersion: poolFeeProof.rateBps === 20 ? ROUTED_FEE_POLICY_V1 : ROUTED_FEE_POLICY_V2, scope: "fee_on_proven_pool_paths", rateBps: poolFeeProof.rateBps, routedRateBps: 0,
     recipient: ROUTED_FEE_RECIPIENT_V1, base: "not_applicable", rounding: "not_applicable", currency: outputCurrency,
     poolEnforcementWitness: poolFeeProof } : { mode: "programmable_routed", obligationId,
     policyVersion, scope: "fee_on_programmable_routed_trades",
@@ -141,7 +145,7 @@ export function launchPlanTradeAmountsV1(gross: bigint, rateBps: 20 | 30 | 0, sl
     amountOutMinimum: netMinimum.toString(), grossAmountOutMinimum: grossMinimum.toString() };
 }
 export function buildLaunchPlanRoutedSwapV1(projection: LaunchProjectionV1, request: LaunchPlanTradeRequestV1, grossAmountOut: bigint,
-  poolFeeProof?: ImmutablePoolFeeRuntimeProofV1): LaunchPlanTradeTransactionV1 {
+  poolFeeProof?: ImmutablePoolFeeRuntimeProof): LaunchPlanTradeTransactionV1 {
   const binding = launchPlanTradeBindingV1(projection, request, poolFeeProof), amounts = launchPlanTradeAmountsV1(grossAmountOut, binding.fee.routedRateBps, request.slippageBps);
   const planner = new V4Planner();
   // The bound Robinhood router is 2.1.1; its swap tuple includes minHopPriceX36.
@@ -158,14 +162,19 @@ export function buildLaunchPlanRoutedSwapV1(projection: LaunchProjectionV1, requ
     data: encodeFunctionData({ abi: ROUTED_TRADE_ROUTER_ABI_V1, functionName: "execute", args: [route.commands as Hex, route.inputs as Hex[], BigInt(request.deadline)] }),
     value: binding.inputCurrency === ZERO ? request.amountIn : "0", gasLimit: "1" };
 }
+export function launchPlanTradeApprovalExpirationV1(deadline: string): bigint {
+  // Leave time to mine the exact-amount approval and refresh the swap quote.
+  // The swap retains its own deadline; this only extends the token allowance.
+  return uint(deadline, (1n << 48n) - 1n - ROUTED_TRADE_APPROVAL_GRACE_SECONDS_V1) + ROUTED_TRADE_APPROVAL_GRACE_SECONDS_V1;
+}
 export function buildLaunchPlanTradeApprovalV1(request: LaunchPlanTradeRequestV1, token: Address, kind: "token_approval" | "permit2_approval"): LaunchPlanTradeTransactionV1 {
-  uint(request.deadline, (1n << 48n) - 1n);
+  const expiration = launchPlanTradeApprovalExpirationV1(request.deadline);
   return { kind, chainId: "4663", from: request.owner, value: "0", gasLimit: "1",
     to: kind === "token_approval" ? token : getAddress(ROUTED_TRADE_CONTRACTS_V1.permit2.address),
     data: kind === "token_approval" ? encodeFunctionData({ abi: ROUTED_TRADE_TOKEN_ABI_V1, functionName: "approve",
       args: [getAddress(ROUTED_TRADE_CONTRACTS_V1.permit2.address), BigInt(request.amountIn)] })
       : encodeFunctionData({ abi: ROUTED_TRADE_PERMIT2_ABI_V1, functionName: "approve", args: [token,
-        getAddress(ROUTED_TRADE_CONTRACTS_V1.universalRouter.address), BigInt(request.amountIn), Number(BigInt(request.deadline))] }) };
+        getAddress(ROUTED_TRADE_CONTRACTS_V1.universalRouter.address), BigInt(request.amountIn), Number(expiration)] }) };
 }
 
 export function launchPlanTradePreparationDigestV1(value: Omit<LaunchPlanTradePreparationV1, "preparationDigest">) {
@@ -176,9 +185,9 @@ export function validateLaunchPlanTradePreparationV1(value: unknown, projection:
     || !projectionObject(value.transaction) || !projectionObject(value.evidence)) return bad("INVALID_PREPARATION", "The prepared trade is invalid.");
   const typed = value as unknown as LaunchPlanTradePreparationV1;
   const original = launchPlanTradeBindingV1(projection, request);
-  let poolFeeProof: ImmutablePoolFeeRuntimeProofV1 | undefined;
+  let poolFeeProof: ImmutablePoolFeeRuntimeProof | undefined;
   if (typed.fee?.mode === "pool_enforced") {
-    try { poolFeeProof = rebuildImmutablePoolFeeRuntimeProofV1(typed.fee.poolEnforcementWitness, {
+    try { poolFeeProof = rebuildImmutablePoolFeeRuntimeProof(typed.fee.poolEnforcementWitness, {
       chainId: "4663", poolManager: getAddress(ROUTED_TRADE_CONTRACTS_V1.poolManager.address), ...original.poolKey }); }
     catch { return bad("IMMUTABLE_POOL_FEE_PROOF_MISSING", "The existing pool fee requires exact independent runtime proof."); }
   }
@@ -212,9 +221,9 @@ export function validateLaunchPlanTradePreparationV1(value: unknown, projection:
     const accrued = projectionObject(proof) && proof.poolFeeAccrual;
     const ledger = (value: unknown) => uint(value, UINT256_MAX);
     if (!projectionObject(accrued) || accrued.proofDigest !== poolFeeProof.proofDigest || accrued.vault !== poolFeeProof.feeVault
-      || accrued.currency !== ZERO || accrued.recipient !== poolFeeProof.recipient || accrued.rateBps !== 20
+      || accrued.currency !== ZERO || accrued.recipient !== poolFeeProof.recipient || accrued.rateBps !== poolFeeProof.rateBps
       || accrued.assessmentBase !== "gross_native_leg" || accrued.rounding !== "ceil_per_trade"
-      || uint(accrued.grossNativeAmount) === 0n || uint(accrued.platformAccruedIncrease) !== (uint(accrued.grossNativeAmount) * 20n + 9999n) / 10000n
+      || uint(accrued.grossNativeAmount) === 0n || uint(accrued.platformAccruedIncrease) !== (uint(accrued.grossNativeAmount) * BigInt(poolFeeProof.rateBps) + 9999n) / 10000n
       || typeof accrued.nativePoolDelta !== "string" || !/^-?[1-9][0-9]{0,38}$/.test(accrued.nativePoolDelta)
       || BigInt(accrued.nativePoolDelta) <= -(1n << 127n) || BigInt(accrued.nativePoolDelta) >= 1n << 127n
       || (request.zeroForOne ? BigInt(accrued.nativePoolDelta) >= 0n : BigInt(accrued.nativePoolDelta) <= 0n)
