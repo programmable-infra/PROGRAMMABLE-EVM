@@ -275,7 +275,8 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
                 : validAddress && !currentAsset ? <><LoaderCircle size={14} aria-hidden="true" className={styles.spin} />Finding your coin…</> : null}
           </div>
         </> : null;
-  if (descriptor?.status === "ready" && descriptor.route.kind === "module-foundation") {
+  if (descriptor?.status === "ready" && descriptor.route.kind === "module-foundation"
+    && pendingLoaded && !pending && !pendingError) {
     return <div className={embedded ? styles.embedded : styles.page}>
       {!embedded ? <section className={styles.card} aria-label="Swap">{heading}{coinPicker}</section> : null}
       <FoundationSwap key={assetKey} tradeOnly chainId={chainId} token={descriptor.token.address}
