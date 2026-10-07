@@ -574,3 +574,13 @@ This package prepares, submits, and tracks Custom launches. It contains no appro
 wallet broadcast, fee-claim, buyback-management, or public Hookbuilder logic. Generic fee claims and buyback management
 for arbitrary hooks are not active. FADE uses a specifically bound adapter, not a generic capability. The reserved
 `fees:claim` and `buybacks:manage` scopes grant no operation.
+
+## Ethereum profile 3.5 candidate
+
+CLI 4.1.3 adds explicit `profileVersion: "3.5.0"` to the V3 pack, validation, submit and status flow. Omitted profile versions retain the existing default. Check `/v3/capabilities` before submitting a fresh request; local packing does not activate the profile.
+
+Use four through sixteen direct targets. The token, hook and initializer keep their existing exact-source interfaces. The fourth fee target is `EthereumSettlementFeeVaultV2`, which collects 3000 ppm (0.3%) with cumulative rounding. Custom hooks remain arbitrary exact-source targets and must connect an authenticated gross-settlement path to the fixed recipient.
+
+The package includes the V2 build artifact, exact Standard JSON compiler input and release binding under `contracts/settlement-fee-vault-v2`. Use `EthereumSettlementFeeVaultV2.build.json` as its artifact, the matching Standard JSON as its compilation unit, the canonical GraphFactory as constructor argument, and `bindRoute(address)` with one reciprocal graph target locator as initializer. Select `claimMode: "immutable-payout-recipient"` and payout recipient `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The explicit input schema is `schemas/programmable-launch-pack-config-v3.5.json`.
+
+Run the usual `programmable-launch pack --config <config>`, `validate <launch.json>`, `validate --remote <launch.json>` and `submit <launch.json>` commands. The API requires its signed settlement-dataflow closure and V2 fee evidence before a wallet handoff. Direct HTTP clients use the same V3 request and do not need this CLI. This candidate does not assert a published tarball or production activation. Historical 3.3/3.4 requests and their immutable release artifacts keep their existing interpretation.

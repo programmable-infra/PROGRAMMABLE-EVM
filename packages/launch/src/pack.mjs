@@ -15,6 +15,7 @@ import {
   CREATE_REQUEST_SCHEMA_V4,
   DIRECT_NATIVE_PROFILE_VERSION,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V35,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
@@ -143,11 +144,13 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const diagnostics = [];
   const metadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V35,
     DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
     DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   ]).has(directNativeProfile?.profileVersion);
   const completeMetadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V35,
     DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   ]).has(directNativeProfile?.profileVersion);
   if (metadataRequired !== Object.hasOwn(config, "projectMetadata")) {
@@ -165,7 +168,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     })
     : null;
   const behaviorScenarioInputs = directNativeProfile?.profileVersion
-    === DIRECT_NATIVE_PROFILE_VERSION_V3
+    === DIRECT_NATIVE_PROFILE_VERSION_V3 || directNativeProfile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35
     ? validateBehaviorScenarioInputs(config.behaviorScenarioInputs, targets)
     : null;
   const behaviorScenarioInputsHash = behaviorScenarioInputs === null
@@ -347,6 +350,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     const launchProfileBinding = buildDirectNativeProfileBinding(
       launchProfileSelection,
       {
+        profileVersion: directNativeProfile.profileVersion,
         graphBundle,
         predictions,
         routeNamespace,
@@ -611,7 +615,8 @@ function assertPackConfig(config) {
     const launchProfile = validateDirectNativeProfileSelection(config.launchProfile);
     const profileVersion = config.profileVersion ?? DIRECT_NATIVE_PROFILE_VERSION;
     if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION
-      && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3) {
+      && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
+      && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V35) {
       throw new TypeError(
         `pack config profileVersion must be ${DIRECT_NATIVE_PROFILE_VERSION} or ${DIRECT_NATIVE_PROFILE_VERSION_V3}`,
       );
@@ -621,7 +626,7 @@ function assertPackConfig(config) {
       ...(Object.hasOwn(config, "profileVersion") ? ["profileVersion"] : []),
       "launchProfile",
       "permitWindow",
-      ...(profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3
+      ...([DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35].includes(profileVersion)
         ? ["behaviorScenarioInputs"]
         : []),
       ...(Object.hasOwn(config, "projectMetadata") ? ["projectMetadata"] : []),
@@ -644,7 +649,7 @@ function assertPackConfig(config) {
     throw new TypeError("direct-native V3 pack config targets must contain between 3 and 16 entries");
   }
   if (apiVersion === "v3"
-    && config.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3
+    && [DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35].includes(config.profileVersion)
     && config.targets.length < 4) {
     throw new TypeError("preparatory profile 3.4 pack config requires between 4 and 16 entries");
   }

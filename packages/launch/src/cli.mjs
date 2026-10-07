@@ -275,6 +275,7 @@ function usage(command) {
     `OpenAPI V1 (read compatibility; create fenced): ${OPENAPI_URL_V1}`,
     `OpenAPI V2 (read compatibility; create fenced): ${OPENAPI_URL_V2}`,
     `OpenAPI V3 general hook profile: ${OPENAPI_URL_V3}`,
+    "Ethereum profile 3.5: explicit profileVersion 3.5.0, four to sixteen targets, immutable-recipient V2 settlement vault; availability comes from /v3/capabilities.",
     `OpenAPI V4 profile 4.1: ${OPENAPI_URL_V41}`,
     `Historical profile 4.0: ${OPENAPI_URL_V4}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,

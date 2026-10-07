@@ -19,6 +19,7 @@ import {
   CREATE_REQUEST_SCHEMA_V3,
   CREATE_REQUEST_SCHEMA_V4,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V35,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
@@ -329,14 +330,16 @@ function validateV3LaunchRequest(request) {
   const profileVersion = request?.launchProfile?.profileVersion;
   const metadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V35,
     DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
     DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   ]).has(profileVersion);
   const completeMetadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
+    DIRECT_NATIVE_PROFILE_VERSION_V35,
     DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   ]).has(profileVersion);
-  const behaviorScenarioRequired = profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3;
+  const behaviorScenarioRequired = [DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35].includes(profileVersion);
   assertExactKeys(request, [
     "schemaVersion",
     "launchWallet",
@@ -429,6 +432,7 @@ function validateV3LaunchRequest(request) {
   const launchProfileSelection = validateDirectNativeProfileBinding(
     request.launchProfileSelection,
     {
+      profileVersion: launchProfile.profileVersion,
       graphBundle: common.graph.graphBundle,
       predictions: common.graph.predictions,
       routeNamespace: deriveRouteNamespace(

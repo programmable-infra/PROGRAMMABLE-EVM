@@ -1,3 +1,4 @@
+import { validateCanonicalSettlementFeeVaultV2Graph, validateCanonicalSettlementFeeVaultV2Build } from "./canonical-settlement-fee-vault-v2.mjs";
 import {
   decodeFunctionData,
   encodeAbiParameters,
@@ -34,6 +35,7 @@ import {
   DIRECT_NATIVE_PROFILE_VERSION_V2,
   DIRECT_NATIVE_PROFILE_VERSION,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
+  DIRECT_NATIVE_PROFILE_VERSION_V35,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
@@ -318,7 +320,7 @@ export function resolveDirectNativeProfile(selection, options = {}) {
     fundingToken: MAINNET_USDC,
     fundingTokenRuntimeCodeHash: MAINNET_USDC_RUNTIME_CODE_HASH,
     graphPolicy: {
-      minimumTargets: profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3 ? 4 : 3,
+      minimumTargets: [DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35].includes(profileVersion) ? 4 : 3,
       maximumTargets: 16,
       directTargetsOnly: true,
     },
@@ -336,8 +338,9 @@ export function resolveDirectNativeProfile(selection, options = {}) {
       normalized.accountingMode,
       normalized.assessmentBase,
       normalized.feeCurrency,
+      profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35 ? "3000" : PLATFORM_FEE_RATE_PPM,
     ),
-    ...([DIRECT_NATIVE_PROFILE_VERSION_V3,
+    ...([DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35,
       DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY].includes(profileVersion)
       ? { projectMetadataPolicy: PROJECT_METADATA_POLICY }
       : {}),
@@ -394,6 +397,8 @@ export function buildDirectNativeProfileBinding(selection, context) {
     "selectionSchema",
     "direct-native launchProfile identity is not supported",
   );
+  const ratePpm = context.profile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35
+    || context.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35 ? "3000" : PLATFORM_FEE_RATE_PPM;
   const byId = new Map(context.graphBundle.targets.map((target) => [target.targetId, target]));
   const predictions = new Map(context.predictions.map((prediction) => [
     prediction.targetId,
@@ -443,6 +448,7 @@ export function buildDirectNativeProfileBinding(selection, context) {
         normalized.accountingMode,
         normalized.assessmentBase,
         normalized.feeCurrency,
+        ratePpm,
       ),
       schemaVersion: PLATFORM_FEE_BINDING_SCHEMA,
       targetId: targetRoles.platformFeeBindingTargetId,
@@ -451,10 +457,12 @@ export function buildDirectNativeProfileBinding(selection, context) {
         buy: platformFeeEconomics(
           normalized.applicantSelectedBuyHundredthsOfBip,
           normalized.accountingMode,
+          ratePpm,
         ),
         sell: platformFeeEconomics(
           normalized.applicantSelectedSellHundredthsOfBip,
           normalized.accountingMode,
+          ratePpm,
         ),
       },
     },
@@ -501,10 +509,16 @@ export function validateDirectNativeProfileGraph(profile, binding, graphBundle) 
     || profile.platformFeePolicy.assessmentBase
       !== binding.platformFeeBinding.assessmentBase
     || profile.platformFeePolicy.feeCurrency
-      !== binding.platformFeeBinding.feeCurrency) {
+      !== binding.platformFeeBinding.feeCurrency
+    || profile.platformFeePolicy.programmableFeeHundredthsOfBip !== binding.platformFeeBinding.programmableFeeHundredthsOfBip) {
     throw new TypeError("direct-native embedded policy does not match its launch binding");
   }
-  const minimumTargets = profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3 ? 4 : 3;
+  if (profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35
+    && (binding.platformFeeBinding.claimBinding.mode !== "immutable-payout-recipient"
+      || binding.platformFeeBinding.claimBinding.payoutRecipient !== PLATFORM_FEE_CLAIM_AUTHORITY)) {
+    throw new TypeError("Profile 3.5 requires the immutable platform payout recipient");
+  }
+  const minimumTargets = [DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35].includes(profile.profileVersion) ? 4 : 3;
   if (!Array.isArray(graphBundle.targets)
     || graphBundle.targets.length < minimumTargets
     || graphBundle.targets.length > 16) {
@@ -548,7 +562,7 @@ export function validateDirectNativeProfileGraph(profile, binding, graphBundle) 
   if (binding.platformFeeBinding.targetId !== roles.platformFeeBindingTargetId) {
     throw new TypeError("direct-native platform fee policy must bind its selected direct target");
   }
-  if (profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3) {
+  if ([DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35].includes(profile.profileVersion)) {
     if (new Set([
       roles.tokenTargetId,
       roles.hookTargetId,
@@ -559,7 +573,8 @@ export function validateDirectNativeProfileGraph(profile, binding, graphBundle) 
         "profile 3.4.0 requires a distinct canonical platform fee module target",
       );
     }
-    validateCanonicalSettlementFeeVaultV1Graph(
+    (profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35
+      ? validateCanonicalSettlementFeeVaultV2Graph : validateCanonicalSettlementFeeVaultV1Graph)(
       graphBundle,
       roles.platformFeeBindingTargetId,
     );
@@ -594,8 +609,9 @@ export function validateDirectNativeProfileBuilds(
       );
     }
   }
-  if (profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V3) {
-    validateCanonicalSettlementFeeVaultV1Build(
+  if ([DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35].includes(profile.profileVersion)) {
+    (profile.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35
+      ? validateCanonicalSettlementFeeVaultV2Build : validateCanonicalSettlementFeeVaultV1Build)(
       graphBundle,
       verificationBundle,
       binding.targetRoles.platformFeeBindingTargetId,
@@ -1703,9 +1719,10 @@ function canonicalLiquidityAssessment(value, expectedVectors) {
   };
 }
 
-function platformFeePolicy(accountingMode, assessmentBase, feeCurrency) {
+function platformFeePolicy(accountingMode, assessmentBase, feeCurrency, ratePpm = PLATFORM_FEE_RATE_PPM) {
   return {
     ...PLATFORM_FEE_POLICY_COMMON,
+    programmableFeeHundredthsOfBip: ratePpm,
     accountingMode: canonicalAccountingMode(accountingMode),
     ...canonicalPlatformFeeAssessment(assessmentBase, feeCurrency),
   };
@@ -1754,9 +1771,9 @@ function platformFeeClaimBinding(selection) {
   };
 }
 
-function platformFeeEconomics(applicantSelectedHundredthsOfBip, accountingMode) {
+function platformFeeEconomics(applicantSelectedHundredthsOfBip, accountingMode, ratePpm = PLATFORM_FEE_RATE_PPM) {
   const selected = BigInt(applicantSelectedHundredthsOfBip);
-  const platform = BigInt(PLATFORM_FEE_RATE_PPM);
+  const platform = BigInt(ratePpm);
   if (accountingMode === "additive-platform-share") {
     return {
       applicantSelectedHundredthsOfBip,
@@ -1845,6 +1862,7 @@ function directNativeProfileVersion(profileContract, requestedVersion) {
     return profileVersion;
   }
   if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
+    && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V35
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA

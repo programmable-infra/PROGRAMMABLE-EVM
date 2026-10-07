@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "4.1.2";
+export const PACKAGE_VERSION = "4.1.3";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -67,6 +67,7 @@ export const DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA = "3.1.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY = "3.2.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY = "3.3.0";
 export const DIRECT_NATIVE_PROFILE_VERSION_V3 = "3.4.0";
+export const DIRECT_NATIVE_PROFILE_VERSION_V35 = "3.5.0";
 export const DIRECT_NATIVE_PROFILE_VERSION =
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY;
 export const DIRECT_NATIVE_PROFILE_HASH_DOMAIN_V2 =
@@ -220,8 +221,8 @@ export const RELEASE_TAG_V3 = "programmable-launch-v3.3.9";
 export const RELEASE_TARBALL_V3 = "programmable-launch-3.3.9.tgz";
 export const RELEASE_URL_V3 =
   `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG_V3}/${RELEASE_TARBALL_V3}`;
-export const RELEASE_TAG = "programmable-launch-v4.1.2";
-export const RELEASE_TARBALL = "programmable-launch-4.1.2.tgz";
+export const RELEASE_TAG = "programmable-launch-v4.1.3";
+export const RELEASE_TARBALL = "programmable-launch-4.1.3.tgz";
 export const RELEASE_URL =
   `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =
