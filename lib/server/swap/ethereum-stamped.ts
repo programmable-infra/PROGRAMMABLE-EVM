@@ -230,13 +230,18 @@ async function prepare(request: ReturnType<typeof parseEthereumStampedSwapReques
     let grossNative = request.side === "buy" ? BigInt(request.amountIn) : outputIncrease;
     let platform = 0n;
     if (charge && request.side === "sell") {
-      if (takes.length !== 2 || !same(takes[0]!.recipient, recipient) || !same(takes[1]!.recipient, request.owner)) {
+      // V4Router skips a zero-value TAKE_PORTION. Tiny positive outputs may
+      // therefore contain only the trader's take, with a rounded fee of zero.
+      const zeroFeeTake = takes.length === 1 && same(takes[0]!.recipient, request.owner)
+        && takes[0]!.amount > 0n && takes[0]!.amount * 30n / 10_000n === 0n;
+      if (!zeroFeeTake && (takes.length !== 2 || !same(takes[0]!.recipient, recipient) || !same(takes[1]!.recipient, request.owner))) {
         return unavailable("ETHEREUM_FEE_TRANSFER_UNPROVEN");
       }
-      traderOutput = takes[1]!.amount;
-      grossNative = takes[0]!.amount + traderOutput;
+      traderOutput = takes[zeroFeeTake ? 0 : 1]!.amount;
+      const paidFee = zeroFeeTake ? 0n : takes[0]!.amount;
+      grossNative = paidFee + traderOutput;
       platform = grossNative * 30n / 10_000n;
-      if (takes[0]!.amount !== platform || outputIncrease !== traderOutput + (same(request.owner, recipient) ? platform : 0n)) {
+      if (paidFee !== platform || outputIncrease !== traderOutput + (same(request.owner, recipient) ? platform : 0n)) {
         return unavailable("ETHEREUM_FEE_TRANSFER_UNPROVEN");
       }
     } else if (takes.length !== 1 || !same(takes[0]!.recipient, request.owner) || takes[0]!.amount !== outputIncrease) {
