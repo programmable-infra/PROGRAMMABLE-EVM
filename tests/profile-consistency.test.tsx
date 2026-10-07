@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { ProfileProjectsLoadingState } from "@/components/profile-projects";
+import { EthereumProfileLaunches } from "@/components/ethereum-profile-launches";
 import { beginPublicProfileRefresh, PublicCreatorProfile, RobinhoodProfileRewards } from "@/components/profile-view";
 import { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
 import { loadingProfileData, type ProfileOnchainData } from "@/lib/profile/onchain-profile";
@@ -27,11 +27,16 @@ describe("shared wallet profile", () => {
     expect(html).not.toContain("<button");
     expect(html.match(/class="[^"]*skeletonProject[^"]*"/g)).toHaveLength(1);
   });
-  it("uses the same launch loading structure for both chains", () => {
-    const ethereum = renderToStaticMarkup(<ProfileProjectsLoadingState />);
+  it("labels both chains separately while keeping the shared launch loading structure", () => {
+    const ethereum = renderToStaticMarkup(<EthereumProfileLaunches account={creator} />);
     const robinhood = renderToStaticMarkup(<RobinhoodProfileLaunches account={creator} />);
-    expect(robinhood).toBe(ethereum);
-    expect(robinhood.match(/class="[^"]*skeletonProject[^"]*"/g)).toHaveLength(1);
+    expect(ethereum).toContain("Ethereum module launches");
+    expect(robinhood).toContain("Robinhood launches");
+    for (const html of [ethereum, robinhood]) {
+      expect(html).toContain('aria-busy="true"');
+      expect(html).toContain('aria-label="Refreshing launches"');
+      expect(html.match(/class="[^"]*skeletonProject[^"]*"/g)).toHaveLength(1);
+    }
   });
 
   it("keeps Module fee actions separate from Custom Launch claims without a fake fee total", () => {
@@ -50,6 +55,8 @@ describe("shared wallet profile", () => {
     expect(html).toContain(`Profile wallet ${creator}`);
     expect(html).toContain('href="/profile">My profile</a>');
     expect(html).toContain("another wallet");
+    expect(html).toContain("Ethereum module launches");
+    expect(html).toContain("Robinhood launches");
     expect(html).not.toContain("Edit profile");
     if (viewChainId === 4663) expect(html).toContain("Custom launch claims");
     else expect(html).not.toContain("Custom launch claims");
