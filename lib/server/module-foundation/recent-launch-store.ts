@@ -36,7 +36,11 @@ async function load(): Promise<Snapshot> {
       && item.presentation?.tokenAddress === item.row.tokenAddress
       && item.presentation?.chainId === item.chainId && item.presentation?.market === null
       && Array.isArray(item.presentation?.links))) throw new Error("Recent launch data is invalid.");
-  return { items: data.items, etag: response.blob.etag };
+  // Blob GET adds a weak validator prefix; conditional writes use the quoted
+  // object ETag without it. Keep the version check so concurrent launches merge.
+  const etag = response.blob.etag.trim().replace(/^W\//, "");
+  if (!/^"[\da-f]{32}"$/i.test(etag)) throw new Error("Recent launch version is invalid.");
+  return { items: data.items, etag };
 }
 function snapshot() {
   if (!saved || saved.expires <= Date.now()) {

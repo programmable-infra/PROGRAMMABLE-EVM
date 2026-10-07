@@ -3,9 +3,11 @@ import type { RecentFoundationLaunch } from "@/lib/module-foundation/recent-laun
 vi.mock("server-only", () => ({}));
 const state = vi.hoisted(() => ({ body: "", etag: 0, block: vi.fn(), chain: vi.fn() }));
 vi.mock("@vercel/blob", () => ({
-  get: async () => state.body ? { statusCode: 200, stream: new Response(state.body).body, blob: { etag: String(state.etag) } } : null,
+  get: async () => state.body ? { statusCode: 200, stream: new Response(state.body).body,
+    blob: { etag: `W/"${state.etag.toString(16).padStart(32, "0")}"` } } : null,
   put: async (_path: string, body: string, options: { ifMatch?: string; allowOverwrite: boolean }) => {
-    if ((!options.allowOverwrite && state.body) || (options.ifMatch && options.ifMatch !== String(state.etag))) throw new Error("Conflict");
+    if ((!options.allowOverwrite && state.body)
+      || (options.ifMatch && options.ifMatch !== `"${state.etag.toString(16).padStart(32, "0")}"`)) throw new Error("Conflict");
     state.etag++; state.body = body;
   },
 }));
@@ -34,7 +36,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 describe("recent launch storage", () => {
-  it("preserves concurrent launches and checks each chain without inventing market data", async () => {
+  it("preserves concurrent launches with weak read ETags and strong conditional writes", async () => {
     const { saveRecentFoundationLaunch, readRecentFoundationLaunches } = await import("@/lib/server/module-foundation/recent-launch-store");
     await Promise.all([saveRecentFoundationLaunch(entry(1)), saveRecentFoundationLaunch(entry(4663))]);
     const rows = await readRecentFoundationLaunches();
