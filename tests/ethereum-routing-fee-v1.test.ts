@@ -27,6 +27,7 @@ function fixture() {
   const body = { schemaVersion: "programmable.ethereum-launch-routing-fee-policy-binding.v1" as const,
     launchProfileVersion: "3.6.0" as const, launchProfileHash: `sha256:${"11".repeat(32)}` as const,
     policyHash: ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, policy: ETHEREUM_ROUTING_FEE_POLICY_V1,
+    enforcementBoundary: ETHEREUM_ROUTING_FEE_BOUNDARY_V1,
     stampBinding: { launchId: stamp.launchId, stampHash: stamp.stampHash, permitDigest: stamp.permitDigest, routePayloadHash: stamp.routePayloadHash } };
   const policy = { ...body, bindingHash: canonicalBrowserSha256V2(body.schemaVersion, body) };
   const classification: EthereumFeeClassificationV1 = { launchId: stamp.launchId, stampHash: stamp.stampHash, profileVersion: "3.6.0", routingFeePolicy: policy };
@@ -50,6 +51,11 @@ describe("Ethereum 3.6 routing fee", () => {
     const body = { ...altered }; delete body.bindingHash;
     altered.bindingHash = canonicalBrowserSha256V2(altered.schemaVersion, body);
     expect(() => parseEthereumRoutingFeePolicyV1(altered)).toThrow();
+    const shifted = JSON.parse(JSON.stringify(f.policy));
+    shifted.enforcementBoundary.blockNumber = "1";
+    const shiftedBody = { ...shifted }; delete shiftedBody.bindingHash;
+    shifted.bindingHash = canonicalBrowserSha256V2(shifted.schemaVersion, shiftedBody);
+    expect(() => parseEthereumRoutingFeePolicyV1(shifted)).toThrow();
   });
   it("charges an exact native amount before the buy, using only the net swap budget", () => {
     const f = fixture(); const [encoded, inputs] = commands(ethereumStampedSwapTransaction(f.route, f.request, 10000n));

@@ -37,7 +37,7 @@ export const ETHEREUM_ROUTING_FEE_POLICY_V1 = {
   "historicalSignedFeeObligations": "preserved"
 } as const;
 export const ETHEREUM_ROUTING_FEE_POLICY_HASH_V1 = canonicalBrowserSha256V2(ETHEREUM_ROUTING_FEE_POLICY_V1.schemaVersion, ETHEREUM_ROUTING_FEE_POLICY_V1);
-export const ETHEREUM_ROUTING_FEE_BOUNDARY_V1 = { blockNumber: "26142122", blockHash: "0x823e99cec0bb5b6011afc44891a1fd897b7efcbd83658cb9bc176dc35f5f86a3" } as const;
+export const ETHEREUM_ROUTING_FEE_BOUNDARY_V1 = { chainId: "1", blockNumber: "26142122", blockHash: "0x823e99cec0bb5b6011afc44891a1fd897b7efcbd83658cb9bc176dc35f5f86a3" } as const;
 
 export type EthereumRoutingFeePolicyBindingV1 = Readonly<{
   schemaVersion: "programmable.ethereum-launch-routing-fee-policy-binding.v1";
@@ -45,6 +45,7 @@ export type EthereumRoutingFeePolicyBindingV1 = Readonly<{
   launchProfileHash: `sha256:${string}`;
   policyHash: `sha256:${string}`;
   policy: typeof ETHEREUM_ROUTING_FEE_POLICY_V1;
+  enforcementBoundary: typeof ETHEREUM_ROUTING_FEE_BOUNDARY_V1;
   stampBinding: Readonly<{ launchId: `0x${string}`; stampHash: `0x${string}`;
     permitDigest: `0x${string}`; routePayloadHash: `0x${string}` }>;
   bindingHash: `sha256:${string}`;
@@ -64,11 +65,12 @@ const invalid = (): never => { throw new TypeError("The Ethereum launch fee poli
 export function parseEthereumRoutingFeePolicyV1(value: unknown): EthereumRoutingFeePolicyBindingV1 {
   if (!value || typeof value !== "object" || Array.isArray(value)) return invalid();
   const binding = value as EthereumRoutingFeePolicyBindingV1;
-  if (Object.keys(binding).sort().join() !== ["schemaVersion", "launchProfileVersion", "launchProfileHash", "policyHash", "policy", "stampBinding", "bindingHash"].sort().join()
+  if (Object.keys(binding).sort().join() !== ["schemaVersion", "launchProfileVersion", "launchProfileHash", "policyHash", "policy", "enforcementBoundary", "stampBinding", "bindingHash"].sort().join()
     || binding.schemaVersion !== "programmable.ethereum-launch-routing-fee-policy-binding.v1"
     || binding.launchProfileVersion !== "3.6.0" || !hash(binding.launchProfileHash)
     || binding.policyHash !== ETHEREUM_ROUTING_FEE_POLICY_HASH_V1
     || canonicalBrowserJsonV2(binding.policy) !== canonicalBrowserJsonV2(ETHEREUM_ROUTING_FEE_POLICY_V1)
+    || canonicalBrowserJsonV2(binding.enforcementBoundary) !== canonicalBrowserJsonV2(ETHEREUM_ROUTING_FEE_BOUNDARY_V1)
     || !binding.stampBinding || Object.keys(binding.stampBinding).sort().join() !== "launchId,permitDigest,routePayloadHash,stampHash"
     || !Object.values(binding.stampBinding).every(hex)) return invalid();
   const { bindingHash, ...body } = binding;
