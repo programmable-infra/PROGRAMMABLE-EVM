@@ -9,13 +9,15 @@ import { MODULE_TOKEN_FALLBACK_IMAGE, RobinhoodCoinArtwork } from "@/components/
 import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
 import { useRobinhoodPresentation } from "@/components/use-robinhood-presentation";
 import { readRobinhoodProfileResponse } from "@/lib/profile/robinhood-profile";
-import { isRobinhoodFoundationLaunch, isRobinhoodModuleLaunch, robinhoodModuleManageHref, ROBINHOOD_PROFILE_PAGE_SIZE, type RobinhoodProfileLaunchList } from "@/lib/robinhood-launches";
+import { isRobinhoodFoundationLaunch, isRobinhoodModuleLaunch, ROBINHOOD_PROFILE_PAGE_SIZE, type RobinhoodProfileLaunchList } from "@/lib/robinhood-launches";
 import { coinAge, coinTicker, coinValuation } from "@/lib/robinhood-presentation";
 import styles from "./robinhood-profile-launches.module.css";
 
 const snapshots = new Map<string, { data: RobinhoodProfileLaunchList; savedAt: number }>();
 const FoundationProfileClaim = dynamic(() => import("@/components/foundation-profile-claim").then(module => module.FoundationProfileClaim),
   { ssr: false, loading: () => <span className={styles.claimStatus}>Checking fees…</span> });
+const LegacyModuleProfileClaim = dynamic(() => import("@/components/legacy-module-profile-claim").then(module => module.LegacyModuleProfileClaim),
+  { ssr: false, loading: () => <span className={styles.claimStatus}>Checking rewards…</span> });
 const cacheKey = (account: string, page: number) => `4663:${account.toLowerCase()}:${page}`;
 function remembered(account: string) {
   if (typeof window === "undefined") return null;
@@ -84,6 +86,7 @@ function RobinhoodAccountLaunches({ account, enableClaims }: { account: string; 
   }, [account, page, refresh, retry]);
 
   return <ProfileProjectsSection
+    title="Robinhood launches" titleId="profile-robinhood-launches-title"
     refreshInProgress={loading}
     onRefresh={() => requestPage(shownPage)}
     currentPage={shownPage}
@@ -110,8 +113,8 @@ function RobinhoodAccountLaunches({ account, enableClaims }: { account: string; 
             </span>
           </Link>
           {enableClaims && isRobinhoodFoundationLaunch(launch) ? <FoundationProfileClaim launch={launch} account={account} /> : null}
-          {enableClaims && isRobinhoodModuleLaunch(launch) && !isRobinhoodFoundationLaunch(launch) ? <Link
-            className={styles.manageLink} href={robinhoodModuleManageHref(launch) ?? `/token/${launch.tokenAddress}`} prefetch={false}>Manage fees</Link> : null}
+          {enableClaims && isRobinhoodModuleLaunch(launch) && !isRobinhoodFoundationLaunch(launch)
+            ? <LegacyModuleProfileClaim launch={launch} account={account} /> : null}
         </li>;
       })}
     </ul> : loading && !scoped ? <ProfileProjectsSkeleton />

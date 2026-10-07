@@ -652,6 +652,8 @@ export function ProfileProjects({
 
 export function ProfileProjectsSection({
   children,
+  title = "Launches",
+  titleId = "profile-launches-title",
   refreshInProgress = false,
   onRefresh,
   currentPage = 1,
@@ -662,6 +664,8 @@ export function ProfileProjectsSection({
   statusMessage,
 }: Readonly<{
   children: ReactNode;
+  title?: string;
+  titleId?: string;
   refreshInProgress?: boolean;
   onRefresh?: () => void;
   currentPage?: number;
@@ -672,9 +676,9 @@ export function ProfileProjectsSection({
   statusMessage?: string;
 }>) {
   return (
-    <section className={styles.section} aria-labelledby="profile-launches-title">
+    <section className={styles.section} aria-labelledby={titleId}>
       <header className={styles.heading}>
-        <h2 id="profile-launches-title">Launches{totalItems !== undefined
+        <h2 id={titleId}>{title}{totalItems !== undefined
           ? <span className={styles.launchCount}> {totalItems}</span> : null}</h2>
         <div className={styles.headerActions}>
           {onRefresh || refreshInProgress ? <button

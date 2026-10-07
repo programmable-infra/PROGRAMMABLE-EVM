@@ -1,21 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { erc20Abi, formatUnits, getAddress, type Hex } from "viem";
+import { formatUnits, getAddress, type Hex } from "viem";
 import { useFoundationSession } from "@/components/module-foundation-session";
-import { ROBINHOOD_BLOCK_EXPLORER_URL } from "@/lib/chains";
-import { foundationLedgerAbi } from "@/lib/module-foundation/abi";
+import { useLiveDataRefresh } from "@/components/use-live-data-refresh";
+import { foundationChainProfile, type FoundationChainId } from "@/lib/module-foundation/chains";
 import { prepareFoundationClaim } from "@/lib/module-foundation/client";
 import type { FoundationPool } from "@/lib/module-foundation/route";
-import type { RobinhoodFoundationLaunch } from "@/lib/robinhood-launches";
+import type { FoundationProfileLaunch } from "@/lib/profile/module-launches";
+import { readFoundationProfileRewards } from "@/lib/profile/foundation-rewards";
 import styles from "./robinhood-profile-launches.module.css";
 
-type FeeBalance = { context: string; amount: bigint; decimals: number | null; symbol: string };
+type FeeBalance = Awaited<ReturnType<typeof readFoundationProfileRewards>> & { context: string };
 
 /** Indexed launch identity supplies the row; the wallet path independently verifies the live pool and recipient. */
-export function FoundationProfileClaim({ launch, account }: { launch: RobinhoodFoundationLaunch; account: string }) {
+export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { launch: FoundationProfileLaunch; account: string; chainId?: FoundationChainId }) {
   const token = getAddress(launch.tokenAddress);
-  const session = useFoundationSession(token);
+  const session = useFoundationSession(token, chainId);
+  const explorer = foundationChainProfile(chainId).explorer;
+  const liveRefresh = useLiveDataRefresh({ intervalMs: 30_000 });
   const [balanceState, setBalanceState] = useState<FeeBalance | null>(null);
   const [balanceError, setBalanceError] = useState("");
   const [refresh, setRefresh] = useState(0);
@@ -34,33 +37,12 @@ export function FoundationProfileClaim({ launch, account }: { launch: RobinhoodF
   useEffect(() => {
     if (!owner || session.availability.status !== "ready" || !releaseDigest) return;
     let active = true;
-    const client = session.client;
-    const ledger = getAddress(launch.feeLedgerAddress);
-    void (async () => {
-      if (releaseDigest.toLowerCase() !== launch.sourceReleaseDigest.toLowerCase()) throw new Error("The coin's fee release changed.");
-      const blockNumber = await client.getBlockNumber();
-      const [creator, quote, credited, claimed] = await Promise.all([
-        client.readContract({ address: ledger, abi: foundationLedgerAbi, functionName: "creator", blockNumber }),
-        client.readContract({ address: ledger, abi: foundationLedgerAbi, functionName: "quote", blockNumber }),
-        client.readContract({ address: ledger, abi: foundationLedgerAbi, functionName: "creatorCredited", blockNumber }),
-        client.readContract({ address: ledger, abi: foundationLedgerAbi, functionName: "creatorClaimed", blockNumber }),
-      ]);
-      if (getAddress(creator) !== getAddress(launch.creator) || getAddress(quote) !== getAddress(launch.quoteAsset)
-        || claimed > credited) throw new Error("The coin's fee ledger does not match its launch.");
-      const amount = credited - claimed;
-      const metadata = amount > 0n ? await Promise.allSettled([
-        client.readContract({ address: getAddress(launch.quoteAsset), abi: erc20Abi, functionName: "decimals", blockNumber }),
-        client.readContract({ address: getAddress(launch.quoteAsset), abi: erc20Abi, functionName: "symbol", blockNumber }),
-      ]) : null;
-      const decimals = metadata?.[0].status === "fulfilled" && metadata[0].value <= 36 ? metadata[0].value : null;
-      const symbol = metadata?.[1].status === "fulfilled" && /^[A-Za-z0-9._-]{1,16}$/.test(metadata[1].value)
-        ? metadata[1].value : "quote units";
-      if (active) { setBalanceError(""); setBalanceState({ context: session.contextKey, amount: credited - claimed, decimals,
-        symbol }); }
-    })().catch(() => { if (active) setBalanceError("Fees could not be checked."); });
+    void readFoundationProfileRewards(session.client, session.envelope!.binding!, launch).then(value => {
+      if (active) { setBalanceError(""); setBalanceState({ context: session.contextKey, ...value }); }
+    }).catch(() => { if (active) { setBalanceState(null); setBalanceError("Rewards could not be checked."); } });
     return () => { active = false; };
   }, [account, launch.creator, launch.feeLedgerAddress, launch.quoteAsset, launch.sourceReleaseDigest, owner,
-    releaseDigest, refresh, session.availability.status, session.client, session.contextKey]);
+    launch, releaseDigest, refresh, liveRefresh, session.availability.status, session.client, session.contextKey, session.envelope, session.resultGeneration]);
 
   async function claim() {
     if (!session.account || !owner || claiming.current || !balance || balance.amount <= 0n) return;
@@ -110,16 +92,16 @@ export function FoundationProfileClaim({ launch, account }: { launch: RobinhoodF
       {session.walletAction.label}</button> : session.availability.status === "unavailable" || balanceError
       ? <button type="button" onClick={() => { setBalanceError(""); session.retryAvailability(); setRefresh(value => value + 1); }}>Retry fee check</button>
       : <button type="button" disabled={!ready || balance!.amount === 0n || busy || Boolean(session.submissionBlocked)} onClick={() => void claim()}>
-        {busy ? "Preparing claim…" : "Claim fees"}</button>}
+        {busy ? "Claiming…" : "Claim Rewards"}</button>}
     <span className={styles.claimStatus}>{balanceError || session.availability.status === "unavailable" ? balanceError || "Fee claims are temporarily unavailable"
-      : !ready ? "Checking fees…" : balance.amount === 0n ? "No creator fees available"
-      : balance.decimals === null ? "Creator fees available" : `${formatUnits(balance.amount, balance.decimals)} ${balance.symbol} available`}</span>
+      : !ready ? "Checking rewards…" : `${formatUnits(balance.amount, balance.decimals)} ${balance.symbol} available`}</span>
+    {ready && balance.wrappedEth ? <span className={styles.claimStatus}>Paid to your wallet as wrapped ETH.</span> : null}
     {savedClaim ? <><span className={styles.claimStatus}>{savedClaim.status === "success" ? "Fee payout saved at" : "Reverted transaction at"} block {savedClaim.blockNumber}.{" "}
-      <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${savedClaim.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a></span>
+      <a href={`${explorer}/tx/${savedClaim.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a></span>
       <button type="button" disabled={acknowledging} onClick={() => void acknowledgeSavedClaim()}>{acknowledging ? "Continuing…" : "Continue"}</button></>
       : session.submissionBlocked ? <span className={styles.claimStatus}>{session.submissionBlocked}{" "}
-        <a href={`/modules/${session.resolution?.metadata?.token ?? token}`}>Review wallet activity</a></span> : null}
-    {message ? <p className={styles.claimMessage} role="status">{message}{transactionHash ? <> <a href={`${ROBINHOOD_BLOCK_EXPLORER_URL}/tx/${transactionHash}`}
+        <a href={`/modules/${session.resolution?.metadata?.token ?? token}?chainId=${chainId}`}>Review wallet activity</a></span> : null}
+    {message ? <p className={styles.claimMessage} role="status">{message}{transactionHash ? <> <a href={`${explorer}/tx/${transactionHash}`}
       target="_blank" rel="noreferrer">View transaction</a></> : null}</p> : null}
   </div>;
 }
