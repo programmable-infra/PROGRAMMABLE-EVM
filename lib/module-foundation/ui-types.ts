@@ -237,6 +237,16 @@ export function foundationReviewError(review: Pick<FoundationLaunchReview, "cont
   return null;
 }
 
+export function foundationConfigurationError(field: FoundationConfigurationField, value: string | boolean | undefined): string | null {
+  if (value === undefined || (typeof value === "string" && !value.trim())) return field.required ? `Complete ${field.label}.` : null;
+  if (field.kind === "boolean" && typeof value !== "boolean") return `Choose a setting for ${field.label}.`;
+  if (field.kind === "address" && (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value))) return `Enter a valid address for ${field.label}.`;
+  if (field.kind === "integer" && (typeof value !== "string" || !/^\d+$/.test(value))) return `Enter a whole number for ${field.label}.`;
+  if (field.kind === "decimal" && (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value))) return `Enter a decimal amount for ${field.label}.`;
+  if (field.kind === "select" && !field.options?.some(option => option.value === value)) return `Choose an available option for ${field.label}.`;
+  return null;
+}
+
 export function foundationSelectionErrors(selections: readonly FoundationModuleSelection[], catalog: readonly FoundationModuleDescriptor[]): string[] {
   const ids = new Set(selections.map(selection => selection.id));
   const issues: string[] = [];
@@ -252,13 +262,8 @@ export function foundationSelectionErrors(selections: readonly FoundationModuleS
     for (const conflict of descriptor.conflictsWith ?? []) if (ids.has(conflict)) issues.push(`${descriptor.name} cannot be combined with ${catalog.find(entry => entry.id === conflict)?.name ?? conflict}.`);
     for (const field of descriptor.fields) {
       const value = selection.configuration[field.key];
-      if (field.required && (value === undefined || (typeof value === "string" && !value.trim()))) issues.push(`Complete ${field.label} in ${descriptor.name}.`);
-      if (value === undefined || value === "") continue;
-      if (field.kind === "boolean" && typeof value !== "boolean") issues.push(`Choose a setting for ${field.label}.`);
-      if (field.kind === "address" && (typeof value !== "string" || !/^0x[0-9a-fA-F]{40}$/.test(value))) issues.push(`Enter a valid address for ${field.label}.`);
-      if (field.kind === "integer" && (typeof value !== "string" || !/^\d+$/.test(value))) issues.push(`Enter a whole number for ${field.label}.`);
-      if (field.kind === "decimal" && (typeof value !== "string" || !/^\d+(?:\.\d+)?$/.test(value))) issues.push(`Enter a decimal amount for ${field.label}.`);
-      if (field.kind === "select" && !field.options?.some(option => option.value === value)) issues.push(`Choose an available option for ${field.label}.`);
+      const error = foundationConfigurationError(field, value);
+      if (error) issues.push(error.startsWith("Complete ") ? `Complete ${field.label} in ${descriptor.name}.` : error);
     }
   }
   return [...new Set(issues)];

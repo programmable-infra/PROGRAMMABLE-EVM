@@ -243,6 +243,48 @@ test.describe("Module Studio", () => {
   });
   test.afterAll(async () => { if (studioServer) { studioServer.close(); await once(studioServer, "close"); } });
 
+  for (const width of [1440, 390]) test(`drafts survive chain navigation and modules offer a direct return at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`${studioOrigin}?mode=draft-navigation`);
+    if (width < 600) await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await page.getByLabel("Name", { exact: true }).fill("Robinhood draft");
+    await page.getByLabel("Ticker", { exact: true }).fill("KEEP");
+    await page.getByLabel("First buy · ETH", { exact: true }).fill("0");
+    await page.getByLabel("Coin image file", { exact: true }).setInputFiles("public/icon-512.png");
+    await expect(page.getByRole("button", { name: "Change image", exact: true })).toBeVisible();
+    if (width < 600) await page.getByRole("button", { name: "Modules", exact: true }).click();
+    await page.getByRole("switch", { name: "Initial wallet buy limit", exact: true }).click();
+    await page.getByRole("button", { name: "Back to coin details", exact: true }).click();
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Robinhood draft");
+    await page.getByRole("button", { name: "Fixture Ethereum", exact: true }).click();
+    if (width < 600) await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Robinhood draft");
+    await page.getByLabel("Name", { exact: true }).fill("Ethereum draft");
+    await expect(page.getByRole("switch", { name: "Initial wallet buy limit", exact: true, includeHidden: true })).toHaveAttribute("aria-checked", "false");
+    await page.goBack();
+    if (width < 600) await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Robinhood draft");
+    await expect(page.getByLabel("First buy · ETH", { exact: true })).toHaveValue("0");
+    await expect(page.getByRole("button", { name: "Change image", exact: true })).toBeVisible();
+    if (width < 600) await page.getByRole("button", { name: "Your coin", exact: true }).click();
+    await page.getByRole("button", { name: "Edit Initial wallet buy limit", exact: true }).click();
+    await page.getByRole("button", { name: "Remove Initial wallet buy limit", exact: true }).click();
+    await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Robinhood draft");
+    await expect(page.getByRole("switch", { name: "Initial wallet buy limit", exact: true, includeHidden: true })).toHaveAttribute("aria-checked", "false");
+  });
+
+  for (const chainId of [1, 4663]) test(`zero first buy reaches preparation on chain ${chainId}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto(`${studioOrigin}?mode=launch-speed&chainId=${chainId}`);
+    await page.getByLabel("Name", { exact: true }).fill("No first buy");
+    await page.getByLabel("Ticker", { exact: true }).fill("ZERO");
+    await page.getByLabel("First buy · ETH", { exact: true }).fill("0");
+    await page.getByRole("button", { name: "Launch coin", exact: true }).click();
+    await expect(page.getByRole("alert")).toContainText("Fixture wallet rejected");
+    const events = await page.evaluate(() => (window as unknown as { launchEvents: { walletRequests: number; lastDraft: { initialBuy: string } } }).launchEvents);
+    expect(events.walletRequests).toBe(1); expect(events.lastDraft.initialBuy).toBe("0");
+  });
+
   for (const width of [1440, 390]) test(`coming soon modules stay disabled while available modules can launch at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(`${studioOrigin}?mode=availability`);

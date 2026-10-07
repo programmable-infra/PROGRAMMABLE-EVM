@@ -7,7 +7,7 @@ import { build } from "esbuild";
 export async function createModuleStudioServer() {
   const root = process.cwd();
   const entry = `
-    import React, {useRef, useState} from 'react';
+    import React, {useEffect, useRef, useState} from 'react';
     import {createRoot} from 'react-dom/client';
     import {FoundationStudio} from './components/module-studio/studio';
     import {ModuleFoundationLaunchHost} from './components/module-foundation-launch-host';
@@ -27,6 +27,18 @@ export async function createModuleStudioServer() {
     const launchEvents = window.launchEvents = {preparations:0,coldPreparations:0,walletRequests:0,aborts:0};
     const chainId = new URLSearchParams(location.search).get('chainId')==='1' ? 1 : 4663;
     const quote = {address:chainId===1?'0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2':'0xC91D9BBCEa565eCaA0821DFAff2E377b4FeaDd5f',chainId,name:'Wrapped Ether',symbol:'WETH',decimals:18,supported:true,supportsNativeEth:true};
+    function DraftNavigationFixture() {
+      const [network,setNetwork] = useState(4663);
+      useEffect(()=>{const back=event=>setNetwork(event.state?.chainId??4663);window.addEventListener('popstate',back);return()=>window.removeEventListener('popstate',back);},[]);
+      const change = value=>{history.pushState({chainId:value},'', '#'+value);setNetwork(value);};
+      return <><button onClick={()=>change(1)}>Fixture Ethereum</button><button onClick={()=>change(4663)}>Fixture Robinhood</button>
+        <ModuleFoundationBuilder key={network} persistDraft layout="studio" contextKey={'draft:'+network}
+          availability={{status:'ready',chainId:network,chainName:network===1?'Ethereum':'Robinhood Chain'}}
+          catalog={catalog} quoteAssets={[{...quote,chainId:network}]} suggestedInitialBuy="0.001"
+          onUploadImage={async()=>{throw new Error('No upload needed');}}
+          onPrepareLaunch={async()=>{throw new Error('No transaction in navigation fixture');}}
+          onConfirmLaunch={async()=>{throw new Error('No transaction in navigation fixture');}}/></>;
+    }
     function LaunchSpeedFixture() {
       const [context,setContext] = useState('wallet:'+chainId+':release');
       const [renders,setRenders] = useState(0);
@@ -60,6 +72,7 @@ export async function createModuleStudioServer() {
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
+      if(mode==='draft-navigation') return <DraftNavigationFixture/>;
       if(mode==='launch-speed'||mode==='open-quote'||mode==='wallet-recovery'||mode==='availability') return <LaunchSpeedFixture/>;
       if(mode==='restored-launch') return <ModuleFoundationLaunchHost layout="studio"/>;
       return <div className="app-frame"><SiteHeader/><main><div className={styles.launchPage}>

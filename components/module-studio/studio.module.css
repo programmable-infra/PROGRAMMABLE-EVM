@@ -201,3 +201,16 @@
 .studio .cashtagInput { background: #08090de8; }
 .studio .cashtagInput > span { flex: 0 0 auto; font-size: 16px; line-height: 24px; }
 :global(body):has(.launchPage) :global(.atmosphere-backdrop) { visibility: hidden; }
+.inspectorBack {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
