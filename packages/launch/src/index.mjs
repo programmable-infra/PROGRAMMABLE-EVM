@@ -9,6 +9,7 @@ export {
 export { canonicalizeJson, parseStrictJson, StrictJsonError } from "./canonical-json.mjs";
 export { ProgrammableCliDiagnosticError } from "./diagnostics.mjs";
 export { buildLaunch, packLaunch } from "./pack.mjs";
+export { packFreshLaunch } from "./pack-current-profile.mjs";
 export {
   buildProjectMetadata,
   buildProjectMetadataImageArtifactV4,
@@ -166,3 +167,7 @@ export {
 } from "./launch-coverage-v1.mjs";
 
 export { CANONICAL_SETTLEMENT_FEE_VAULT_V2, validateCanonicalSettlementFeeVaultV2Graph, validateCanonicalSettlementFeeVaultV2Build } from "./canonical-settlement-fee-vault-v2.mjs";
+
+export { DIRECT_NATIVE_PROFILE_VERSION_V36 } from "./constants.mjs";
+export { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36, assertDirectNativeProgrammableTradeFeePolicyV36,
+  directNativeProgrammableTradeFeePolicyHashV36 } from "./profile-v36.mjs";

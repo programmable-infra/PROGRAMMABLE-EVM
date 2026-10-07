@@ -79,20 +79,20 @@ describe("public Custom Launch CLI surface", () => {
         },
       },
       generalHookProfile: {
-        status: "live",
+        status: "selected-by-server-capabilities",
         apiVersion: "3",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.3.0",
+        profileVersion: null,
         compatibleProfileVersions: ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
         legacyProfileSemantics: "readable-and-byte-identical-retryable-only",
-        productionLaunchAuthorized: true,
+        productionLaunchAuthorized: null,
         createPath: "/v3/custom-launches",
         capabilitiesPath: "/v3/capabilities",
         preflightPath: "/v3/custom-launches/preflight",
         finalizedMetadataPath: "/v3/finalized-custom-launches",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.3.9",
+        cliReleaseVersion: null,
         admissionPolicy: {
           manualProjectAllowlist: false,
           hardBlockFindingRules: [
@@ -108,16 +108,16 @@ describe("public Custom Launch CLI surface", () => {
         },
       },
       integrationPreview: {
-        status: "live",
+        status: "selected-by-server-capabilities",
         apiVersion: "3",
-        publicAuthorization: true,
+        publicAuthorization: null,
         createPath: "/v3/custom-launches",
         capabilitiesPath: "/v3/capabilities",
         preflightPath: "/v3/custom-launches/preflight",
         openApiUrl: "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1",
         profileRevision: 3,
-        profileVersion: "3.3.0",
+        profileVersion: null,
         compatibleProfileVersions: ["3.2.0", "3.1.0", "3.0.0", "2.0.0"],
         requestSchemaVersion: "programmable.custom-launch-create-request.v3",
         minimumTargets: 3,
@@ -223,8 +223,8 @@ describe("public Custom Launch CLI surface", () => {
         },
         v3: {
           status: "live",
-          publicAuthorization: true,
-          freshWritesOnlyProfileVersion: "3.3.0",
+          publicAuthorization: null,
+          freshWritesOnlyProfileVersion: null,
           createHttpStatus: 202,
           replayHttpStatus: 200,
           capabilitiesPath: "/v3/capabilities",
@@ -1349,7 +1349,7 @@ describe("public Custom Launch CLI surface", () => {
       "utf8",
     );
     expect(packageGuide).toContain(
-      "The released package `3.3.9` uses live/default general profile",
+      "The historical released package `3.3.9` defaults to general profile",
     );
     expect(packageGuide).toContain(
       "same package contains explicit preparatory support for",

@@ -1,4 +1,5 @@
 import "server-only";
+import { parseEthereumRoutingFeePolicyV1, type EthereumRoutingFeePolicyBindingV1 } from "@/lib/custom-launch/ethereum-routing-fee-policy-v1";
 
 import { isIP } from "node:net";
 
@@ -99,7 +100,8 @@ type LaunchProfileVersionV1 =
   | "3.2.0"
   | "3.3.0"
   | "3.4.0"
-  | "3.5.0";
+  | "3.5.0"
+  | "3.6.0";
 
 type LaunchPresentationLinkKindV1 =
   | "website"
@@ -174,6 +176,7 @@ export type FinalizedCustomLaunchMetadataV1 = Readonly<{
   resourceId: string;
   routerLaunchId: Hex32;
   launchProfileVersion: LaunchProfileVersionV1;
+  routingFeePolicy?: EthereumRoutingFeePolicyBindingV1;
   chainId: "1";
   router: Address;
   token: Address;
@@ -426,7 +429,7 @@ export async function readFinalizedCustomLaunchMetadataPagesV1(input: Readonly<{
   throw new Error("Finalized Custom metadata feed exceeds its page bound");
 }
 
-const readProductionFinalizedCustomLaunchMetadataFeedV1 =
+export const readProductionFinalizedCustomLaunchMetadataFeedV1 =
   createFinalizedCustomLaunchMetadataFeedReaderV1();
 
 export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
@@ -640,7 +643,7 @@ function projectLaunchPresentationV1(
   });
 }
 
-function metadataMatchesRouterEntryV1(
+export function metadataMatchesRouterEntryV1(
   metadata: FinalizedCustomLaunchMetadataV1,
   entry: CanonicalTokenExploreEntry,
 ) {
@@ -746,6 +749,8 @@ function parseFeedQualityV1(
 }
 
 function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
+  const hasRoutingFeePolicy = value !== null && typeof value === "object"
+    && !Array.isArray(value) && Object.hasOwn(value, "routingFeePolicy");
   const hasPartnerAttribution = value !== null
     && typeof value === "object"
     && !Array.isArray(value)
@@ -762,6 +767,7 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     "createdAt", "finalizedAt",
     ...(hasPartnerAttribution ? ["partnerAttribution"] : []),
     ...(hasTradeAdapterDescriptor ? ["tradeAdapterDescriptor"] : []),
+    ...(hasRoutingFeePolicy ? ["routingFeePolicy"] : []),
   ], "Finalized Custom metadata item");
   if (
     record.schemaVersion !== FINALIZED_CUSTOM_LAUNCH_METADATA_SCHEMA_V1
@@ -777,7 +783,12 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     && record.launchProfileVersion !== "3.3.0"
     && record.launchProfileVersion !== "3.4.0"
     && record.launchProfileVersion !== "3.5.0"
+    && record.launchProfileVersion !== "3.6.0"
   ) throw new Error("Finalized Custom metadata launch profile version is invalid");
+  if (hasRoutingFeePolicy !== (record.launchProfileVersion === "3.6.0")) {
+    throw new Error("Finalized Custom routing fee policy is missing or unexpected");
+  }
+  const routingFeePolicy = hasRoutingFeePolicy ? parseEthereumRoutingFeePolicyV1(record.routingFeePolicy) : null;
   const metadataRequired = launchProfileUsesProjectMetadataV1(
     record.launchProfileVersion,
   );
@@ -885,6 +896,7 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     resourceId: record.resourceId,
     routerLaunchId,
     launchProfileVersion: record.launchProfileVersion,
+    ...(routingFeePolicy ? { routingFeePolicy } : {}),
     chainId: "1",
     router,
     token,
@@ -909,7 +921,8 @@ function launchProfileUsesProjectMetadataV1(
   return launchProfileVersion === "3.2.0"
     || launchProfileVersion === "3.3.0"
     || launchProfileVersion === "3.4.0"
-    || launchProfileVersion === "3.5.0";
+    || launchProfileVersion === "3.5.0"
+    || launchProfileVersion === "3.6.0";
 }
 
 function parseTokenMetadataReadbackV1(

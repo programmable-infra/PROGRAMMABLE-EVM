@@ -23,8 +23,9 @@ afterEach(() => {
 });
 
 describe("active Robinhood agent setup and generated documentation", () => {
-  it("preserves the complete default setup and links from the reviewed 4.0 source", () => {
-    expect(hash(PROGRAMMABLE_AGENT_SETUP_TEXT_V1)).toBe("1c6766ed4ea874282a27b45e0d4e597f17f84bea5cb4edad478ca2c84a273fbc");
+  it("uses capability-driven Ethereum guidance while preserving reviewed 4.0 links", () => {
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).toContain("use the exact current V3 profile from capabilities");
+    expect(PROGRAMMABLE_AGENT_SETUP_TEXT_V1).not.toContain("use the current V3.3 profile");
     expect(hash(JSON.stringify(PROGRAMMABLE_AGENT_SETUP_LINKS_V1))).toBe("df1d924ec33cc27d465f804c57ef8e5a573c253604dc6b93f3542787d55ba4a7");
     expect(buildProgrammableAgentSetupTextV1("4.0.0")).toBe(PROGRAMMABLE_AGENT_SETUP_TEXT_V1);
   });

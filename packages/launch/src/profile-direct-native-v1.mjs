@@ -1,3 +1,4 @@
+import { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 } from "./profile-v36.mjs";
 import { validateCanonicalSettlementFeeVaultV2Graph, validateCanonicalSettlementFeeVaultV2Build } from "./canonical-settlement-fee-vault-v2.mjs";
 import {
   decodeFunctionData,
@@ -36,6 +37,7 @@ import {
   DIRECT_NATIVE_PROFILE_VERSION,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V35,
+  DIRECT_NATIVE_PROFILE_VERSION_V36,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
@@ -338,9 +340,12 @@ export function resolveDirectNativeProfile(selection, options = {}) {
       normalized.accountingMode,
       normalized.assessmentBase,
       normalized.feeCurrency,
-      profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35 ? "3000" : PLATFORM_FEE_RATE_PPM,
+      [DIRECT_NATIVE_PROFILE_VERSION_V35, DIRECT_NATIVE_PROFILE_VERSION_V36].includes(profileVersion) ? "3000" : PLATFORM_FEE_RATE_PPM,
     ),
-    ...([DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35,
+    ...(profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36
+      ? { programmableTradeFeePolicy: DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 }
+      : {}),
+    ...([DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35, DIRECT_NATIVE_PROFILE_VERSION_V36,
       DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY].includes(profileVersion)
       ? { projectMetadataPolicy: PROJECT_METADATA_POLICY }
       : {}),
@@ -397,8 +402,8 @@ export function buildDirectNativeProfileBinding(selection, context) {
     "selectionSchema",
     "direct-native launchProfile identity is not supported",
   );
-  const ratePpm = context.profile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35
-    || context.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V35 ? "3000" : PLATFORM_FEE_RATE_PPM;
+  const ratePpm = [DIRECT_NATIVE_PROFILE_VERSION_V35, DIRECT_NATIVE_PROFILE_VERSION_V36]
+    .includes(context.profile?.profileVersion ?? context.profileVersion) ? "3000" : PLATFORM_FEE_RATE_PPM;
   const byId = new Map(context.graphBundle.targets.map((target) => [target.targetId, target]));
   const predictions = new Map(context.predictions.map((prediction) => [
     prediction.targetId,
@@ -1863,6 +1868,7 @@ function directNativeProfileVersion(profileContract, requestedVersion) {
   }
   if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V35
+    && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V36
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY
     && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3_PRE_METADATA

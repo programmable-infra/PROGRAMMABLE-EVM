@@ -14,10 +14,11 @@ body bytes and limits JSON nesting to 128 levels. An oversized body, invalid UTF
 a terminal `API_RESPONSE_*` error, including on HTTP 429 or 503. These responses are not retried.
 For valid responses, the existing retry rules preserve the exact request body and idempotency key.
 
-## Install the current public Ethereum V3 release
+## Verify the historical Ethereum 3.3.9 release
 
-The commands below intentionally install the published CLI `3.3.9` for Ethereum. For Robinhood V4, follow the
-separate public-release checks below; this Ethereum installer does not establish V4 availability.
+For fresh Ethereum packs, read current capabilities and verify a published client supporting that exact profile.
+The commands below verify the historical CLI `3.3.9` artifact for profile `3.3.0` compatibility. For Robinhood V4,
+follow the separate public-release checks below; this artifact does not establish V4 availability.
 
 ```sh
 programmable_cli_dir="$(mktemp -d)"
@@ -33,8 +34,9 @@ programmable-launch --version
 The checksum command must report `OK`, and the version command must print `3.3.9`. Install this verified GitHub
 Release asset rather than an unverified npm-registry package with the same name.
 
-CLI `3.3.9` defaults fresh packs to the live profile `3.3.0`. It can materialize profile `3.4.0` only when that version
-is selected explicitly; live remote validation rejects the preparatory profile until capabilities activate it.
+The historical CLI `3.3.9` defaults to profile `3.3.0`. Verify the active profile through `/v3/capabilities`
+before choosing a released client. It can materialize profile `3.4.0` only when selected explicitly;
+remote validation rejects preparation that does not match the active capabilities.
 
 The release includes `npm-shrinkwrap.json` so the runtime dependency closure is integrity-pinned. Release operators
 generate the CycloneDX inventory with `npm run sbom`; that inventory and the tarball checksum are evidence for exact
@@ -191,7 +193,7 @@ their original contracts; this read never calls preflight, reads credentials, cr
 
 ## V3 general hook profile
 
-The released package `3.3.9` uses live/default general profile
+The historical released package `3.3.9` defaults to general profile
 `programmable.direct-native-hook-graph.v1` version `3.3.0`. The same package contains explicit preparatory support for
 profile `3.4.0`; it is not accepted or authorized merely because those materials exist. Exact nullable-image `3.2.0`
 requests retain their original immutable semantics, while metadata-absent `3.1.0`, `3.0.0`, and `2.0.0`
@@ -200,7 +202,7 @@ is the normative request and lifecycle contract. Existing V2 and V1 resources re
 routes are closed. The CLI rejects legacy submit attempts locally before reading request bytes, credentials, state,
 or network.
 
-The Router primitive supports 2–16 targets. Live profile `3.3.0` retains its three-target minimum. Pending profile
+The Router primitive supports 2–16 targets. Profile `3.3.0` retains its three-target minimum. Historical profile
 `3.4.0` requires 4–16 direct CREATE2 targets inclusive of the exact canonical settlement-fee vault; token, hook and
 initializer roles remain distinct and project-owned. All valid
 Uniswap v4 permission masks are supported when the source declaration, compiled permissions and hook-address low bits
@@ -577,10 +579,18 @@ for arbitrary hooks are not active. FADE uses a specifically bound adapter, not 
 
 ## Ethereum profile 3.5 candidate
 
-CLI 4.1.3 adds explicit `profileVersion: "3.5.0"` to the V3 pack, validation, submit and status flow. Omitted profile versions retain the existing default. Check `/v3/capabilities` before submitting a fresh request; local packing does not activate the profile.
+CLI 4.1.3 adds explicit `profileVersion: "3.5.0"` to the V3 pack, validation, submit and status flow. Profile 3.5 remains inactive. Fresh CLI packs with an omitted version select active `/v3/capabilities`; explicit configurations preserve their version. Local packing does not activate a profile.
 
 Use four through sixteen direct targets. The token, hook and initializer keep their existing exact-source interfaces. The fourth fee target is `EthereumSettlementFeeVaultV2`, which collects 3000 ppm (0.3%) with cumulative rounding. Custom hooks remain arbitrary exact-source targets and must connect an authenticated gross-settlement path to the fixed recipient.
 
 The package includes the V2 build artifact, exact Standard JSON compiler input and release binding under `contracts/settlement-fee-vault-v2`. Use `EthereumSettlementFeeVaultV2.build.json` as its artifact, the matching Standard JSON as its compilation unit, the canonical GraphFactory as constructor argument, and `bindRoute(address)` with one reciprocal graph target locator as initializer. Select `claimMode: "immutable-payout-recipient"` and payout recipient `0x4957f49620AFf3Adbbe8195a4f633E49cc93376c`. The explicit input schema is `schemas/programmable-launch-pack-config-v3.5.json`.
 
 Run the usual `programmable-launch pack --config <config>`, `validate <launch.json>`, `validate --remote <launch.json>` and `submit <launch.json>` commands. The API requires its signed settlement-dataflow closure and V2 fee evidence before a wallet handoff. Direct HTTP clients use the same V3 request and do not need this CLI. This candidate does not assert a published tarball or production activation. Historical 3.3/3.4 requests and their immutable release artifacts keep their existing interpretation.
+
+## Ethereum profile 3.6 capabilities selection
+
+CLI 4.1.3 also supports explicit `profileVersion: "3.6.0"` and selects the exact authorized server version for fresh V3 packs with no explicit version. Unsupported, inactive or unavailable capabilities stop fresh packing. Explicit configuration remains suitable for offline preparation; the library builder default stays 3.3.0 and stored-request validation reproduces the stored version. Publishing this client never activates a server profile. Deploy the website reader first, independently activate backend 3.6, then publish and verify the immutable 4.1.3 release. The earlier 3.3.9 download above remains a historical artifact reference.
+
+Profile 3.6 keeps the 3.3 static admission baseline, complete metadata and three through sixteen arbitrary exact-source targets. It does not require a canonical fee vault, settlement-dataflow closure or the 3.4/3.5 behavior inputs. Use `schemas/programmable-launch-pack-config-v3.6.json` and the additive [3.6 OpenAPI](https://programmable.market/openapi/custom-launch-v3.6.json). Its closed embedded `programmableTradeFeePolicy` hashes to `sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3` using the policy schema, NUL separator and canonical JSON.
+
+The declared platform value is 3000 ppm (30 bps or 0.3%). Programmable trade collection uses the complete capability policy and separate per-trade evidence. A native30 waiver requires server-verified runtime and accrual for the exact trade; an applicant assertion or getter cannot waive the routed fee. Launch admission does not establish fee collection or guarantee external trade fees. Historical signed obligations and exact retries retain their original interpretation. Direct HTTP clients use the same V3 contract without this CLI.

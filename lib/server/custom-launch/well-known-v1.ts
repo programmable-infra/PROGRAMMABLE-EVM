@@ -17,6 +17,49 @@ export const PROGRAMMABLE_WELL_KNOWN_PATH =
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
+// This website can be deployed before the independently operated API switches profiles.
+// Discovery points to live capabilities and never authorizes a fresh profile itself.
+const ETHEREUM_PROFILE_SELECTION = Object.freeze({
+  capabilitiesUrl: "https://api.programmable.market/v3/capabilities",
+  profileVersionPath: "profile.profileVersion" as const,
+  productionLaunchAuthorizedPath: "profile.productionLaunchAuthorized" as const,
+  freshSubmissionExactVersionsPath: "requestProfiles.freshSubmissionExactVersions" as const,
+  selectionRequiredBeforePacking: true as const,
+  discoveryIsActivationEvidence: false as const,
+  supportedActiveProfileVersions: Object.freeze(["3.3.0", "3.6.0"] as const),
+  unknownProfileDisposition: "fail-closed" as const,
+  requiresCliForDirectHttp: false as const,
+  cli: Object.freeze({
+    sourceCandidateVersion: "4.1.3" as const,
+    publicationVerified: null,
+    publicationAuthority: "immutable-github-release" as const,
+    releaseUrl: "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v4.1.3",
+    releaseTag: "programmable-launch-v4.1.3" as const,
+    publishedReleaseAndArtifactVerificationRequired: true as const,
+    freshUnversionedPackSelection: "server-capabilities" as const,
+    offlineBuilderDefaultProfileVersion: "3.3.0" as const,
+    publicationRequiresActiveBackendProfile: "3.6.0" as const,
+  }),
+  profile36: Object.freeze({
+    profileVersion: "3.6.0" as const,
+    openApiUrl: "https://programmable.market/openapi/custom-launch-v3.6.json",
+    activation: "requires-server-capabilities" as const,
+    staticAdmissionBaseline: "3.3.0" as const,
+    minimumTargets: 3 as const,
+    maximumTargets: 16 as const,
+    mandatoryCanonicalFeeVaultTarget: false as const,
+    exactSettlementDataflowClosureRequired: false as const,
+    behaviorScenarioInputsRequired: false as const,
+    programmableTradeFeePolicyHash:
+      "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3" as const,
+    programmableTradeFeePolicySource: "capabilities.programmableTradeFeePolicy.policy" as const,
+    programmableHundredthsOfBip: "3000" as const,
+    launchAdmissionEstablishesFeeCollection: false as const,
+    native30WaiverAuthority: "server-runtime-and-per-trade-accrual-proof" as const,
+    applicantWaiverAssertionsAccepted: false as const,
+  }),
+});
+
 export function programmableWellKnownDocumentV1(
   manifest: CustomRegistryPublicManifestV1,
 ) {
@@ -26,7 +69,7 @@ export function programmableWellKnownDocumentV1(
     ...(V4_API_PROFILE_VERSION === "4.0.0" ? {} : { agent: PROGRAMMABLE_AGENT_ENTRY }),
     name: "Programmable Developer Platform",
     description: robinhoodV4PublicPolicyDescription(V4_API_PROFILE_VERSION,
-      "Canonical discovery for Programmable Classic and Custom launches. Fresh V3.3 general-hook writes and lifecycle reads accept wallet keys, partner roots and bounded partner subkeys on Ethereum Mainnet. Robinhood Chain V4 availability is derived from the versioned release evidence below, independently from token publication and indexing. Its required 20 bps default policy is not a canonical onchain fee-enforcement or revenue claim. V2 and V1 remain readable but their creation routes are write-fenced."),
+      "Canonical discovery for Programmable Classic and Custom launches. Ethereum fresh-write profile selection and authorization come from public V3 capabilities; lifecycle reads accept wallet keys, partner roots and bounded partner subkeys. Robinhood Chain V4 availability is derived from the versioned release evidence below, independently from token publication and indexing. Its required 20 bps default policy is not a canonical onchain fee-enforcement or revenue claim. V2 and V1 remain readable but their creation routes are write-fenced."),
     apiVersion: "2" as const,
     apiBaseUrl: "https://developers.programmable.family/api/v2",
     statusUrl: "https://developers.programmable.family/api/v2/status",
@@ -48,6 +91,7 @@ export function programmableWellKnownDocumentV1(
       apiBaseUrl: "https://api.programmable.market",
       readyzUrl: "https://api.programmable.market/readyz",
       capabilitiesUrl: "https://api.programmable.market/v3/capabilities",
+      ethereumProfileSelection: ETHEREUM_PROFILE_SELECTION,
       preflightUrl:
         "https://api.programmable.market/v3/custom-launches/preflight",
       finalizedMetadataUrl:
@@ -204,11 +248,12 @@ export function programmableWellKnownDocumentV1(
         }),
       }),
       generalHookProfile: Object.freeze({
-        status: "live" as const,
+        status: "selected-by-server-capabilities" as const,
         apiVersion: "3" as const,
         profileId: "programmable.direct-native-hook-graph.v1" as const,
         profileRevision: 3 as const,
-        profileVersion: "3.3.0" as const,
+        profileVersion: null,
+        profileSelection: ETHEREUM_PROFILE_SELECTION,
         compatibleProfileVersions: Object.freeze([
           "3.2.0",
           "3.1.0",
@@ -217,29 +262,35 @@ export function programmableWellKnownDocumentV1(
         ] as const),
         legacyProfileSemantics:
           "readable-and-byte-identical-retryable-only" as const,
-        productionLaunchAuthorized: true as const,
+        productionLaunchAuthorized: null,
         createPath: "/v3/custom-launches" as const,
         capabilitiesPath: "/v3/capabilities" as const,
         preflightPath: "/v3/custom-launches/preflight" as const,
         finalizedMetadataPath: "/v3/finalized-custom-launches" as const,
         openApiUrl:
           "https://programmable.market/openapi/custom-launch-v3.json",
-        cliReleaseVersion: "3.3.9" as const,
+        cliReleaseVersion: null,
+        cliReleaseSelection: "independently-verified-release-supporting-selected-profile" as const,
         projectMetadata: Object.freeze({
           schemaVersion: "programmable.project-metadata.v1" as const,
           inputSchemaVersion:
             "programmable.project-metadata-input.v1" as const,
-          requiredForProfileVersion: "3.3.0" as const,
+          requiredForProfileVersion: null,
+          currentPolicySource: "capabilities.projectMetadata" as const,
           requiredForProfileVersions: Object.freeze([
             "3.2.0",
             "3.3.0",
             "3.4.0",
+            "3.5.0",
+            "3.6.0",
           ] as const),
           strictMetadataProfileVersions: Object.freeze([
             "3.3.0",
             "3.4.0",
+            "3.5.0",
+            "3.6.0",
           ] as const),
-          strictNewPackPolicyProfileVersion: "3.3.0" as const,
+          strictNewPackPolicyProfileVersion: null,
           legacyWithoutMetadataProfileVersions: Object.freeze([
             "2.0.0",
             "3.0.0",
@@ -307,9 +358,9 @@ export function programmableWellKnownDocumentV1(
         }),
       }),
       integrationPreview: Object.freeze({
-        status: "live" as const,
+        status: "selected-by-server-capabilities" as const,
         apiVersion: "3" as const,
-        publicAuthorization: true as const,
+        publicAuthorization: null,
         createPath: "/v3/custom-launches" as const,
         capabilitiesPath: "/v3/capabilities" as const,
         preflightPath: "/v3/custom-launches/preflight" as const,
@@ -318,7 +369,8 @@ export function programmableWellKnownDocumentV1(
           "https://programmable.market/openapi/custom-launch-v3.json",
         profileId: "programmable.direct-native-hook-graph.v1" as const,
         profileRevision: 3 as const,
-        profileVersion: "3.3.0" as const,
+        profileVersion: null,
+        profileSelection: ETHEREUM_PROFILE_SELECTION,
         compatibleProfileVersions: Object.freeze([
           "3.2.0",
           "3.1.0",
@@ -379,6 +431,8 @@ export function programmableWellKnownDocumentV1(
       }),
       releaseCandidate: Object.freeze({
         status: "promoted-to-public" as const,
+        scope: "historical-cli-3.3.9-publication" as const,
+        establishesCurrentProfileAuthorization: false as const,
         publicAuthorization: true as const,
         artifactPublished: true as const,
         packageName: "@programmable/launch",
@@ -456,8 +510,9 @@ export function programmableWellKnownDocumentV1(
           openApiUrl:
             "https://programmable.market/openapi/custom-launch-v3.json",
           status: "live" as const,
-          publicAuthorization: true as const,
-          freshWritesOnlyProfileVersion: "3.3.0" as const,
+          publicAuthorization: null,
+          freshWritesOnlyProfileVersion: null,
+          profileSelection: ETHEREUM_PROFILE_SELECTION,
           createHttpStatus: 202 as const,
           replayHttpStatus: 200 as const,
           capabilitiesPath: "/v3/capabilities" as const,
@@ -525,6 +580,7 @@ export function programmableWellKnownDocumentV1(
             installable: V4_API_DISCOVERY.cliInstallable,
             release: V4_API_DISCOVERY.cliRelease,
             liveEthereumVersion: "3.3.9" as const,
+            liveEthereumVersionScope: "historical-published-artifact" as const,
             signsWalletTransactions: false as const,
             broadcastsWalletTransactions: false as const,
           }),
@@ -697,8 +753,8 @@ export function programmableWellKnownDocumentV1(
           ? "1"
           : null,
         note: manifest.status === "live"
-          ? "Fresh V3.3 general-hook writes and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable and both legacy creation routes are read-only. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
-          : "Fresh V3.3 general-hook writes and lifecycle reads are live on Ethereum Mainnet. V2 and V1 history remain readable and both legacy creation routes are read-only. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
+          ? "Ethereum fresh writes require the exact profile selected and authorized by public V3 capabilities. V2 and V1 history remain readable and both legacy creation routes are read-only. Finalized Router and approved Custom Registry identities remain discoverable. Legacy Registry and GitHub submission intake is closed."
+          : "Ethereum fresh writes require the exact profile selected and authorized by public V3 capabilities. V2 and V1 history remain readable and both legacy creation routes are read-only. Finalized Router identities remain discoverable. The legacy Registry has no live deployment, and Registry or GitHub submission intake is closed.",
       }),
     }),
     compatibility: Object.freeze({

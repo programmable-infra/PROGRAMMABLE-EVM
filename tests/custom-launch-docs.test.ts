@@ -144,7 +144,7 @@ describe("Custom Launch API documentation", () => {
       "https://github.com/programmablehq/PROGRAMMABLE/tree/7fd1a327577517d628cd529ec84862f1ae43eb08/packages/launch",
     );
     expect(cliGuide).toContain(
-      "## Install the current public Ethereum V3 release",
+      "## Verify the historical Ethereum 3.3.9 release",
     );
     expect(cliGuide).toContain(
       "**Blocked:**",

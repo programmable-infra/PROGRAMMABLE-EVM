@@ -103,8 +103,8 @@ Prepare one clean `production` candidate in which all of these values agree:
 1. `packages/launch/package.json` contains the new exact version.
 2. Package constants, install instructions and the expected tarball SHA-256
    identify that same CLI release. For an API release, discovery and OpenAPI
-   also match it. The additive CLI `4.1.1` instead references the unchanged API
-   `4.1.0` profile and discovery pins through its separate client binding below.
+   also match it. The additive clients `4.1.1`, `4.1.2` and `4.1.3` reference the
+   unchanged API `4.1.0` profile and discovery pins through separate client bindings.
 3. The expected tarball digest was computed with Node `24.14.0`, npm `11.16.0`
    and `npm pack --ignore-scripts` from the exact candidate package tree.
 4. The package tests, machine-contract verification and dry pack pass.
@@ -137,6 +137,16 @@ CLI commands and their existing request semantics remain compatible.
 Verify the new client against the live unauthenticated report and an older deployment returning 404. The latter
 must produce `LAUNCH_COVERAGE_UNAVAILABLE`, without loading or transmitting a key, inferring support or changing any
 launch request. Neither this report nor its publication activates a new graph, Router or write profile.
+
+### Additive Ethereum candidate client
+
+CLI `4.1.3` supports explicit Ethereum profiles `3.5.0` and `3.6.0`. Fresh CLI packs with no explicit
+version select the authorized server capabilities profile; offline builders retain `3.3.0` and stored
+requests preserve their exact version. Its separate client binding retains the original Robinhood API `4.1.0`
+release gates. Follow the [4.1.3 client release procedure](releases/custom-launch-v4.1.3/README.md).
+Profile 3.5 remains inactive. Deploy website 3.6 support and capability-driven guidance first, activate
+and verify backend 3.6 independently, then publish this client. Direct HTTP clients do not require this CLI. Client publication, API activation and
+wallet lifecycle verification are recorded separately.
 
 ### Dispatch the immutable release
 

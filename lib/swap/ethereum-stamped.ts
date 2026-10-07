@@ -6,6 +6,10 @@ import { customTradePermit2Abi, customTradeRouterAbi, customTradeTokenAbi } from
 import { parsePreparedTransaction, type PreparedTradeTransaction } from "@/lib/prepared-transaction";
 import { isLaunchStampProvenanceV1, type CanonicalTokenExploreEntry, type LaunchStampProvenanceV1 } from "@/lib/tokens";
 import { computeOfficialV4PoolId } from "@/lib/uniswap/liquidity-launcher-sdk";
+import { ETHEREUM_ROUTING_FEE_BOUNDARY_V1, ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, ETHEREUM_ROUTING_FEE_POLICY_V1,
+  validateEthereumFeeClassificationV1, type EthereumFeeClassificationV1 } from "@/lib/custom-launch/ethereum-routing-fee-policy-v1";
+import { assertIssuedEthereumNative30RuntimeProofV1, rebuildEthereumNative30RuntimeProofV1,
+  type EthereumNative30RuntimeProofV1 } from "@/lib/custom-launch/ethereum-native30-runtime-v1";
 
 const NATIVE = "0x0000000000000000000000000000000000000000";
 const UINT128_MAX = (1n << 128n) - 1n;
@@ -28,6 +32,7 @@ export interface EthereumStampedSwapRoute {
   tokenDecimals: number;
   stamp: LaunchStampProvenanceV1;
   routeBindingHash: `sha256:${string}`;
+  feeClassification?: EthereumFeeClassificationV1;
 }
 export interface EthereumStampedSwapRequest {
   schemaVersion: "programmable.ethereum-stamped-swap-request.v1";
@@ -41,6 +46,18 @@ export interface EthereumStampedSwapRequest {
   routeBindingHash: `sha256:${string}`;
 }
 export interface EthereumSwapRuntimeBinding { address: Address; runtimeCodeHash: Hex }
+export interface EthereumSwapFeeV1 {
+  policyHash: typeof ETHEREUM_ROUTING_FEE_POLICY_HASH_V1;
+  mode: "programmable_routed" | "pool_enforced_native30";
+  rateBps: 30;
+  routedRateBps: 0 | 30;
+  recipient: Address;
+  grossNativeAmount: string;
+  platformFeeAmount: string;
+  netNativeAmount: string;
+  native30Proof: EthereumNative30RuntimeProofV1 | null;
+  accrual: Record<string, unknown> | null;
+}
 export interface EthereumStampedSwapPreparation {
   schemaVersion: "programmable.ethereum-stamped-swap-preparation.v1";
   status: "ready" | "approval-required";
@@ -49,6 +66,7 @@ export interface EthereumStampedSwapPreparation {
   transaction: PreparedTradeTransaction;
   evidence: { kind: "independent-rpc-simulation"; runtimeBindings: readonly EthereumSwapRuntimeBinding[]; runtimeBindingHash: `sha256:${string}`; executionDigest: `sha256:${string}` };
   preparationDigest: `sha256:${string}`;
+  fee?: EthereumSwapFeeV1;
 }
 
 export class EthereumStampedSwapError extends Error {
@@ -56,7 +74,7 @@ export class EthereumStampedSwapError extends Error {
 }
 function requireValue(value: unknown, message: string): asserts value { if (!value) throw new EthereumStampedSwapError(message); }
 
-function routeHash(stamp: LaunchStampProvenanceV1, tokenDecimals: number) {
+function routeHash(stamp: LaunchStampProvenanceV1, tokenDecimals: number, feeClassification?: EthereumFeeClassificationV1) {
   // Presentation and later observation checkpoints are deliberately excluded.
   return canonicalBrowserSha256V2("programmable.ethereum-stamped-swap-route-binding.v1", {
     chainId: 1, tokenDecimals, launchId: stamp.launchId.toLowerCase(), stampHash: stamp.stampHash.toLowerCase(),
@@ -64,13 +82,14 @@ function routeHash(stamp: LaunchStampProvenanceV1, tokenDecimals: number) {
     poolManager: stamp.poolManagerAddress.toLowerCase(), poolId: stamp.poolId.toLowerCase(),
     poolKey: { ...stamp.poolKey, currency0: stamp.poolKey.currency0.toLowerCase(), currency1: stamp.poolKey.currency1.toLowerCase(), hooks: stamp.poolKey.hooks.toLowerCase() },
     protocol: ETHEREUM_STAMPED_SWAP_PROTOCOL,
+    ...(feeClassification ? { feeClassification } : {}),
   });
 }
 
 /** A route candidate proves origin and encoding. Only transaction preparation
  * proves that this owner's requested swap currently executes. No audit or
  * reviewed-provider descriptor is inferred from a launch stamp. */
-export function ethereumStampedSwapRoute(entry: CanonicalTokenExploreEntry): EthereumStampedSwapRoute | null {
+export function ethereumStampedSwapRoute(entry: CanonicalTokenExploreEntry, feeClassification?: EthereumFeeClassificationV1): EthereumStampedSwapRoute | null {
   const stamp = entry.launchStampProvenance;
   if (!stamp || stamp.kind !== "custom-graph" || stamp.chainId !== 1
     || !isLaunchStampProvenanceV1(stamp, { chainId: 1, tokenAddress: entry.tokenAddress, hookAddress: entry.hookAddress, poolId: entry.poolId })
@@ -78,8 +97,11 @@ export function ethereumStampedSwapRoute(entry: CanonicalTokenExploreEntry): Eth
     || !same(stamp.poolKey.currency0, NATIVE) || !same(stamp.poolKey.currency1, entry.tokenAddress)
     || !same(stamp.poolManagerAddress, ETHEREUM_STAMPED_SWAP_PROTOCOL.poolManager.address)
     || !same(computeOfficialV4PoolId(stamp.poolKey), stamp.poolId)) return null;
+  if (BigInt(stamp.blockNumber) > BigInt(ETHEREUM_ROUTING_FEE_BOUNDARY_V1.blockNumber) && !feeClassification) return null;
+  try { if (feeClassification) validateEthereumFeeClassificationV1(feeClassification, stamp); } catch { return null; }
   return Object.freeze({ schemaVersion: "programmable.ethereum-stamped-swap-route.v1", chainId: 1,
-    tokenDecimals: entry.tokenDecimals!, stamp, routeBindingHash: routeHash(stamp, entry.tokenDecimals!) });
+    tokenDecimals: entry.tokenDecimals!, stamp, routeBindingHash: routeHash(stamp, entry.tokenDecimals!, feeClassification),
+    ...(feeClassification ? { feeClassification } : {}) });
 }
 
 export function parseEthereumStampedSwapRoute(value: unknown, expected: { token: string; decimals: number }): EthereumStampedSwapRoute {
@@ -88,7 +110,7 @@ export function parseEthereumStampedSwapRoute(value: unknown, expected: { token:
   const candidate = value as unknown as EthereumStampedSwapRoute;
   requireValue(isAddress(expected.token) && isLaunchStampProvenanceV1(candidate.stamp, { chainId: 1, tokenAddress: getAddress(expected.token) }), "The Ethereum launch stamp is invalid.");
   const rebuilt = ethereumStampedSwapRoute({ tokenAddress: expected.token, tokenDecimals: expected.decimals,
-    hookAddress: candidate.stamp.poolKey.hooks, poolId: candidate.stamp.poolId, launchStampProvenance: candidate.stamp } as CanonicalTokenExploreEntry);
+    hookAddress: candidate.stamp.poolKey.hooks, poolId: candidate.stamp.poolId, launchStampProvenance: candidate.stamp } as CanonicalTokenExploreEntry, candidate.feeClassification);
   requireValue(rebuilt && rebuilt.routeBindingHash === candidate.routeBindingHash, "The Ethereum route does not match this coin.");
   return rebuilt;
 }
@@ -121,15 +143,27 @@ export function ethereumStampedRuntimeBindings(route: EthereumStampedSwapRoute):
   return [...result.values()].sort((a, b) => a.address.toLowerCase().localeCompare(b.address.toLowerCase()));
 }
 
-function swapTransaction(route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, minimum: bigint): PreparedTradeTransaction {
-  const amountIn = BigInt(request.amountIn);
+export const ethereumNative30Market = (route: EthereumStampedSwapRoute) => ({ chainId: "1" as const,
+  poolManager: getAddress(route.stamp.poolManagerAddress), ...route.stamp.poolKey });
+export const ethereumRouteRequiresFee = (route: EthereumStampedSwapRoute) => route.feeClassification?.profileVersion === "3.6.0";
+
+function swapTransaction(route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, minimum: bigint,
+  native30Proof?: EthereumNative30RuntimeProofV1): PreparedTradeTransaction {
+  if (native30Proof) assertIssuedEthereumNative30RuntimeProofV1(native30Proof, ethereumNative30Market(route));
+  const charge = ethereumRouteRequiresFee(route) && !native30Proof;
+  const upfrontFee = charge && request.side === "buy" ? BigInt(request.amountIn) * 30n / 10_000n : 0n;
+  const amountIn = BigInt(request.amountIn) - upfrontFee;
   requireValue(minimum > 0n && minimum <= UINT128_MAX, "The swap returned no usable output.");
   const planner = new V4Planner();
   planner.addAction(Actions.SWAP_EXACT_IN_SINGLE, [{ poolKey: route.stamp.poolKey, zeroForOne: request.side === "buy",
     amountIn: amountIn.toString(), amountOutMinimum: minimum.toString(), hookData: "0x" }], URVersion.V2_0);
   planner.addAction(Actions.SETTLE_ALL, [request.side === "buy" ? NATIVE : request.token, amountIn.toString()], URVersion.V2_0);
+  if (charge && request.side === "sell") planner.addAction(Actions.TAKE_PORTION,
+    [NATIVE, ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient, 30], URVersion.V2_0);
   planner.addAction(Actions.TAKE_ALL, [request.side === "buy" ? request.token : NATIVE, minimum.toString()], URVersion.V2_0);
   const plannerRoute = new RoutePlanner();
+  if (upfrontFee > 0n) plannerRoute.addCommand(CommandType.TRANSFER,
+    [NATIVE, ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient, upfrontFee.toString()], false, UniversalRouterVersion.V2_0);
   plannerRoute.addCommand(CommandType.V4_SWAP, [planner.finalize()], false, UniversalRouterVersion.V2_0);
   // Return any native refund to msgSender. A hook may reduce the settled input;
   // remaining transaction value must never stay in the public router.
@@ -139,12 +173,14 @@ function swapTransaction(route: EthereumStampedSwapRoute, request: EthereumStamp
     value: request.side === "buy" ? request.amountIn : "0", gasLimit: "1" };
 }
 
-export function ethereumStampedSwapTransaction(route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, amountOut: bigint): PreparedTradeTransaction {
+export function ethereumStampedSwapTransaction(route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, amountOut: bigint,
+  native30Proof?: EthereumNative30RuntimeProofV1): PreparedTradeTransaction {
   requireValue(amountOut > 0n && amountOut <= UINT128_MAX, "The swap returned no usable output.");
-  return swapTransaction(route, request, amountOut * (10_000n - BigInt(request.slippageBps)) / 10_000n);
+  return swapTransaction(route, request, amountOut * (10_000n - BigInt(request.slippageBps)) / 10_000n, native30Proof);
 }
 /** Simulation only. This transaction is never returned for wallet submission. */
-export const ethereumStampedProbeTransaction = (route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest) => swapTransaction(route, request, 1n);
+export const ethereumStampedProbeTransaction = (route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest,
+  native30Proof?: EthereumNative30RuntimeProofV1) => swapTransaction(route, request, 1n, native30Proof);
 
 export function ethereumStampedApprovalTransaction(request: EthereumStampedSwapRequest, kind: "token-to-permit2" | "permit2-to-router"): PreparedTradeTransaction {
   return kind === "token-to-permit2"
@@ -175,7 +211,40 @@ export function validateEthereumStampedPreparation(value: unknown, route: Ethere
     && evidence.runtimeBindingHash === ethereumStampedRuntimeDigest(evidence.runtimeBindings), "The current swap runtime could not be verified.");
   for (const expected of ethereumStampedRuntimeBindings(route)) requireValue(evidence.runtimeBindings.some(binding => same(binding.address, expected.address) && same(binding.runtimeCodeHash, expected.runtimeCodeHash)), "The swap runtime does not match the launch.");
   const transaction = parsePreparedTransaction(prepared.transaction);
-  const expected = transaction.kind === "swap" ? ethereumStampedSwapTransaction(route, request, BigInt(quote.amountOut))
+  let native30Proof: EthereumNative30RuntimeProofV1 | undefined;
+  if (ethereumRouteRequiresFee(route)) {
+    const fee = prepared.fee;
+    requireValue(fee && fee.policyHash === ETHEREUM_ROUTING_FEE_POLICY_HASH_V1 && fee.rateBps === 30
+      && same(fee.recipient, ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient)
+      && [fee.grossNativeAmount, fee.platformFeeAmount, fee.netNativeAmount].every(amount => typeof amount === "string" && /^(0|[1-9][0-9]{0,77})$/.test(amount)), "The platform fee is invalid.");
+    if (fee.mode === "pool_enforced_native30") {
+      native30Proof = rebuildEthereumNative30RuntimeProofV1(fee.native30Proof, ethereumNative30Market(route));
+      requireValue(fee.routedRateBps === 0 && native30Proof.runtimeBindings.every(expected => evidence.runtimeBindings.some(binding => same(binding.address, expected.address)
+        && same(binding.runtimeCodeHash, expected.runtimeCodeHash))), "The pool fee runtime is incomplete.");
+    } else requireValue(fee.mode === "programmable_routed" && fee.routedRateBps === 30 && fee.native30Proof === null && fee.accrual === null, "The platform fee mode is invalid.");
+    const gross = BigInt(fee.grossNativeAmount), platform = BigInt(fee.platformFeeAmount);
+    requireValue(BigInt(fee.netNativeAmount) === gross - platform && platform === (gross * 30n + (native30Proof ? 9999n : 0n)) / 10000n, "The platform fee amount is invalid.");
+    if (transaction.kind === "swap") {
+      requireValue(gross > 0n && (request.side !== "buy" || gross === BigInt(request.amountIn))
+        && (request.side !== "sell" || native30Proof || BigInt(fee.netNativeAmount) === BigInt(quote.amountOut)), "The platform fee does not match the trade.");
+      if (native30Proof) {
+        const accrued = fee.accrual;
+        requireValue(object(accrued) && accrued.proofDigest === native30Proof.proofDigest && accrued.vault === native30Proof.feeVault
+          && accrued.recipient === native30Proof.recipient && accrued.rateBps === 30 && accrued.currency === NATIVE
+          && accrued.assessmentBase === "gross_native_leg" && accrued.rounding === "ceil_per_trade"
+          && accrued.grossNativeAmount === fee.grossNativeAmount && accrued.platformAccruedIncrease === fee.platformFeeAmount
+          && digest(accrued.callbackTraceDigest) && digest(accrued.recordTraceDigest), "The pool fee accrual is invalid.");
+        const ledger = (key: string) => { const value = accrued[key]; requireValue(typeof value === "string" && /^(0|[1-9][0-9]{0,77})$/.test(value), "The pool fee ledger is invalid."); return BigInt(value); };
+        requireValue(ledger("platformAccruedAfter") - ledger("platformAccruedBefore") === platform
+          && ledger("creatorAccruedAfter") - ledger("creatorAccruedBefore") === ledger("creatorAccruedIncrease")
+          && ledger("backingAfter") - ledger("backingBefore") === ledger("backingIncrease")
+          && ledger("backingIncrease") === platform + ledger("creatorAccruedIncrease")
+          && ledger("backingBefore") >= ledger("platformAccruedBefore") + ledger("creatorAccruedBefore")
+          && ledger("backingAfter") >= ledger("platformAccruedAfter") + ledger("creatorAccruedAfter"), "The pool fee is not backed.");
+      }
+    } else requireValue(gross === 0n && fee.accrual === null, "An approval cannot charge a platform fee.");
+  } else requireValue(prepared.fee === undefined, "The historical fee policy changed.");
+  const expected = transaction.kind === "swap" ? ethereumStampedSwapTransaction(route, request, BigInt(quote.amountOut), native30Proof)
     : transaction.kind === "token-to-permit2" || transaction.kind === "permit2-to-router" ? ethereumStampedApprovalTransaction(request, transaction.kind) : null;
   requireValue(expected && transaction.chainId === 1 && transaction.kind === expected.kind && same(transaction.to, expected.to)
     && transaction.data === expected.data && transaction.value === expected.value && transaction.gasLimit && BigInt(transaction.gasLimit) > 0n

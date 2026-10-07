@@ -1,3 +1,4 @@
+import { assertDirectNativeProgrammableTradeFeePolicyV36, directNativeProgrammableTradeFeePolicyHashV36 } from "./profile-v36.mjs";
 import { assertRobinhoodInitialBuyReviewV1 } from "./initial-buy-review-v1.mjs";
 import { assertRobinhoodFeeReviewV1 } from "./fee-review-v1.mjs";
 import { isRobinhoodProfileV41 } from "./profile-v41.mjs";
@@ -20,6 +21,7 @@ import {
   DIRECT_NATIVE_PROFILE_ID,
   DIRECT_NATIVE_PROFILE_REVISION,
   DIRECT_NATIVE_PROFILE_VERSION,
+  DIRECT_NATIVE_PROFILE_VERSION_V36,
   MAX_REQUEST_BYTES,
   MAX_REQUEST_BYTES_V4,
   PERMIT_REISSUE_CAPABILITY_SCHEMA_V1,
@@ -186,7 +188,7 @@ export async function validateLaunchRemote(options) {
   const isV4 = validation.schemaVersion === CREATE_REQUEST_SCHEMA_V4;
   const request = isV4
     ? parseV4RequestBytes(requestBytes)
-    : null;
+    : parseStrictJson(decodeExactUtf8(requestBytes, "V3 request"), { maximumBytes: MAX_REQUEST_BYTES });
   const chainId = isV4 ? normalizeV4ChainId(request.chainId) : undefined;
   const serverRequestHash = isV4
     ? customLaunchRequestHashV4(request)
@@ -202,6 +204,7 @@ export async function validateLaunchRemote(options) {
     sleepImpl: options.sleepImpl,
   });
   if (isV4) assertV4RequestMatchesCapabilities(request, capabilities.resource);
+  else assertProfile36RequestMatchesCapabilities(request, capabilities.resource);
   const apiKey = await (options.loadApiKeyImpl ?? loadApiKey)();
   const preflightPath = isV4
     ? v4Path(PREFLIGHT_PATH_TEMPLATE_V4, chainId)
@@ -290,7 +293,8 @@ export async function submitLaunch(options) {
     );
   }
   const isV4 = validation.schemaVersion === CREATE_REQUEST_SCHEMA_V4;
-  const request = isV4 ? parseV4RequestBytes(requestBytes) : null;
+  const request = isV4 ? parseV4RequestBytes(requestBytes)
+    : parseStrictJson(decodeExactUtf8(requestBytes, "V3 request"), { maximumBytes: MAX_REQUEST_BYTES });
   if (isV4 && isRobinhoodProfileV41(normalizeV4ProfileRef(request.profile))) {
     assertRobinhoodFundingPlanDeployableV1(request.fundingPlan, request.funding);
   }
@@ -319,6 +323,7 @@ export async function submitLaunch(options) {
       sleepImpl: options.sleepImpl,
     });
 
+  if (!isV4) assertProfile36RequestMatchesCapabilities(request, capabilities.resource);
   const stateDirectory = path.resolve(options.stateDirectory ?? defaultStateDirectory());
   const journalPath = path.join(
     stateDirectory,
@@ -2330,6 +2335,39 @@ function assertPreflightV4Field(condition, field) {
   );
 }
 
+
+function assertProfile36RequestMatchesCapabilities(request, capabilities) {
+  if (request?.launchProfile?.profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V36) return;
+  assertCapabilitiesField(capabilities.profile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36,
+    "profile.requestProfileVersion");
+  assertDirectNativeProgrammableTradeFeePolicyV36(request.launchProfile.programmableTradeFeePolicy);
+}
+
+function assertProfile36Capabilities(value) {
+  const report = value.programmableTradeFeePolicy;
+  assertCapabilitiesField(isPlainObject(report), "programmableTradeFeePolicy");
+  try { assertDirectNativeProgrammableTradeFeePolicyV36(report?.policy); }
+  catch { assertCapabilitiesField(false, "programmableTradeFeePolicy.policy"); }
+  assertCapabilitiesField(report.policyHash === directNativeProgrammableTradeFeePolicyHashV36(), "programmableTradeFeePolicy.policyHash");
+  assertCapabilitiesField(report.collectionStatus === "required-per-trade-evidence"
+    && report.launchAdmissionEstablishesFeeCollection === false, "programmableTradeFeePolicy.collectionStatus");
+  const release = value.profile36Release;
+  assertCapabilitiesField(isPlainObject(release) && release.profileVersion === "3.6.0"
+    && release.selected === true && release.productionLaunchAuthorized === true
+    && release.staticAdmissionBaseline === "3.3.0" && release.customHookAllowlistRequired === false
+    && release.mandatoryCanonicalFeeVaultTarget === false && release.exactSettlementDataflowClosureRequired === false
+    && release.selectionIsFeeExecutionProof === false && release.websiteBoundarySupportMustPrecedeSelection === true,
+    "profile36Release");
+  assertCapabilitiesField(isPlainObject(value.feePolicy) && value.feePolicy.programmableHundredthsOfBip === "3000"
+    && value.feePolicy.denominator === "1000000" && value.feePolicy.requiredForProfileVersion === "3.6.0"
+    && value.feePolicy.releaseModule === null, "feePolicy");
+  assertCapabilitiesField(value.graph?.minimumTargets === 3 && value.graph?.maximumTargets === 16, "graph");
+  const versions = value.requestProfiles;
+  assertCapabilitiesField(isPlainObject(versions) && versions.current === "3.6.0"
+    && canonicalizeJson(versions.freshSubmissionExactVersions) === canonicalizeJson(["3.6.0"])
+    && versions.newProfileVersionsAreImplicitlyAccepted === false, "requestProfiles");
+}
+
 function assertCapabilitiesResponse(value) {
   assertCapabilitiesField(isPlainObject(value), "$", value);
   assertCapabilitiesField(
@@ -2352,13 +2390,17 @@ function assertCapabilitiesResponse(value) {
     "profile.profileRevision",
   );
   assertCapabilitiesField(
-    value.profile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION,
+    [DIRECT_NATIVE_PROFILE_VERSION, DIRECT_NATIVE_PROFILE_VERSION_V36].includes(value.profile?.profileVersion),
     "profile.profileVersion",
   );
   assertCapabilitiesField(
     value.profile?.productionLaunchAuthorized === true,
     "profile.productionLaunchAuthorized",
   );
+  const selectedProfileVersion = value.profile.profileVersion;
+  if (selectedProfileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36) {
+    assertProfile36Capabilities(value);
+  }
   assertCapabilitiesField(isPlainObject(value.routes), "routes");
   for (const [field, expected] of Object.entries({
     create: CREATE_PATH_V3,
@@ -2411,8 +2453,8 @@ function assertCapabilitiesResponse(value) {
   for (const [field, expected] of Object.entries({
     schemaVersion: "programmable.project-metadata.v1",
     inputSchemaVersion: "programmable.project-metadata-input.v1",
-    requiredForProfileVersion: DIRECT_NATIVE_PROFILE_VERSION,
-    strictNewPackPolicyProfileVersion: DIRECT_NATIVE_PROFILE_VERSION,
+    requiredForProfileVersion: selectedProfileVersion,
+    strictNewPackPolicyProfileVersion: selectedProfileVersion,
     imageMayBeNull: false,
     maximumLinks: 32,
     exactlyOneRequiredLinkPerKind: true,
@@ -2477,6 +2519,8 @@ function assertCapabilitiesResponse(value) {
         !strictMetadataProfileVersions.includes(profileVersion)),
     "projectMetadata.legacyMetadataProfileVersions",
   );
+  assertCapabilitiesField(requiredForProfileVersions.includes(selectedProfileVersion)
+    && strictMetadataProfileVersions.includes(selectedProfileVersion), "projectMetadata.selectedProfileVersion");
   assertCapabilitiesField(
     canonicalizeJson(value.projectMetadata?.legacyWithoutMetadataProfileVersions)
       === canonicalizeJson(["2.0.0", "3.0.0", "3.1.0"]),

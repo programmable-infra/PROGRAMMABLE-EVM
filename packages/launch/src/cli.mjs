@@ -17,7 +17,7 @@ import {
   RELEASE_URL_V3,
 } from "./constants.mjs";
 import { createCliDiagnosticError } from "./diagnostics.mjs";
-import { packLaunch } from "./pack.mjs";
+import { packFreshLaunch } from "./pack-current-profile.mjs";
 import { validateLaunchFile } from "./validate.mjs";
 import { getRobinhoodLaunchCoverageV1 } from "./launch-coverage-v1.mjs";
 import {
@@ -106,10 +106,12 @@ export async function main(argv) {
     });
   } else if (command === "pack") {
     rejectPositionals(parsed, 0, "pack");
-    result = await packLaunch({
+    result = await packFreshLaunch({
       configPath: requiredV3ConfigFlag(parsed),
       outputPath: parsed.flags.output,
       receiptPath: parsed.flags.receipt,
+      maxAttempts: integerFlag(parsed, "max-attempts"),
+      timeoutMs: integerFlag(parsed, "timeout-ms"),
     });
   } else if (command === "validate") {
     rejectPositionals(parsed, 1, "validate");
@@ -264,7 +266,7 @@ function usage(command) {
     ],
     status: [
       "Usage: programmable-launch status <request-id> [--api-version 1|2|3|4] [--chain-id 4663] [--watch] [--until authorized|finalized]",
-      "V3 is the default with unchanged Ethereum behavior. V4 requires explicit --api-version 4 --chain-id 4663.",
+      "V3 is the default Ethereum transport. Fresh unversioned packs select active capabilities. V4 requires explicit --api-version 4 --chain-id 4663.",
       "This command never signs or broadcasts a wallet transaction.",
     ],
   };
@@ -275,7 +277,10 @@ function usage(command) {
     `OpenAPI V1 (read compatibility; create fenced): ${OPENAPI_URL_V1}`,
     `OpenAPI V2 (read compatibility; create fenced): ${OPENAPI_URL_V2}`,
     `OpenAPI V3 general hook profile: ${OPENAPI_URL_V3}`,
+    "OpenAPI for selected Ethereum profile 3.6: https://programmable.market/openapi/custom-launch-v3.6.json",
     "Ethereum profile 3.5: explicit profileVersion 3.5.0, four to sixteen targets, immutable-recipient V2 settlement vault; availability comes from /v3/capabilities.",
+    "Fresh Ethereum CLI packs without profileVersion select the active /v3/capabilities profile. Explicit versions and exact retries retain their version.",
+    "Ethereum profile 3.6: three to sixteen arbitrary exact-source targets; 0.3% on Programmable native ETH trades, with a server-proven native30 waiver. Packing is not activation or fee-collection evidence.",
     `OpenAPI V4 profile 4.1: ${OPENAPI_URL_V41}`,
     `Historical profile 4.0: ${OPENAPI_URL_V4}`,
     `Stable V1 release: ${RELEASE_URL_V1}`,

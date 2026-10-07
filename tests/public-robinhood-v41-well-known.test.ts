@@ -36,12 +36,13 @@ afterEach(() => {
 });
 
 describe("profile-selected Robinhood well-known discovery", () => {
-  it("preserves the complete historical document bytes", async () => {
+  it("pins historical Robinhood discovery alongside current Ethereum version selection", async () => {
     const original = await document("4.0.0");
-    // Captured from protected source 1f488b4685e349f09d41cc45dbd5e27ce0d4a996
-    // before changing this reader, with the exact pending inputs above.
+    // Ethereum discovery now selects the active profile from capabilities. The
+    // Robinhood 4.0.0 fixture remains historical; the complete document includes
+    // the additive Ethereum 3.6 metadata and the immutable CLI release pointer.
     expect(createHash("sha256").update(JSON.stringify(original)).digest("hex"))
-      .toBe("01f31ffe078a8937b397b82710fe82e48fb7d8ecffcaa119ec8437f935bbc8de");
+      .toBe("3cffa5bc7910ea3d747a0dc946f6707e000365849cf3b8de9324c6ed2a69d881");
   });
 
   it("publishes successor fee and funding rules while pending authority stays closed", async () => {
