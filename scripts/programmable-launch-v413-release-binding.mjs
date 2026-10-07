@@ -8,6 +8,7 @@ import { pathToFileURL } from "node:url";
 import { canonicalizeJson, parseStrictJson } from "../packages/launch/src/canonical-json.mjs";
 import { decodeExactUtf8 } from "../packages/launch/src/io.mjs";
 import { ROBINHOOD_PROFILE_V41 } from "../packages/launch/src/profile-v41.mjs";
+import { directNativeProgrammableTradeFeePolicyHashV36 } from "../packages/launch/src/profile-v36.mjs";
 import * as apiRelease from "./programmable-launch-v41-release-binding.mjs";
 
 export const V4_RELEASE_BINDING_SCHEMA = "programmable.launch-cli-v4-client-release-binding.v1";
@@ -39,6 +40,9 @@ const CLIENT_FILES = Object.freeze([
   "packages/launch/contracts/settlement-fee-vault-v2/EthereumSettlementFeeVaultV2.build.json",
   "packages/launch/contracts/settlement-fee-vault-v2/EthereumSettlementFeeVaultV2.standard-json.json",
   "packages/launch/contracts/settlement-fee-vault-v2/release-binding.v2.json",
+  "packages/launch/src/pack-current-profile.mjs",
+  "packages/launch/src/profile-v36.mjs",
+  "packages/launch/schemas/programmable-launch-pack-config-v3.6.json",
 ]);
 const COVERAGE_CONTRACTS = Object.freeze([
   ["openapi", "public/openapi/launch-coverage-v1.json", "https://programmable.market/openapi/launch-coverage-v1.json"],
@@ -48,10 +52,14 @@ const COVERAGE_CONTRACTS = Object.freeze([
 const ETHEREUM_CLIENT = Object.freeze({
   "chainId": "1",
   "requestSchemaVersion": "programmable.custom-launch-create-request.v3",
-  "defaultProfileVersion": "3.3.0",
+  "offlineBuilderDefaultProfileVersion": "3.3.0",
+  "freshCliDefaultSelection": "current-server-capabilities",
   "candidateProfileVersion": "3.5.0",
   "packConfigSchemaPath": "packages/launch/schemas/programmable-launch-pack-config-v3.5.json",
   "candidateActivation": "requires-server-capabilities",
+  "profile36Version": "3.6.0",
+  "profile36PackConfigSchemaPath": "packages/launch/schemas/programmable-launch-pack-config-v3.6.json",
+  "profile36TradeFeePolicyHash": "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3",
   "activatesWriteProfile": false,
   "requiresCliForDirectHttp": false
 });
@@ -76,10 +84,18 @@ export function createV413ClientReleaseBinding({ repositoryRoot }) {
   for (const line of [
     'export const DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY = "3.3.0";',
     'export const DIRECT_NATIVE_PROFILE_VERSION_V35 = "3.5.0";',
+    'export const DIRECT_NATIVE_PROFILE_VERSION_V36 = "3.6.0";',
     "export const DIRECT_NATIVE_PROFILE_VERSION =\n  DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY;",
   ]) assert.ok(constants.includes(line), `Ethereum client profile constant missing: ${line}`);
   const ethereumSchema = json(bytes(root, ETHEREUM_CLIENT.packConfigSchemaPath));
   assert.equal(ethereumSchema.properties?.profileVersion?.const, "3.5.0", "explicit Ethereum candidate profile");
+  const profile36Schema = json(bytes(root, ETHEREUM_CLIENT.profile36PackConfigSchemaPath));
+  assert.equal(profile36Schema.properties?.profileVersion?.const, "3.6.0", "explicit Ethereum 3.6 profile");
+  assert.equal(profile36Schema.properties?.targets?.minItems, 3, "Ethereum 3.6 free three-target graph");
+  assert.equal(profile36Schema["x-programmable-profile-3-6-contract"]?.programmableTradeFeePolicyHash,
+    ETHEREUM_CLIENT.profile36TradeFeePolicyHash, "Ethereum 3.6 schema policy hash");
+  assert.equal(directNativeProgrammableTradeFeePolicyHashV36(), ETHEREUM_CLIENT.profile36TradeFeePolicyHash,
+    "Ethereum 3.6 complete policy hash");
   const apiBytes = bytes(root, apiRelease.V4_RELEASE_BINDING_PATH);
   const apiBinding = json(apiBytes);
   assert.equal(apiBinding.schemaVersion, apiRelease.V4_RELEASE_BINDING_SCHEMA, "existing API binding schema");

@@ -170,6 +170,8 @@ export type LaunchResource = Readonly<{
     | "3.2.0"
     | "3.3.0"
     | "3.4.0"
+    | "3.5.0"
+    | "3.6.0"
     | null;
   launchProfileHash: `sha256:${string}` | null;
   launchIntentHash: `sha256:${string}` | null;
@@ -861,7 +863,9 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
       || value.launchProfileVersion === "3.1.0"
       || value.launchProfileVersion === "3.2.0"
       || value.launchProfileVersion === "3.3.0"
-      || value.launchProfileVersion === "3.4.0")
+      || value.launchProfileVersion === "3.4.0"
+      || value.launchProfileVersion === "3.5.0"
+      || value.launchProfileVersion === "3.6.0")
     ? value.launchProfileVersion
     : null;
   if (v3 && launchProfileVersion === null) return null;
@@ -888,7 +892,9 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
       ))
       || ((launchProfileVersion === "3.2.0"
         || launchProfileVersion === "3.3.0"
-        || launchProfileVersion === "3.4.0") && (
+        || launchProfileVersion === "3.4.0"
+        || launchProfileVersion === "3.5.0"
+        || launchProfileVersion === "3.6.0") && (
         projectMetadata === null || projectMetadataHash === null
       ))
     )
@@ -896,7 +902,9 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
   if (
     (launchProfileVersion === "3.2.0"
       || launchProfileVersion === "3.3.0"
-      || launchProfileVersion === "3.4.0")
+      || launchProfileVersion === "3.4.0"
+      || launchProfileVersion === "3.5.0"
+      || launchProfileVersion === "3.6.0")
     && projectMetadata
     && projectMetadataHash
     && browserProjectMetadataHashV1(projectMetadata) !== projectMetadataHash
@@ -1167,6 +1175,12 @@ export function walletPlatformFeeDisclosureV3(
   if (launchProfileVersion === "3.4.0") {
     return "10 bps · exact fee-path verification required";
   }
+  if (launchProfileVersion === "3.5.0") {
+    return "30 bps · exact settlement fee-path verification required";
+  }
+  if (launchProfileVersion === "3.6.0") {
+    return "30 bps (0.3%) on Programmable trades · server-proven native30 avoids an additional routed fee";
+  }
   return "Defined by the bound launch profile";
 }
 
@@ -1303,7 +1317,9 @@ export function walletProjectMetadataRequirementsV1(
 function requiresCurrentProjectMetadata(launch: LaunchResource) {
   return launch.routeId === "custom-launch:create:v4"
     || launch.launchProfileVersion === "3.3.0"
-    || launch.launchProfileVersion === "3.4.0";
+    || launch.launchProfileVersion === "3.4.0"
+      || launch.launchProfileVersion === "3.5.0"
+      || launch.launchProfileVersion === "3.6.0";
 }
 
 export function walletProjectMetadataReadyForReviewV1(launch: LaunchResource) {
@@ -1321,7 +1337,9 @@ export function walletProjectMetadataSummaryV1(
       launch.routeId !== "custom-launch:create:v3"
       || (launch.launchProfileVersion !== "3.2.0"
         && launch.launchProfileVersion !== "3.3.0"
-        && launch.launchProfileVersion !== "3.4.0")
+        && launch.launchProfileVersion !== "3.4.0"
+        && launch.launchProfileVersion !== "3.5.0"
+        && launch.launchProfileVersion !== "3.6.0")
     ))
     || !launch.launchIntentHash
     || !launch.requestHash
@@ -1346,7 +1364,9 @@ export function walletProjectMetadataBindingV1(
   if (
     !summary
     || ((launch.launchProfileVersion === "3.3.0"
-      || launch.launchProfileVersion === "3.4.0")
+      || launch.launchProfileVersion === "3.4.0"
+      || launch.launchProfileVersion === "3.5.0"
+      || launch.launchProfileVersion === "3.6.0")
       && !walletProjectMetadataRequirementsV1(summary.projectMetadata).complete)
   ) return null;
   const artifact = launch.output?.artifact;

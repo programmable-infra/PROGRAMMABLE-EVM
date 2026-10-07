@@ -140,11 +140,12 @@ launch request. Neither this report nor its publication activates a new graph, R
 
 ### Additive Ethereum candidate client
 
-CLI `4.1.3` adds explicit Ethereum profile `3.5.0` client support. Its default Ethereum profile
-remains `3.3.0`, and its separate client binding retains the original Robinhood API `4.1.0`
+CLI `4.1.3` supports explicit Ethereum profiles `3.5.0` and `3.6.0`. Fresh CLI packs with no explicit
+version select the authorized server capabilities profile; offline builders retain `3.3.0` and stored
+requests preserve their exact version. Its separate client binding retains the original Robinhood API `4.1.0`
 release gates. Follow the [4.1.3 client release procedure](releases/custom-launch-v4.1.3/README.md).
-The candidate profile remains inactive until server capabilities and authenticated release evidence
-authorize it. Direct HTTP clients do not require this CLI. Client publication, API activation and
+Profile 3.5 remains inactive. Deploy website 3.6 support and capability-driven guidance first, activate
+and verify backend 3.6 independently, then publish this client. Direct HTTP clients do not require this CLI. Client publication, API activation and
 wallet lifecycle verification are recorded separately.
 
 ### Dispatch the immutable release

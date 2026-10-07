@@ -16,6 +16,7 @@ import {
   DIRECT_NATIVE_PROFILE_VERSION,
   DIRECT_NATIVE_PROFILE_VERSION_V3,
   DIRECT_NATIVE_PROFILE_VERSION_V35,
+  DIRECT_NATIVE_PROFILE_VERSION_V36,
   DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   DIRECT_NATIVE_PROFILE_REVISION_V3,
@@ -145,12 +146,14 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const metadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
     DIRECT_NATIVE_PROFILE_VERSION_V35,
+    DIRECT_NATIVE_PROFILE_VERSION_V36,
     DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
     DIRECT_NATIVE_PROFILE_VERSION_V3_METADATA_LEGACY,
   ]).has(directNativeProfile?.profileVersion);
   const completeMetadataRequired = new Set([
     DIRECT_NATIVE_PROFILE_VERSION_V3,
     DIRECT_NATIVE_PROFILE_VERSION_V35,
+    DIRECT_NATIVE_PROFILE_VERSION_V36,
     DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY,
   ]).has(directNativeProfile?.profileVersion);
   if (metadataRequired !== Object.hasOwn(config, "projectMetadata")) {
@@ -515,8 +518,8 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   return result;
 }
 
-export async function packLaunch({ configPath, outputPath, receiptPath }) {
-  const built = await buildLaunch({ configPath });
+export async function packLaunch({ configPath, outputPath, receiptPath, directNativeProfileVersion }) {
+  const built = await buildLaunch({ configPath, directNativeProfileVersion });
   const resolvedOutput = path.resolve(outputPath ?? path.join(built.configDirectory, "launch.json"));
   const resolvedReceipt = path.resolve(receiptPath ?? `${resolvedOutput}.receipt.json`);
   await atomicWrite(resolvedOutput, built.requestBytes, 0o600);
@@ -616,9 +619,10 @@ function assertPackConfig(config) {
     const profileVersion = config.profileVersion ?? DIRECT_NATIVE_PROFILE_VERSION;
     if (profileVersion !== DIRECT_NATIVE_PROFILE_VERSION
       && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V3
-      && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V35) {
+      && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V35
+      && profileVersion !== DIRECT_NATIVE_PROFILE_VERSION_V36) {
       throw new TypeError(
-        `pack config profileVersion must be ${DIRECT_NATIVE_PROFILE_VERSION} or ${DIRECT_NATIVE_PROFILE_VERSION_V3}`,
+        `pack config profileVersion must be one of ${[DIRECT_NATIVE_PROFILE_VERSION, DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35, DIRECT_NATIVE_PROFILE_VERSION_V36].join(", ")}`,
       );
     }
     assertExactKeys(config, [

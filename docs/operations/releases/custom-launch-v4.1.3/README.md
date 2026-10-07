@@ -1,9 +1,9 @@
-# CLI 4.1.3 Ethereum candidate client release
+# CLI 4.1.3 Ethereum capabilities client release
 
-CLI `4.1.3` adds explicit Ethereum `profileVersion: "3.5.0"` support to the existing V3 pack, validation,
-submit and status flow. The default Ethereum profile remains `3.3.0`; the Robinhood API identity remains
-`4.1.0`, revision `2`. Ethereum `3.5.0` is inactive and requires authenticated server capabilities and
-release evidence before a wallet handoff. Publishing the client does not activate that profile.
+CLI `4.1.3` supports explicit Ethereum `3.5.0` and `3.6.0` in the V3 pack, validation, submit and status flow.
+Fresh CLI packs with no explicit version select the exact authorized server capabilities profile; the offline
+library default stays `3.3.0` and stored requests reproduce their exact version. The Robinhood API identity
+remains `4.1.0`, revision `2`. Ethereum `3.5.0` remains inactive. Publishing the client does not activate a profile.
 Direct HTTP clients use the same V3 request and do not require this CLI.
 
 This procedure prepares the separate immutable GitHub Release `programmable-launch-v4.1.3`.
@@ -12,9 +12,10 @@ Source checks do not establish publication or production readiness. The package 
 ## Source binding
 
 `cli-release-binding.json` binds the package identity and lockfile, existing response and coverage readers,
-the executable entry point, the Ethereum pack and validation paths, the explicit 3.5 configuration schema,
-and all four packaged V2 settlement-vault release files. The Ethereum schema is a packaged candidate;
-this record does not claim a published 3.5 API contract. It references the unchanged API `4.1.0` release
+the executable entry point, the Ethereum pack and validation paths, capabilities selection, both explicit
+3.5/3.6 schemas, the complete 3.6 trade policy and all four packaged V2 settlement-vault release files.
+The 3.6 policy hash is `sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3`.
+This record does not claim active Ethereum capabilities or executed trade collection. It references the unchanged API `4.1.0` release
 binding by exact path, schema and digest. The record has no `releaseReady` field or production approval.
 
 After freezing the client source, regenerate only the 4.1.3 record and review its diff:
@@ -47,6 +48,13 @@ and the old binding, schema, helper and runbook retain their exact bytes. The ex
 is unchanged. Neither test suite executes snapshot code or requires historical Git objects at runtime.
 
 ## Protected publication
+
+Deploy the website's 3.6 reader and capability-driven guidance before selecting backend profile 3.6.
+Independently activate and verify the complete backend 3.6 capabilities, then publish this CLI release.
+The pre-activation website must direct clients to current capabilities and must not assert that 3.6 is active.
+Profile 3.6 uses the static 3.3 baseline, three through sixteen targets and no mandatory canonical fee vault,
+settlement-dataflow closure or 3.4/3.5 behavior inputs. A native30 waiver still requires server runtime and
+per-trade accrual proof; launch admission is not collection evidence. Profile 3.5 remains inactive.
 
 1. Merge the reviewed release-plumbing candidate into `production` and obtain a fresh, authenticated
    production `Verify` proof for that exact commit and tree. The release workflow requires the current
@@ -90,6 +98,6 @@ The expected assets are `programmable-launch-4.1.3.tgz`, its `.tgz.sha256` check
 `programmable-launch-4.1.3.cdx.json` and `programmable-launch-4.1.3.release.json`.
 The manifest binds the exact source commit/tree, toolchain and 4.1.3 client record; verification also
 requires the original API release gates. Install the independently verified tarball into a temporary
-prefix and require `programmable-launch --version` to print `4.1.3`. Check the unchanged default and
-the explicit candidate behavior against current server capabilities. Record publication, API
+prefix and require `programmable-launch --version` to print `4.1.3`. Check capability-selected fresh packs,
+explicit 3.6 configuration and historical exact-byte reproduction. Record publication, API
 activation and wallet lifecycle verification as separate results.

@@ -1035,10 +1035,10 @@ describe("developer launch history same-origin bridge", () => {
       .toBe("First line\nSecond line");
   });
 
-  it.each([true, false])("reads profile 3.5.0 only when its metadata binding is valid: %s", async (valid) => {
+  it.each([["3.5.0", true], ["3.5.0", false], ["3.6.0", true], ["3.6.0", false]])("reads profile %s only when its metadata binding is valid: %s", async (launchProfileVersion, valid) => {
     const resource = {
       ...launchV3(),
-      launchProfileVersion: "3.5.0",
+      launchProfileVersion,
       projectMetadataHash: valid ? PROJECT_METADATA_HASH : `sha256:${"ff".repeat(32)}`,
     };
     fetchBackend.mockResolvedValueOnce(new Response(JSON.stringify(resource), {

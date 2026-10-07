@@ -71,14 +71,21 @@ test("client source record binds 4.1.3 separately from the unchanged 4.1.0 API i
     "packages/launch/contracts/settlement-fee-vault-v2/EthereumSettlementFeeVaultV2.build.json",
     "packages/launch/contracts/settlement-fee-vault-v2/EthereumSettlementFeeVaultV2.standard-json.json",
     "packages/launch/contracts/settlement-fee-vault-v2/release-binding.v2.json",
+    "packages/launch/src/pack-current-profile.mjs",
+    "packages/launch/src/profile-v36.mjs",
+    "packages/launch/schemas/programmable-launch-pack-config-v3.6.json",
   ]);
   assert.deepEqual({ ...result.binding.ethereumClient }, {
     chainId: "1",
     requestSchemaVersion: "programmable.custom-launch-create-request.v3",
-    defaultProfileVersion: "3.3.0",
+    offlineBuilderDefaultProfileVersion: "3.3.0",
+    freshCliDefaultSelection: "current-server-capabilities",
     candidateProfileVersion: "3.5.0",
     packConfigSchemaPath: "packages/launch/schemas/programmable-launch-pack-config-v3.5.json",
     candidateActivation: "requires-server-capabilities",
+    profile36Version: "3.6.0",
+    profile36PackConfigSchemaPath: "packages/launch/schemas/programmable-launch-pack-config-v3.6.json",
+    profile36TradeFeePolicyHash: "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3",
     activatesWriteProfile: false,
     requiresCliForDirectHttp: false,
   });
@@ -126,7 +133,9 @@ test("client binding rejects identity substitutions, forged approval fields, has
     value => { value.coverage.activatesWriteProfile = true; },
     value => { value.ethereumClient.activatesWriteProfile = true; },
     value => { value.ethereumClient.requiresCliForDirectHttp = true; },
-    value => { value.ethereumClient.defaultProfileVersion = "3.5.0"; },
+    value => { value.ethereumClient.offlineBuilderDefaultProfileVersion = "3.6.0"; },
+    value => { value.ethereumClient.freshCliDefaultSelection = "offline-builder"; },
+    value => { value.ethereumClient.profile36TradeFeePolicyHash = `sha256:${"f".repeat(64)}`; },
   ]) {
     const changed = structuredClone(binding); mutate(changed);
     assert.throws(() => audit(changed), /exact client source binding/);
@@ -137,7 +146,7 @@ test("client binding rejects identity substitutions, forged approval fields, has
 });
 
 test("client response decoding and UTF-8 source drift invalidates the exact client binding", t => {
-  for (const name of ["api-client", "api-response", "canonical-json", "io"]) {
+  for (const name of ["api-client", "api-response", "canonical-json", "io", "pack-current-profile", "profile-v36"]) {
     const { root, binding, audit } = fixture(t);
     const relative = `packages/launch/src/${name}.mjs`;
     write(root, relative, `${readFileSync(path.join(root, relative), "utf8")}\n// Changed response contract\n`);
