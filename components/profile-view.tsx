@@ -24,6 +24,7 @@ import type { ViewChainId } from "@/lib/view-chain";
 import { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
 export { ProfileLoadingSkeleton } from "@/components/profile-skeleton";
 import { RobinhoodProfileLaunches } from "@/components/robinhood-profile-launches";
+import { EthereumProfileLaunches } from "@/components/ethereum-profile-launches";
 import { GenericLaunchClaims } from "@/components/generic-launch-claims";
 import type { LaunchClaimWalletInputV1, LaunchClaimWalletReviewV1 } from "@/lib/custom-launch/claim-handoff-v1";
 import {
@@ -3821,7 +3822,10 @@ export function ProfileView({ onchainData, viewChainId = 4663 }: ProfileViewProp
         </div>
       </section>
 
-      {ethereumView ? <><ProfileProjects
+      <EthereumProfileLaunches account={account} enableClaims />
+      <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} enableClaims />
+      {ethereumView ? <>
+      {creatorWalletProjects.length > 0 || (scopedClassicV3Rewards.status === "ready" && scopedClassicV3Rewards.rewards.length > 0) ? <ProfileProjects
         key={account?.toLowerCase() ?? "disconnected"}
         classicRewards={
           scopedClassicV3Rewards.status === "ready"
@@ -3840,7 +3844,7 @@ export function ProfileView({ onchainData, viewChainId = 4663 }: ProfileViewProp
           )}
         onRefresh={retryProfileData}
         refreshing={profileRefreshing}
-      />
+      /> : null}
       <ProfileAccountWorkspace
         key={account.toLowerCase()}
         connected={Boolean(account)}
@@ -3866,7 +3870,6 @@ export function ProfileView({ onchainData, viewChainId = 4663 }: ProfileViewProp
         terminalErrorReady={terminalErrorReady}
       />
       </> : <>
-        <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} enableClaims />
         <RobinhoodProfileRewards account={account} sendWallet={sendLaunchClaimWalletAction} />
       </>}
     </div>
@@ -4756,7 +4759,9 @@ export function PublicCreatorProfile({
         </div>
       </section>
 
-      {viewChainId === 4663 ? <><RobinhoodProfileLaunches key={account.toLowerCase()} account={account} /><RobinhoodProfileRewards account={account} /></> : scopedData.status === "loading" ? (
+      <EthereumProfileLaunches account={account} />
+      <RobinhoodProfileLaunches key={account.toLowerCase()} account={account} />
+      {viewChainId === 4663 ? <RobinhoodProfileRewards account={account} /> : scopedData.status === "loading" ? (
         <ProfileProjectsLoadingState />
       ) : scopedData.status === "error" ? (
         <section
