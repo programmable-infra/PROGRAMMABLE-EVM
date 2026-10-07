@@ -22,6 +22,7 @@ test.beforeEach(async ({ page }) => {
 async function signing(page: Page) {
   await expect(page.getByRole("dialog", { name: "Transaction signing fixture" })).toBeVisible();
   await expect(page.getByLabel("Module signing prompt count")).toHaveText("1");
+  await expect(page.getByLabel("Module request marker count")).toHaveText("1");
   const calls = JSON.parse(await page.getByLabel("SDK calls", { exact: true }).innerText()) as { method: string }[];
   expect(calls.some(call => /^(login|linkWallet|personal_sign|eth_signTypedData_v4|forbidden-wallet-operation)$/.test(call.method))).toBe(false);
 }
@@ -48,6 +49,7 @@ for (const chain of ["Ethereum", "Robinhood"]) {
     await expect(page.getByLabel("Module signing result")).toContainText("attempted=true");
     await page.getByRole("button", { name: `Launch ${chain} fixture` }).click();
     await expect(page.getByLabel("Module signing prompt count")).toHaveText("2");
+    await expect(page.getByLabel("Module request marker count")).toHaveText("2");
     await page.getByRole("button", { name: "Confirm fixture signature" }).click();
     await expect(page.getByLabel("Module signing result")).toHaveText("submitted");
   });

@@ -8,7 +8,7 @@ let enabled = false;
 const admitted = new WeakSet<object>();
 const listeners = new Set<() => void>();
 const hash = `0x${"42".repeat(32)}`;
-let state = { hold: false, checks: 0, prompts: 0, request: "", signing: false };
+let state = { hold: false, checks: 0, requests: 0, prompts: 0, request: "", signing: false };
 let finishValidation: (() => void) | undefined;
 let finishSigning: { resolve: (value: string) => void; reject: (error: Error) => void } | undefined;
 function update(patch: Partial<typeof state>) { state = { ...state, ...patch }; listeners.forEach(listener => listener()); }
@@ -32,6 +32,10 @@ export async function revalidateModuleModeTransaction(value: { transaction: { fr
   return value.transaction;
 }
 export async function foundationWalletRequestNonce() { return 7; }
+export function noteFoundationWalletRequest(value: object) {
+  if (!admitted.has(value)) throw new Error("Unknown fixture preparation");
+  update({ requests: state.requests + 1 });
+}
 export function ModuleSigningControls() {
   const wallet = useWallet();
   const current = useSyncExternalStore(listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => state);
@@ -53,6 +57,7 @@ export function ModuleSigningControls() {
     <button onClick={() => { update({ hold: false }); finishValidation?.(); finishValidation = undefined; }}>Finish fresh validation</button>
     <output aria-label="Module signing result">{result}</output>
     <output aria-label="Module validation count">{current.checks}</output>
+    <output aria-label="Module request marker count">{current.requests}</output>
     <output aria-label="Module signing prompt count">{current.prompts}</output>
     <output aria-label="Module signing request">{current.request}</output>
     {current.signing ? <section role="dialog" aria-label="Transaction signing fixture">
