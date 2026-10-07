@@ -3,6 +3,8 @@ import { decodeAbiParameters, decodeFunctionData, keccak256, toHex, type Address
 import type { OpenConfigContext, OpenConfigSchema } from "@/packages/classic-modules/src/open-config.mjs";
 import type { OpenSourcePackage } from "@/packages/classic-modules/src/open-packages.mjs";
 import type { FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
+import { foundationSelectionErrors } from "@/lib/module-foundation/ui-types";
+import { presentFoundationLaunchCatalogV1 } from "@/lib/module-foundation/launch-availability";
 import {
   FOUNDATION_CAPABILITIES_V1, FOUNDATION_CONFIGURATION_CODEC_V1, FOUNDATION_HOST_ADAPTER_ID_V1,
   FOUNDATION_PACKAGE_EXTENSION_V1, FOUNDATION_ZERO_HASH, createFoundationModuleManifestV1,
@@ -72,6 +74,36 @@ function fixture(role = "creator", modify?: (source: OpenSourcePackage) => void,
 }
 
 describe("Foundation catalog to UI binding", () => {
+  it("holds separate-execution modules out of new launches without disabling installed actions", () => {
+    for (const family of ["buyback-burn", "dip-buyback", "lp-rewards", "full-range-lp", "buyer-rewards", "nth-buy-pot", "king-of-the-hill"]) {
+      const f = fixture("public", source => {
+        // The display name is deliberately unrelated: the reviewed identity controls availability.
+        const extension = source.extensions![FOUNDATION_PACKAGE_EXTENSION_V1] as unknown as FoundationPackageExtensionV1;
+        extension.descriptor.moduleId = hash(`programmable.foundation.${family}.v1`);
+        extension.descriptorHash = hashFoundationModuleDescriptorV1(extension.descriptor);
+      });
+      const catalog = presentFoundationLaunchCatalogV1(f);
+      expect(catalog[0]).toMatchObject({ available: false, comingSoon: true });
+      expect(foundationSelectionErrors([f.selection], catalog)).toEqual(["Technical state cell is coming soon. Remove it to launch your coin."]);
+      expect(presentFoundationCatalogV1(f)[0].available).toBe(true);
+      expect(prepareFoundationActionIntentV1({ ...f, selection: f.actionSelection, account: creator, now }).transaction.to).toBe(f.readback.host);
+    }
+  });
+
+  it("keeps swap-triggered and unrelated modules subject to their existing availability checks", () => {
+    for (const family of ["launch-wallet-cap", "hot-potato", "plague", "reactive-pair", "entangled", "future-module"]) {
+      const f = fixture("public", source => {
+        const extension = source.extensions![FOUNDATION_PACKAGE_EXTENSION_V1] as unknown as FoundationPackageExtensionV1;
+        extension.descriptor.moduleId = hash(`programmable.foundation.${family}.v1`);
+        extension.descriptorHash = hashFoundationModuleDescriptorV1(extension.descriptor);
+      });
+      expect(presentFoundationLaunchCatalogV1(f)[0]).toMatchObject({ available: true });
+      expect(presentFoundationLaunchCatalogV1(f)[0].comingSoon).toBeUndefined();
+      const unverified = bindFoundationCatalogV1({ schemaVersion: FOUNDATION_CATALOG_SCHEMA_V1, entries: [f.entry] });
+      expect(presentFoundationLaunchCatalogV1({ ...f, catalog: unverified })[0].available).toBe(false);
+    }
+  });
+
   it("checks asset bindings inserted by the compiler inside fixed array children against the verified context", () => {
     const asset = address(70), context: OpenConfigContext = { assets: { verified: { chainId: 4663, address: asset, decimals: 6 } } };
     const f = fixture("creator", source => {

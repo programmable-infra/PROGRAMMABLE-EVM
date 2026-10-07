@@ -14,7 +14,7 @@ import { ModuleFoundationBuilder } from "./module-foundation-builder";
 import { FoundationSessionStatus, useFoundationSession, type FoundationExecutionResult } from "./module-foundation-session";
 import { uploadModuleModeImage } from "./module-mode-wallet-state";
 import { bindFoundationCatalogV1 } from "@/lib/module-foundation/catalog";
-import { presentFoundationCatalogV1 } from "@/lib/module-foundation/presentation";
+import { presentFoundationLaunchCatalogV1 } from "@/lib/module-foundation/launch-availability";
 import { FOUNDATION_HOST_ADAPTER_ID_V1 } from "@/lib/module-foundation/manifest";
 import { parseFoundationAssetPinsV1 } from "@/lib/module-foundation/assets";
 import { createFoundationClient, foundationMetadata, prepareFoundationLaunch } from "@/lib/module-foundation/client";
@@ -32,7 +32,7 @@ import type { FoundationResolution } from "@/lib/module-foundation/result-store"
 import { foundationLaunchPositionPresentation, foundationPoolPresentation, foundationPositionPresentation } from "@/lib/module-foundation/ui-readback";
 import { foundationStepSummary } from "@/lib/module-foundation/wallet";
 import { isFoundationQuotePrice, type FoundationStartPrice } from "@/lib/module-foundation/start-price";
-import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, type FoundationImage,
+import { FOUNDATION_PLATFORM_FEE_BPS, FOUNDATION_PLATFORM_FEE_RECIPIENT, foundationSelectionErrors, type FoundationImage,
   type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationQuoteAsset, type FoundationTransactionResult } from "@/lib/module-foundation/ui-types";
 import styles from "./module-foundation-ui.module.css";
 import studioStyles from "./module-studio/studio.module.css";
@@ -80,7 +80,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
   const [openingSavedLaunch, setOpeningSavedLaunch] = useState(false);
   const recoveryRequest = useRef<AbortController | null>(null);
   const displayEnvelope = session.envelope ?? session.displayEnvelope;
-  const catalog = useMemo(() => displayEnvelope ? presentFoundationCatalogV1({
+  const catalog = useMemo(() => displayEnvelope ? presentFoundationLaunchCatalogV1({
     catalog: bindFoundationCatalogV1(displayEnvelope.catalog.document, displayEnvelope.catalog.authority),
     chainId, hostAdapterId: FOUNDATION_HOST_ADAPTER_ID_V1,
   }) : [], [displayEnvelope, chainId]);
@@ -147,6 +147,8 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
     const assertCurrent = () => { signal?.throwIfAborted(); session.assertCurrent(account, context); };
     assertCurrent();
     if (session.preparationBlocked) throw new Error(session.preparationBlocked);
+    const moduleErrors = foundationSelectionErrors(draft.modules, catalog);
+    if (moduleErrors.length) throw new Error(moduleErrors.join(" "));
     // Reviewing a new draft acknowledges only the completed result currently shown.
     // Keep the draft mounted; the result store still enforces its exact ID and wallet lock.
     const previousResult = session.resolution;

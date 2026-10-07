@@ -19,7 +19,11 @@ export async function createModuleStudioServer() {
     import './app/programmable-experience.css'; import './app/webde-final-ui.css'; import './app/surfaces.css';
     const catalog = [{id:'wallet-cap-fixture',version:'1.0.0',digest:'0x'+'11'.repeat(32),name:'Initial wallet buy limit',
       description:'This module limits how much each wallet can buy during the opening period.',capabilities:['beforeSwap'],
-      fields:[],available:true,studio:{category:'trading'}}];
+      fields:[],available:true,studio:{category:'trading'}},
+      ...(new URLSearchParams(location.search).get('mode')==='availability' ? [
+        ...['Hot potato','Plague','Reactive pair','Entangled'].map((name,index)=>({id:'ready-'+index,name,available:true})),
+        ...['Buyback and burn','Dip buyback','LP rewards','Full-range liquidity','Buyer rewards','Nth-buy pot','King of the Hill'].map((name,index)=>({id:'pending-'+index,name,available:false,comingSoon:true,unavailableReason:'Coming soon. This module is not available for new launches yet.'})),
+      ].map(module=>({version:'1.0.0',digest:'0x'+'22'.repeat(32),description:'Fixture module.',capabilities:[],fields:[],studio:{category:'trading'},...module})) : [])];
     const launchEvents = window.launchEvents = {preparations:0,coldPreparations:0,walletRequests:0,aborts:0};
     const chainId = new URLSearchParams(location.search).get('chainId')==='1' ? 1 : 4663;
     const quote = {address:chainId===1?'0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2':'0xC91D9BBCEa565eCaA0821DFAff2E377b4FeaDd5f',chainId,name:'Wrapped Ether',symbol:'WETH',decimals:18,supported:true,supportsNativeEth:true};
@@ -56,7 +60,7 @@ export async function createModuleStudioServer() {
       const [customQuote,setCustomQuote] = useState(false);
       const [errors,setErrors] = useState(new URLSearchParams(location.search).get('mode')==='error'?{name:'Enter a coin name'}:{});
       const imageInput = useRef(null);
-      if(mode==='launch-speed'||mode==='open-quote'||mode==='wallet-recovery') return <LaunchSpeedFixture/>;
+      if(mode==='launch-speed'||mode==='open-quote'||mode==='wallet-recovery'||mode==='availability') return <LaunchSpeedFixture/>;
       if(mode==='restored-launch') return <ModuleFoundationLaunchHost layout="studio"/>;
       return <div className="app-frame"><SiteHeader/><main><div className={styles.launchPage}>
         <FoundationStudio draft={draft} catalog={catalog} quoteSymbol={customQuote?'TOKEN':'ETH'} initialBuy={draft.initialBuy}

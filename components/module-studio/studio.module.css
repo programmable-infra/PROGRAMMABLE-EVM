@@ -42,7 +42,8 @@
 .moduleLoading > div::after { content: ""; height: 9px; width: 64%; border-radius: 5px; background: #ffffff0b; }
 .moduleCard { display: flex; width: 100%; text-align: left; gap: 7px; border: 0; border-radius: 11px; padding: 12px 10px; min-height: 64px; align-items: center; background: var(--panel-fill-soft); transition: background .32s ease; }
 .moduleCard[data-active="true"] { background: var(--panel-fill-selected); }
-.moduleCard[data-unavailable="true"] { opacity: .5; }
+.studio .moduleCard[data-unavailable="true"],.studio .pickerModule[data-unavailable="true"] { opacity: .65; filter: grayscale(1); }
+.comingSoon { display: block; margin-top: 4px; color: #b4b4bc; font-size: 11px; line-height: 15px; font-weight: 500; }
 .moduleName > span:last-child { overflow-wrap: anywhere; }
 .moduleName { display: flex; align-items: center; gap: 9px; padding: 0; background: transparent; border: 0; text-align: left; flex: 1; min-width: 0; font-size: 14px !important; line-height: 19px; font-weight: 500 !important; }
 .moduleArt { display: inline-block; width: 38px; height: 38px; aspect-ratio: 1; flex: 0 0 auto; background: url("/brand/modules/module-florals-v1.webp") 100% 100% / 300% 200% no-repeat; }
