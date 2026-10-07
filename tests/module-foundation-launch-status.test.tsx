@@ -67,6 +67,13 @@ describe("compact completed-launch status", () => {
     expect(render({ progress: "Confirm in your wallet…", pending: "unreadable" })).not.toContain("Recover wallet operation");
   });
 
+  it("offers a normal launch retry without demanding a transaction hash when its nonce is unused", () => {
+    const html = render({ pending: "saved", retryAvailable: true, resolution: null });
+    expect(html).toContain("You can retry the launch below");
+    expect(html).not.toContain("Check previous wallet transaction");
+    expect(html).not.toContain("Add transaction hash");
+  });
+
   it("uses the saved hash without asking the user to paste it again", () => {
     const html = render({ pending: JSON.stringify({ transactionHash: hash }), pendingTransactionHash: hash,
       profile: { explorer: "https://etherscan.io" } as Session["profile"] });

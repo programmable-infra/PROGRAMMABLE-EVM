@@ -456,3 +456,22 @@ for (const [width, chainId] of [[1440, 1], [390, 1], [1440, 4663], [390, 4663]])
     } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
   });
 }
+
+for (const [width, chainId] of [[1440, 1], [390, 4663]]) {
+  test(`hashless unsubmitted launch can be retried on ${chainId}`, async ({ page }) => {
+    const studio = await createModuleStudioServer(); studio.listen(0, "127.0.0.1"); await once(studio, "listening");
+    const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
+    try {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto(`http://127.0.0.1:${address.port}/?mode=pending-recovery&unmined=1&chainId=${chainId}`);
+      if (width < 700) await page.getByRole("button", { name: "Settings", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Launch coin", exact: true })).toBeDisabled();
+      await page.getByRole("button", { name: "Check wallet activity", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Launch coin", exact: true })).toBeEnabled();
+      await expect(page.getByText("Your previous request did not finish. You can retry the launch below.")).toBeVisible();
+      await expect(page.getByLabel("Name", { exact: true })).toHaveValue("BRUNO");
+      await expect(page.getByLabel("Ticker", { exact: true })).toHaveValue("BRUNO");
+      await expect(page.getByLabel("First buy · ETH", { exact: true })).toHaveValue("0");
+    } finally { const closed = once(studio, "close"); studio.close(); studio.closeAllConnections(); await closed; }
+  });
+}
