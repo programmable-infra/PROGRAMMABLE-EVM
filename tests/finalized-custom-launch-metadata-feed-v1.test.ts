@@ -129,7 +129,7 @@ function projectMetadata(
 type LaunchFixtureOptions = Readonly<{
   resourceId?: string;
   routerLaunchId?: `0x${string}`;
-  launchProfileVersion?: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0" | "3.3.0" | "3.4.0";
+  launchProfileVersion?: "2.0.0" | "3.0.0" | "3.1.0" | "3.2.0" | "3.3.0" | "3.4.0" | "3.5.0";
   tokenAddress?: `0x${string}`;
   createdAt?: string;
   finalizedAt?: string;
@@ -372,6 +372,20 @@ describe("finalized Custom launch metadata feed v1", () => {
     });
 
     expect(feed.launches[0]?.routerLaunchId).toBe(launch.routerLaunchId);
+  });
+
+  it("indexes profile 3.5.0 only with the exact bound project metadata", async () => {
+    const launch = launchFixture({ launchProfileVersion: "3.5.0" });
+    const feed = await parsedFeed(launch);
+    expect(feed.launches[0]).toMatchObject({
+      launchProfileVersion: "3.5.0",
+      projectMetadataHash: launch.projectMetadataHash,
+      token: launch.token,
+    });
+    await expect(parsedFeed({ ...launch, projectMetadataHash: digest("ff") }))
+      .rejects.toThrow();
+    await expect(parsedFeed({ ...launch, projectMetadata: null, projectMetadataHash: null }))
+      .rejects.toThrow();
   });
 
   it("accepts legacy finalized entries with explicit null metadata keyed by launchProfileVersion", async () => {

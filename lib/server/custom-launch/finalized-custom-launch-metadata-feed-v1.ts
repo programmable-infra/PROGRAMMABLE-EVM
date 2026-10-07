@@ -98,7 +98,8 @@ type LaunchProfileVersionV1 =
   | "3.1.0"
   | "3.2.0"
   | "3.3.0"
-  | "3.4.0";
+  | "3.4.0"
+  | "3.5.0";
 
 type LaunchPresentationLinkKindV1 =
   | "website"
@@ -775,6 +776,7 @@ function parseLaunchV1(value: JsonValue): FinalizedCustomLaunchMetadataV1 {
     && record.launchProfileVersion !== "3.2.0"
     && record.launchProfileVersion !== "3.3.0"
     && record.launchProfileVersion !== "3.4.0"
+    && record.launchProfileVersion !== "3.5.0"
   ) throw new Error("Finalized Custom metadata launch profile version is invalid");
   const metadataRequired = launchProfileUsesProjectMetadataV1(
     record.launchProfileVersion,
@@ -906,7 +908,8 @@ function launchProfileUsesProjectMetadataV1(
 ) {
   return launchProfileVersion === "3.2.0"
     || launchProfileVersion === "3.3.0"
-    || launchProfileVersion === "3.4.0";
+    || launchProfileVersion === "3.4.0"
+    || launchProfileVersion === "3.5.0";
 }
 
 function parseTokenMetadataReadbackV1(
