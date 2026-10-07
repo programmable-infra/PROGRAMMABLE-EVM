@@ -33,6 +33,10 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
   const releaseDigest = session.envelope?.binding?.releaseDigest;
   const savedClaim = session.resolution?.metadata?.operationKind === "claim"
     && session.resolution.metadata.token?.toLowerCase() === token.toLowerCase() ? session.resolution : null;
+  // A successful, displayed result can be acknowledged by the next Claim click.
+  // Pending, unreadable and reverted operations still require recovery first.
+  const claimBlocked = session.preparationBlocked
+    ?? (session.resolution?.status === "success" ? undefined : session.submissionBlocked);
 
   useEffect(() => {
     if (!owner || session.availability.status !== "ready" || !releaseDigest) return;
@@ -53,7 +57,9 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
     setMessage("Checking the current payout…");
     setTransactionHash(null);
     try {
-      if (session.submissionBlocked) throw new Error(session.submissionBlocked);
+      if (claimBlocked) throw new Error(claimBlocked);
+      session.assertCurrent(wallet, context);
+      if (session.resolution?.status === "success") await session.acknowledgeResult(session.resolution.operationId, false);
       const pool: FoundationPool = { token, quote: getAddress(launch.quoteAsset), hook: getAddress(launch.hookAddress), poolId: launch.poolId as Hex };
       const sequence = await prepareFoundationClaim({ client: session.client, binding: await session.resolveAuthority(),
         account: wallet, pool, beneficiary: "creator" });
@@ -91,7 +97,7 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
     {session.walletAction ? <button type="button" disabled={session.walletAction.busy} onClick={session.walletAction.onClick}>
       {session.walletAction.label}</button> : session.availability.status === "unavailable" || balanceError
       ? <button type="button" onClick={() => { setBalanceError(""); session.retryAvailability(); setRefresh(value => value + 1); }}>Retry fee check</button>
-      : <button type="button" disabled={!ready || balance!.amount === 0n || busy || Boolean(session.submissionBlocked)} onClick={() => void claim()}>
+      : <button type="button" disabled={!ready || balance!.amount === 0n || busy || Boolean(claimBlocked)} onClick={() => void claim()}>
         {busy ? "Claiming…" : "Claim Rewards"}</button>}
     <span className={styles.claimStatus}>{balanceError || session.availability.status === "unavailable" ? balanceError || "Fee claims are temporarily unavailable"
       : !ready ? "Checking rewards…" : `${formatUnits(balance.amount, balance.decimals)} ${balance.symbol} available`}</span>
@@ -99,6 +105,8 @@ export function FoundationProfileClaim({ launch, account, chainId = 4663 }: { la
     {savedClaim ? <><span className={styles.claimStatus}>{savedClaim.status === "success" ? "Fee payout saved at" : "Reverted transaction at"} block {savedClaim.blockNumber}.{" "}
       <a href={`${explorer}/tx/${savedClaim.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a></span>
       <button type="button" disabled={acknowledging} onClick={() => void acknowledgeSavedClaim()}>{acknowledging ? "Continuing…" : "Continue"}</button></>
+      : session.resolution?.status === "success" ? <span className={styles.claimStatus}>Previous transaction confirmed.{" "}
+        <a href={`${explorer}/tx/${session.resolution.transactionHash}`} target="_blank" rel="noreferrer">View transaction</a></span>
       : session.submissionBlocked ? <span className={styles.claimStatus}>{session.submissionBlocked}{" "}
         <a href={`/modules/${session.resolution?.metadata?.token ?? token}?chainId=${chainId}`}>Review wallet activity</a></span> : null}
     {message ? <p className={styles.claimMessage} role="status">{message}{transactionHash ? <> <a href={`${explorer}/tx/${transactionHash}`}
