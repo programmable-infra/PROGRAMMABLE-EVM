@@ -52,13 +52,20 @@ export function parseSwapTokenDescriptor(value: unknown, expected: { address: st
   requireValue(typeof token.name === "string" && token.name.length > 0 && token.name.length <= 256
     && typeof token.symbol === "string" && token.symbol.length > 0 && token.symbol.length <= 128
     && Number.isInteger(token.decimals) && token.decimals >= 0 && token.decimals <= 36, "The token details could not be verified.");
-  requireValue(row.manageHref === null || typeof row.manageHref === "string" && /^\/launch\/modules\/manage\/0x[0-9a-f]{40}\?/i.test(row.manageHref), "The coin controls link is invalid.");
+  const moduleHref = `/modules/${token.address.toLowerCase()}${row.chainId === 1 ? "?chainId=1" : ""}`;
+  requireValue(row.manageHref === null || row.manageHref === moduleHref
+    || typeof row.manageHref === "string" && row.manageHref.toLowerCase().startsWith(`/launch/modules/manage/${token.address.toLowerCase()}?`), "The coin controls link is invalid.");
   if (row.status === "unavailable") {
     requireValue(row.route === null && typeof row.reason === "string" && row.reason.length <= 512, "The route status is invalid.");
     return row;
   }
   requireValue(row.status === "ready" && object(row.route), "The token route is invalid.");
   const route = row.route;
+  if (route.kind === "module-foundation") {
+    requireValue(/^0x[0-9a-f]{64}$/i.test(route.transactionHash) && BigInt(route.transactionHash) !== 0n
+      && row.manageHref === moduleHref, "The module launch identity is invalid.");
+    return row;
+  }
   if (route.kind === "module-native") {
     const availability = parseModuleModeAvailability(route.availability);
     requireValue(row.chainId === 4663 && availability.release, "The module version is unavailable.");
@@ -172,6 +179,7 @@ export async function prepareSwap(input: PrepareSwapInput, wallet: SwapWalletAct
   requireValue(Number.isInteger(slippageBps) && slippageBps >= 1 && slippageBps <= 1000, "Use slippage between 0.01% and 10%.");
   requireValue(!getPendingSwap(input.owner, input.descriptor.chainId), "Check the previous swap in your wallet before sending another.");
   const route = input.descriptor.route, account = getAddress(input.owner), token = input.descriptor.token.address;
+  requireValue(route.kind !== "module-foundation", "Use this coin’s module trading controls.");
   if (route.kind === "module-native") {
     const native = await import("@/lib/module-mode/native-client"), client = createModuleEngineClient();
     const quote = await native.prepareModuleNativeSwap({ client, availability: route.availability, account, token,

@@ -24,6 +24,16 @@ const review: FoundationTradeReview = {
 const draft = { side: "buy" as const, amount: "0.01", slippageBps: 300 };
 
 describe("inline Foundation trading", () => {
+  it("embeds the same buy/sell form without a second market page", () => {
+    const html = renderToStaticMarkup(<ModuleFoundationMarket {...props} tradeOnly />);
+    expect(html.match(/<form/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Trade direction"');
+    expect(html).toContain(">Buy</button>");
+    expect(html).toContain(">Sell</button>");
+    expect(html).not.toContain("Manage coin");
+    expect(html).not.toContain("Pool details");
+    expect(html).not.toContain("<h1");
+  });
   it("starts with Buy, gas-aware Max and three percent slippage without a review page", () => {
     const html = renderToStaticMarkup(<ModuleFoundationMarket {...props} />);
     expect(html).toMatch(/aria-pressed="true"[^>]*>Buy<\/button>/);

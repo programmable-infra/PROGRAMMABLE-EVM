@@ -16,6 +16,7 @@ export interface SwapToken {
   decimals: number;
 }
 export type SwapRoute =
+  | { kind: "module-foundation"; transactionHash: Hex }
   | { kind: "module-native"; availability: ModuleModeAvailability }
   | { kind: "any-quote"; availability: ModuleEngineAvailability; template: ModuleEngineTemplate }
   | { kind: "custom-v4"; descriptor: CustomV4SwapDescriptor }

@@ -18,6 +18,7 @@ import styles from "./module-foundation-ui.module.css";
 import tradeStyles from "./swap-panel.module.css";
 
 export type ModuleFoundationMarketProps = FoundationCreatorFees & {
+  tradeOnly?: boolean;
   availability: FoundationAvailability;
   contextKey: string;
   coin: { address: Address; name: string; symbol: string; description: string; decimals: number; balance?: string; imageURI?: string; creator?: string; socialLinks?: readonly { label: string; url: string }[] };
@@ -184,11 +185,7 @@ export function ModuleFoundationMarket(props: ModuleFoundationMarketProps) {
     finally { lock.current = false; if (active.current) setBusy(null); }
   }
 
-  return <RobinhoodMarketView chainId={availability.chainId === 1 ? 1 : 4663} address={coin.address} name={coin.name} symbol={coin.symbol} creator={coin.creator}
-    launch={{ tokenAddress: coin.address, sourceKind: "module-foundation-v1", poolId: pool.poolId, quoteAsset: quote.address, quoteSymbol: quote.symbol }}
-    presentation={{ tokenAddress: coin.address, imageUrl: imageURI, description: coin.description, links: socialLinks, market: props.market ?? null }}
-    loading={props.marketLoading} delayed={props.marketDelayed} fallbackImageUrl={FOUNDATION_DEFAULT_IMAGE.url}
-    trade={<div className={`${styles.marketScope} ${tradeStyles.embedded}`}>
+  const trade = <div className={`${styles.marketScope} ${tradeStyles.embedded}`}>
         <section className={tradeStyles.card} aria-label={`Trade ${coin.symbol}`}>
           <form noValidate onSubmit={event => void prepare(event)}>
             {props.tradeCurrency ? <div className={tradeStyles.sides} role="group" aria-label="Payment currency">
@@ -233,7 +230,14 @@ export function ModuleFoundationMarket(props: ModuleFoundationMarketProps) {
           </form>
           {result ? <div className={styles.tradeResult} role="status"><span>{result.status === "confirmed" ? result.operationComplete ? "Trade complete" : "Approval confirmed. Continue your trade." : result.status === "reverted" ? "Trade failed. Try again." : "Waiting for confirmation…"}</span>{foundationPublicUrl(result.explorerUrl) ? <a href={result.explorerUrl} target="_blank" rel="noopener noreferrer" aria-label="View trade transaction"><ArrowUpRightIcon size={16} aria-hidden="true" /></a> : null}{waitingForConfirmation && onRefreshResult ? <button type="button" className={styles.textButton} disabled={Boolean(busy)} onClick={() => void refresh()}>{busy === "refresh" ? "Checking…" : "Check confirmation"}</button> : null}</div> : null}
         </section>
-      </div>}>
+      </div>;
+  if (props.tradeOnly) return trade;
+
+  return <RobinhoodMarketView chainId={availability.chainId === 1 ? 1 : 4663} address={coin.address} name={coin.name} symbol={coin.symbol} creator={coin.creator}
+    launch={{ tokenAddress: coin.address, sourceKind: "module-foundation-v1", poolId: pool.poolId, quoteAsset: quote.address, quoteSymbol: quote.symbol }}
+    presentation={{ tokenAddress: coin.address, imageUrl: imageURI, description: coin.description, links: socialLinks, market: props.market ?? null }}
+    loading={props.marketLoading} delayed={props.marketDelayed} fallbackImageUrl={FOUNDATION_DEFAULT_IMAGE.url}
+    trade={trade}>
       <div className={`${styles.marketScope} ${styles.marketExtras}`}><FoundationPoolDetails pool={pool} positions={positions} />
         {feeLedger || moduleActions ? <details className={styles.details}><summary>Manage coin</summary><div className={styles.detailsBody}>
         {feeLedger ? <section className={styles.feeLedger}><h2>Fees in {quote.symbol}</h2><dl className={styles.rows}><div><dt>Platform credited</dt><dd>{feeLedger.platformCredited} {quote.symbol}</dd></div><div><dt>Platform paid out</dt><dd>{feeLedger.platformPaid} {quote.symbol}</dd></div><div><dt>Creator credited</dt><dd>{feeLedger.creatorCredited} {quote.symbol}</dd></div><div><dt>Creator paid out</dt><dd>{feeLedger.creatorPaid} {quote.symbol}</dd></div></dl><p className={styles.help}>Read at block {feeLedger.asOfBlock}. A fee credit is not a completed payout.</p></section> : null}

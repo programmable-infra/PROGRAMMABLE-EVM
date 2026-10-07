@@ -34,6 +34,7 @@ import styles from "./module-foundation-ui.module.css";
 import tradeStyles from "./swap-panel.module.css";
 
 type ModuleFoundationMarketHostProps = {
+  tradeOnly?: boolean;
   chainId?: FoundationChainId;
   token: Address; transactionHash?: Hex; initialName?: string;
   initialLaunch?: LaunchPresentationSource & { symbol?: string | null; creator?: string | null };
@@ -46,10 +47,10 @@ export function ModuleFoundationMarketHost(props: ModuleFoundationMarketHostProp
   </TradePanelStateProvider>;
 }
 
-function ModuleFoundationMarketContent({ token, transactionHash, initialName, initialLaunch, initialPresentation, chainId = 4663 }: ModuleFoundationMarketHostProps) {
+function ModuleFoundationMarketContent({ token, transactionHash, initialName, initialLaunch, initialPresentation, chainId = 4663, tradeOnly = false }: ModuleFoundationMarketHostProps) {
   const profile = foundationChainProfile(chainId), FOUNDATION_INFRASTRUCTURE = profile.infrastructure, FOUNDATION_WETH = profile.wrappedEth.address;
   const session = useFoundationSession(token, chainId);
-  const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(token)}`, true, initialPresentation, chainId);
+  const presentation = useRobinhoodPresentation(`token=${encodeURIComponent(token)}`, !tradeOnly, initialPresentation, chainId);
   const coinPresentation = presentation.items.find(item => item.tokenAddress.toLowerCase() === token.toLowerCase());
   const market = coinPresentation?.market;
   useEffect(() => { window.scrollTo({ top: 0, left: 0, behavior: "instant" }); }, [token]);
@@ -171,17 +172,19 @@ function ModuleFoundationMarketContent({ token, transactionHash, initialName, in
     return outcome.result;
   }
 
-  if (!details) return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} />
-    <RobinhoodMarketView chainId={chainId} address={token} name={initialName || coinPresentation?.name || "Loading coin…"} symbol={initialLaunch?.symbol || coinPresentation?.symbol} creator={initialLaunch?.creator ?? undefined}
-      launch={initialLaunch} presentation={coinPresentation} loading={presentation.loading || !error && session.availability.status !== "unavailable"} delayed={presentation.delayed}
-      fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE}
-      trade={<div className={`${styles.marketScope} ${tradeStyles.embedded}`}><section className={tradeStyles.card} aria-label="Trade loading">
+  if (!details) {
+    const trade = <div className={`${styles.marketScope} ${tradeStyles.embedded}`}><section className={tradeStyles.card} aria-label="Trade loading">
         <p className={tradeStyles.note} role="status">{session.envelope?.indexPending ? session.envelope.reason : error || session.availability.status === "unavailable" ? "Trading is temporarily unavailable." : "Loading trade…"}</p>
         {error || session.availability.status === "unavailable" ? <button type="button" className={styles.secondaryButton} onClick={() => {
           setError(""); session.retryAvailability(); setRefreshKey(value => value + 1);
         }}>Retry</button> : null}
-      </section></div>} />
-  </>;
+      </section></div>;
+    return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} />
+      {tradeOnly ? trade : <RobinhoodMarketView chainId={chainId} address={token} name={initialName || coinPresentation?.name || "Loading coin…"} symbol={initialLaunch?.symbol || coinPresentation?.symbol} creator={initialLaunch?.creator ?? undefined}
+      launch={initialLaunch} presentation={coinPresentation} loading={presentation.loading || !error && session.availability.status !== "unavailable"} delayed={presentation.delayed}
+      fallbackImageUrl={MODULE_TOKEN_FALLBACK_IMAGE} trade={trade} />}
+    </>;
+  }
   const quote = { address: details.quote.address, chainId, name: details.quote.name, symbol: details.quote.symbol, decimals: details.quote.decimals,
     supported: true, ...(details.quote.balance === null ? {} : { balance: formatUnits(details.quote.balance, details.quote.decimals) }) };
   const coin = { address: token, name: details.token.name, symbol: details.token.symbol, description: details.token.description, decimals: 18,
@@ -196,7 +199,7 @@ function ModuleFoundationMarketContent({ token, transactionHash, initialName, in
       payout: { asset: quote, recipient: budget.beneficiary, claimableAmount: formatUnits(budget.withdrawable, quote.decimals),
         creditedAmount: formatUnits(budget.credited, quote.decimals), paidAmount: formatUnits(budget.claimed, quote.decimals), asOfBlock: details.checkpoint.blockNumber.toString() } };
   });
-  return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} /><ModuleFoundationMarket key={`${session.contextKey}:${session.resultGeneration}:${useNativeEth}`} availability={session.availability} contextKey={session.contextKey}
+  return <><FoundationSessionStatus session={session} hideSuccessfulLaunch hideSuccessfulTrade showProgress={false} /><ModuleFoundationMarket tradeOnly={tradeOnly} key={`${session.contextKey}:${session.resultGeneration}:${useNativeEth}`} availability={session.availability} contextKey={session.contextKey}
     coin={coin} quote={quote} market={market} marketLoading={presentation.loading} marketDelayed={presentation.delayed}
     tradeCurrency={getAddress(quote.address) !== FOUNDATION_WETH ? { value: tradeCurrency, onChange: setTradeCurrency } : undefined}
     tradeAsset={useNativeEth ? { address: zeroAddress, chainId, name: "Ether", symbol: "ETH", decimals: 18, supported: true, balance: funds?.balance } : quote}
