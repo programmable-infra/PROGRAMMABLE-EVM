@@ -10,7 +10,7 @@ vi.mock("@/contracts/spec/robinhood-custom-launch/chain-4663.v1.json", async imp
 });
 import { projectionFixture, controller, component, runtime, runtimeHash, hash, now, nowIso } from "./fixtures/universal-launch-v1";
 import { buildLaunchPlanRoutedSwapV1, launchPlanTradeAmountsV1, launchPlanTradeBindingV1, launchPlanTradePreparationDigestV1,
-  parseLaunchPlanTradeRequestV1, ROUTED_FEE_POLICY_V1, ROUTED_FEE_RECIPIENT_V1, ROUTED_TRADE_CONTRACTS_V1, ROUTED_TRADE_REQUEST_V1, ROUTED_TRADE_ROUTER_ABI_V1,
+  parseLaunchPlanTradeRequestV1, ROUTED_FEE_POLICY_V2, ROUTED_FEE_RECIPIENT_V1, ROUTED_TRADE_CONTRACTS_V1, ROUTED_TRADE_REQUEST_V1, ROUTED_TRADE_ROUTER_ABI_V1,
   ROUTED_TRADE_TOKEN_ABI_V1, validateLaunchPlanTradePreparationV1, type LaunchPlanTradeRequestV1 } from "@/lib/custom-launch/routed-trade-plan-v1";
 import { prepareLaunchPlanTradeV1 } from "@/lib/server/custom-launch/routed-trade-plan-v1";
 import { productionTradeRpcsV1, tradePostStateV1, type TradeRpcV1 } from "@/lib/server/custom-launch/routed-trade-rpc-v1";
@@ -45,7 +45,9 @@ function request(): LaunchPlanTradeRequestV1 {
     planHash: projection().planHash, marketId: "unfamiliar-curve", owner: controller, zeroForOne: true, amountIn: "100000", slippageBps: 50,
     deadline: (now + 600n).toString(), hookData: "0x01020304" });
 }
-function fixtureRpc(options: { revert?: boolean; missingFee?: boolean; underpaid?: boolean; overspent?: boolean; contractWallet?: boolean } = {}): TradeRpcV1 {
+function fixtureRpc(options: { revert?: boolean; missingFee?: boolean; underpaid?: boolean; overspent?: boolean; contractWallet?: boolean; rateBps?: 20 | 30 } = {}): TradeRpcV1 {
+  const fee = options.rateBps === 30 ? 150n : 100n;
+  const received = 50001n - fee;
   return vi.fn(async (method, params) => {
     if (method === "eth_chainId") return "0x1237";
     if (method === "eth_getBlockByNumber") return { number: params[0] === "latest" ? "0x3a" : params[0], hash, timestamp: toHex(now) };
@@ -60,7 +62,7 @@ function fixtureRpc(options: { revert?: boolean; missingFee?: boolean; underpaid
       if (decoded.functionName === "decimals") return toHex(18n, { size: 32 });
       if (decoded.functionName === "balanceOf") {
         const owner = String(decoded.args[0]).toLowerCase() === controller;
-        return toHex(owner ? params[2] ? 149901n : 100000n : params[2] ? options.underpaid ? 99n : 100n : 0n, { size: 32 });
+        return toHex(owner ? params[2] ? 100000n + received : 100000n : params[2] ? options.underpaid ? fee - 1n : fee : 0n, { size: 32 });
       }
     }
     if (method === "debug_traceCall") {
@@ -71,7 +73,7 @@ function fixtureRpc(options: { revert?: boolean; missingFee?: boolean; underpaid
         to: ROUTED_TRADE_CONTRACTS_V1.poolManager.address, value: "0x0", gasUsed: "0x2710",
         input: encodeFunctionData({ abi: TAKE, functionName: "take", args: [component, recipient as Hex, amount] }), output: "0x" });
       return { type: "CALL", from: tx.from, to: tx.to, input: tx.data, value: tx.value, output: "0x", gasUsed: "0x186a0",
-        ...(options.revert ? { error: "execution reverted" } : {}), calls: [...(options.missingFee ? [] : [take(ROUTED_FEE_RECIPIENT_V1, 100n)]), take(controller, 49901n)] };
+        ...(options.revert ? { error: "execution reverted" } : {}), calls: [...(options.missingFee ? [] : [take(ROUTED_FEE_RECIPIENT_V1, fee)]), take(controller, received)] };
     }
     throw new Error(`Unexpected fixture method ${method}`);
   });
@@ -135,20 +137,35 @@ function immutablePoolFixture(index = 0, options: { unbacked?: boolean; wrongAcc
 }
 
 describe("generic vNext routed swap", () => {
-  it("uses the fixed routed trade policy for bound open provenance without adding fee assurance", async () => {
+  it("charges 30 bps for current provenance trades and binds the same fee in the wallet transaction", async () => {
     const value = provenanceProjection(), original = structuredClone(value);
     const binding = launchPlanTradeBindingV1(value, request());
-    expect(binding.fee).toEqual({ mode: "programmable_routed", obligationId: ROUTED_FEE_POLICY_V1,
-      policyVersion: ROUTED_FEE_POLICY_V1, scope: "fee_on_programmable_routed_trades", rateBps: 20, routedRateBps: 20,
+    expect(binding.fee).toEqual({ mode: "programmable_routed", obligationId: ROUTED_FEE_POLICY_V2,
+      policyVersion: ROUTED_FEE_POLICY_V2, scope: "fee_on_programmable_routed_trades", rateBps: 30, routedRateBps: 30,
       recipient: ROUTED_FEE_RECIPIENT_V1, base: "gross_output_credit", rounding: "floor", currency: component, poolEnforcementWitness: null });
     expect(binding.projection).toEqual(original);
     expect(value.assuranceClaims.map(claim => claim.claimType)).toEqual(["launch_admission_policy"]);
-    expect(buildLaunchPlanRoutedSwapV1(value, request(), 50001n).data).toBe(sdkVector.buy.transactionData);
-    expect(buildLaunchPlanRoutedSwapV1(value, { ...request(), zeroForOne: false }, 50001n).data).toBe(sdkVector.sell.transactionData);
+    for (const zeroForOne of [true, false]) {
+      const transaction = buildLaunchPlanRoutedSwapV1(value, { ...request(), zeroForOne }, 50001n);
+      const decoded = decodeFunctionData({ abi: ROUTED_TRADE_ROUTER_ABI_V1, data: transaction.data });
+      const [actions, parameters] = decodeAbiParameters([{ type: "bytes" }, { type: "bytes[]" }], decoded.args[1][0]!);
+      expect(actions).toBe("0x060c100f");
+      expect(decodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "uint256" }], parameters[2]!))
+        .toEqual([zeroForOne ? component : ZERO, ROUTED_FEE_RECIPIENT_V1, 30n]);
+      expect(decodeAbiParameters([{ type: "address" }, { type: "uint256" }], parameters[3]!)[1]).toBe(49601n);
+    }
     const trade = await prepareLaunchPlanTradeV1(request(), {
-      loadProjection: async () => value, rpcs: [fixtureRpc(), fixtureRpc()], now: () => now });
-    expect(trade.quote).toMatchObject({ grossAmountOut: "50001", platformFeeAmount: "100", amountOut: "49901", amountOutMinimum: "49651" });
+      loadProjection: async () => value, rpcs: [fixtureRpc({ rateBps: 30 }), fixtureRpc({ rateBps: 30 })], now: () => now });
+    expect(trade.quote).toMatchObject({ grossAmountOut: "50001", platformFeeAmount: "150", amountOut: "49851", amountOutMinimum: "49601" });
     expect(validateLaunchPlanTradePreparationV1(trade, value, request(), now)).toEqual(trade);
+    await expect(prepareLaunchPlanTradeV1(request(), {
+      loadProjection: async () => value, rpcs: [fixtureRpc(), fixtureRpc()], now: () => now }))
+      .rejects.toMatchObject({ code: "ROUTED_FEE_TRANSFER_UNPROVEN" });
+    const { preparationDigest: _digest, ...body } = trade;
+    void _digest;
+    const changed = { ...body, transaction: buildLaunchPlanRoutedSwapV1(projection(), request(), 50001n) };
+    const stale = { ...changed, preparationDigest: launchPlanTradePreparationDigestV1(changed) };
+    expect(() => validateLaunchPlanTradePreparationV1(stale, value, request(), now)).toThrow();
   });
   it("rejects missing, duplicate, forged and unbound open provenance policy claims", () => {
     const value = provenanceProjection(), claim = value.assuranceClaims[0]!;
@@ -188,7 +205,7 @@ describe("generic vNext routed swap", () => {
   it("waives the open provenance route fee only for the existing issued runtime pool proof", async () => {
     const fixture = immutablePoolFixture(0, { provenance: true });
     expect(launchPlanTradeBindingV1(fixture.projection, fixture.request).fee)
-      .toMatchObject({ mode: "programmable_routed", routedRateBps: 20, poolEnforcementWitness: null });
+      .toMatchObject({ mode: "programmable_routed", routedRateBps: 30, poolEnforcementWitness: null });
     expect(() => launchPlanTradeBindingV1(fixture.projection, fixture.request, structuredClone(fixture.proof))).toThrow();
     const trade = await fixture.prepare();
     expect(trade.fee).toMatchObject({ mode: "pool_enforced", routedRateBps: 0, rateBps: 20, scope: "fee_on_proven_pool_paths" });
@@ -197,7 +214,7 @@ describe("generic vNext routed swap", () => {
     const claim = fixture.projection.assuranceClaims[0]!;
     const claimedFee = { ...fixture.projection, assuranceClaims: [{ ...claim,
       witness: { ...claim.witness, details: { ...claim.witness.details, routedRateBps: 0, poolEnforced: true } } }] };
-    expect(launchPlanTradeBindingV1(claimedFee, fixture.request).fee).toMatchObject({ mode: "programmable_routed", routedRateBps: 20 });
+    expect(launchPlanTradeBindingV1(claimedFee, fixture.request).fee).toMatchObject({ mode: "programmable_routed", routedRateBps: 30 });
   });
   it("reuses each exact immutable native20 path without an additional output fee and verifies actual backed accrual", async()=>{
     for(let index=0;index<feeVectors.proofs.length;index++) for(const sell of [false,true]){

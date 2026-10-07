@@ -23,13 +23,13 @@ export default function EconomicsDocsPage() {
       description="Trading fees, recipient shares and protocol revenue are recorded separately for each launch model.">
       <section id="basis">
         <h2>Fee units</h2>
-        <p>One basis point is 0.01%; 20 bps is 0.20%. Gas, initial purchases, liquidity deposits and module operating budgets are separate costs. The launch review shows the selected fees and funding before wallet confirmation.</p>
+        <p>One basis point is 0.01%; 30 bps is 0.30%. Gas, initial purchases, liquidity deposits and module operating budgets are separate costs. The launch review shows the selected fees and funding before wallet confirmation.</p>
       </section>
       <section id="custom">
         <h2>Robinhood Custom Launches</h2>
-        <p>Native20 charges the full 20 bps (0.20%) of gross native ETH per successful buy or sell for Programmable, rounded up to the next wei. Creator fees and Uniswap pool fees are additional. A 1 ETH gross trade accrues 0.002 ETH for Programmable.</p>
-        <p>PoolManager native claims accrue to the fixed platform recipient <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code>. Anyone may trigger a claim, but its payment goes only to that recipient. Creator rewards use a separate balance; a creator fee of zero earns no creator rewards.</p>
-        <p>The supported separate-contract and shared token/hook Native20 paths use this fee model. These Native20 contracts retain their recorded fees. Read the exact launch configuration for earlier deployments.</p>
+        <p>Current Custom Launch Plans use a <strong>0.30% (30 bps)</strong> platform fee on buys and sells prepared by Programmable. It is deducted from the gross output in the output asset, rounded down once. A gross output of 100 tokens pays 0.3 tokens to Programmable before the remaining output reaches the trader. Creator and pool fees are separate.</p>
+        <p>The trade review shows the exact fee, asset and recipient before wallet confirmation. The routed fee is paid to <code>0xD88539d3c4C460136a733A3Fd60cf6BF269079da</code> in the same swap. This pricing applies to Programmable routes; it does not establish a fee on external trades.</p>
+        <p>Earlier signed fee obligations and Native20 pools retain their recorded 0.20% model. When the existing pool fee is verified, Programmable adds no second route fee. Native20 accrues native ETH claims to its fixed recipient; claiming those balances does not create new revenue.</p>
       </section>
       <section id="ethereum">
         <h2>Ethereum Mainnet Custom Hooks</h2>
