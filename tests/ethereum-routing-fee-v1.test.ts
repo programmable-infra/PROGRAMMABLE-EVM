@@ -8,7 +8,7 @@ import { ETHEREUM_ROUTING_FEE_BOUNDARY_V1, ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, 
 import { ETHEREUM_NATIVE30_RECIPES_V1 } from "@/lib/custom-launch/ethereum-native30-recipes-v1";
 import { materializeEthereumNative30RuntimeWordsV1, proveEthereumNative30RuntimeV1, rebuildEthereumNative30RuntimeProofV1,
   type EthereumNative30MarketV1 } from "@/lib/custom-launch/ethereum-native30-runtime-v1";
-import { readEthereumFeeClassificationV1 } from "@/lib/server/custom-launch/ethereum-routing-fee-policy-v1";
+import { readEthereumFeeClassificationV1, type EthereumFeeClassificationStoreV1 } from "@/lib/server/custom-launch/ethereum-routing-fee-policy-v1";
 import { ethereumStampedSwapRoute, ethereumStampedSwapTransaction } from "@/lib/swap/ethereum-stamped";
 import { customTradeRouterAbi } from "@/lib/custom-launch/trade-v1";
 import type { CanonicalTokenExploreEntry } from "@/lib/tokens";
@@ -34,6 +34,17 @@ function fixture() {
   const route = ethereumStampedSwapRoute(entry, classification)!;
   const request = { ...recording.buy.request, amountIn: "1000000000001", routeBindingHash: route.routeBindingHash } as EthereumStampedSwapRequest;
   return { entry, route, request, classification, policy };
+}
+function memoryStore(records = new Map<string, unknown>()): EthereumFeeClassificationStoreV1 {
+  return { read: async key => structuredClone(records.get(key) ?? null), write: async (key, record) => { records.set(key, structuredClone(record)); } };
+}
+function metadataFeed(f: ReturnType<typeof fixture>): FinalizedCustomLaunchMetadataFeedV1 {
+  const stamp = f.entry.launchStampProvenance!;
+  return { launches: [{ launchProfileVersion: "3.6.0", routingFeePolicy: f.policy, projectMetadata: null, chainId: "1",
+    routerLaunchId: stamp.launchId, router: stamp.routerAddress, token: f.entry.tokenAddress, hook: f.entry.hookAddress,
+    poolManager: stamp.poolManagerAddress, poolId: f.entry.poolId,
+    finality: { transactionHash: stamp.transactionHash, blockNumber: stamp.blockNumber, blockHash: stamp.blockHash, logIndex: stamp.launchLogIndex } }]
+  } as unknown as FinalizedCustomLaunchMetadataFeedV1;
 }
 function commands(tx: ReturnType<typeof ethereumStampedSwapTransaction>) {
   const decoded = decodeFunctionData({ abi: customTradeRouterAbi, data: tx.data });
@@ -88,8 +99,8 @@ describe("Ethereum 3.6 routing fee", () => {
   it("never turns an unavailable or absent post-boundary policy into a free route", async () => {
     const f = fixture();
     expect(ethereumStampedSwapRoute(f.entry)).toBeNull();
-    await expect(readEthereumFeeClassificationV1(f.entry, async () => { throw Error("unavailable"); })).rejects.toThrow();
-    await expect(readEthereumFeeClassificationV1(f.entry, async () => ({ launches: [] } as unknown as FinalizedCustomLaunchMetadataFeedV1))).rejects.toThrow();
+    await expect(readEthereumFeeClassificationV1(f.entry, async () => { throw Error("unavailable"); }, memoryStore())).rejects.toThrow();
+    await expect(readEthereumFeeClassificationV1(f.entry, async () => ({ launches: [] } as unknown as FinalizedCustomLaunchMetadataFeedV1), memoryStore())).rejects.toThrow();
     expect(ethereumStampedSwapRoute(f.entry, { ...f.classification, stampHash: `0x${"33".repeat(32)}` })).toBeNull();
   });
   it("binds a canonical fee record even when presentation metadata is missing", async () => {
@@ -98,8 +109,39 @@ describe("Ethereum 3.6 routing fee", () => {
       routerLaunchId: stamp.launchId, router: stamp.routerAddress, token: f.entry.tokenAddress, hook: f.entry.hookAddress,
       poolManager: stamp.poolManagerAddress, poolId: f.entry.poolId,
       finality: { transactionHash: stamp.transactionHash, blockNumber: stamp.blockNumber, blockHash: stamp.blockHash, logIndex: stamp.launchLogIndex } };
-    expect(await readEthereumFeeClassificationV1(f.entry, async () => ({ launches: [metadata] } as unknown as FinalizedCustomLaunchMetadataFeedV1))).toEqual(f.classification);
-    await expect(readEthereumFeeClassificationV1(f.entry, async () => ({ launches: [{ ...metadata, token: zero }] } as unknown as FinalizedCustomLaunchMetadataFeedV1))).rejects.toThrow();
+    expect(await readEthereumFeeClassificationV1(f.entry, async () => ({ launches: [metadata] } as unknown as FinalizedCustomLaunchMetadataFeedV1), memoryStore())).toEqual(f.classification);
+    await expect(readEthereumFeeClassificationV1(f.entry, async () => ({ launches: [{ ...metadata, token: zero }] } as unknown as FinalizedCustomLaunchMetadataFeedV1), memoryStore())).rejects.toThrow();
+  });
+  it("keeps verified routes across cold starts and API outages while the finalized checkpoint advances", async () => {
+    const f = fixture(), records = new Map<string, unknown>();
+    await readEthereumFeeClassificationV1(f.entry, async () => metadataFeed(f), memoryStore(records));
+    const restartedStore = memoryStore(records), unavailable = vi.fn(async () => { throw Error("API down"); });
+    const advanced = structuredClone(f.entry);
+    advanced.launchStampProvenance = { ...advanced.launchStampProvenance!, finalizedAtBlockNumber: "99999999", finalizedAtBlockHash: `0x${"99".repeat(32)}` };
+    expect(await readEthereumFeeClassificationV1(advanced, unavailable, restartedStore)).toEqual(f.classification);
+    expect(unavailable).not.toHaveBeenCalled();
+    const different = structuredClone(f.entry);
+    different.launchStampProvenance = { ...different.launchStampProvenance!, blockHash: `0x${"98".repeat(32)}` };
+    await expect(readEthereumFeeClassificationV1(different, unavailable, restartedStore)).rejects.toThrow("API down");
+  });
+  it("rejects saved policy and identity substitutions instead of authorizing a free route", async () => {
+    const f = fixture(), records = new Map<string, unknown>();
+    await readEthereumFeeClassificationV1(f.entry, async () => metadataFeed(f), memoryStore(records));
+    const [key, original] = [...records][0]!;
+    const record = original as { identityKey: string; classification: EthereumFeeClassificationV1 };
+    records.set(key, { ...record, identityKey: `sha256:${"99".repeat(32)}` });
+    await expect(readEthereumFeeClassificationV1(f.entry, async () => metadataFeed(f), memoryStore(records))).rejects.toThrow("identity");
+    records.set(key, { ...record, classification: { ...record.classification, routingFeePolicy: null } });
+    await expect(readEthereumFeeClassificationV1(f.entry, async () => metadataFeed(f), memoryStore(records))).rejects.toThrow("policy");
+  });
+  it("accepts an identical concurrent insert but requires durable storage before returning a new classification", async () => {
+    const f = fixture(), records = new Map<string, unknown>(), base = memoryStore(records);
+    expect(await readEthereumFeeClassificationV1(f.entry, async () => metadataFeed(f), {
+      ...base, write: async (key, record) => { await base.write(key, record); throw Error("already inserted"); },
+    })).toEqual(f.classification);
+    await expect(readEthereumFeeClassificationV1(f.entry, async () => metadataFeed(f), {
+      read: async () => null, write: async () => { throw Error("store unavailable"); },
+    })).rejects.toThrow("store unavailable");
   });
 });
 
