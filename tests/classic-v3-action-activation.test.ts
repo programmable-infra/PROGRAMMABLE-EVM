@@ -177,6 +177,8 @@ function catalogEntry(releaseVersion: string) {
   const isV4 = releaseVersion === "classic-v4";
   return {
     exploreKind: "token",
+    launchModel: "classic", tokenAddress: token, creatorAddress: account, name: "Classic Token", symbol: "CLS",
+    launchBlockNumber: "25639596", launchTransactionHash,
     launchModelVersion: releaseVersion,
     rewardVaultAddress: vault,
     hookAddress: isV4 ? v4Hook : hook,
@@ -376,7 +378,7 @@ describe("Classic V3 action identity activation", () => {
   });
 
   it.each([true, false])(
-    "uses Envio identity and one RPC when indexed lookup is %s",
+    "uses Codex identity and one RPC when indexed lookup is %s",
     async (indexedEnabled) => {
       mocks.indexedEnabled = indexedEnabled;
 
@@ -469,6 +471,7 @@ describe("Classic V3 action identity activation", () => {
   it("keeps an indexer-activated Classic V4 reward visible on GET", async () => {
     mocks.classicV4Release = classicV4Release(factory, false);
     mocks.catalogReleaseVersion = "classic-v4";
+    mocks.readCatalog.mockResolvedValue({ entries: [catalogEntry("classic-v4")] });
     const client = identityClient();
     mocks.createPublicClient.mockReturnValue(client);
 
@@ -493,6 +496,8 @@ describe("Classic V3 action identity activation", () => {
         platformFeeBps: 10,
       }],
     });
+    expect(client.getLogs).not.toHaveBeenCalled();
+    expect(mocks.readCatalog).toHaveBeenCalledTimes(1);
     expect(client.readContract).toHaveBeenCalledWith(
       expect.objectContaining({
         address: v4Hook,
