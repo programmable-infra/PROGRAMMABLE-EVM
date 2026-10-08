@@ -1568,6 +1568,12 @@ export function selectMonotonicLaunchResource(
   const incomingRank = launchStatusRank[incoming.status];
   if (incomingRank < currentRank) return current;
   if (incomingRank > currentRank) return incoming;
+  // Review decisions have their own revision and need not update the launch row.
+  if (incoming.manualReview && (!current.manualReview
+    || incoming.manualReview.reviewId === current.manualReview.reviewId
+      && incoming.manualReview.revision > current.manualReview.revision)) return incoming;
+  if (current.manualReview && incoming.manualReview?.reviewId === current.manualReview.reviewId
+    && incoming.manualReview.revision < current.manualReview.revision) return current;
   return updatedAtTime(incoming.updatedAt) > updatedAtTime(current.updatedAt)
     ? incoming
     : current;
