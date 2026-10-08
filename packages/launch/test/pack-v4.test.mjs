@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import packageManifest from "../package.json" with { type: "json" };
 
 import solc from "solc";
 
@@ -51,7 +52,7 @@ test("V4 pack builds and revalidates an exact 3-target Robinhood request without
     assert.equal(validation.exactSourceIncluded, true);
     assert.equal(validation.predictions.length, 3);
     assert.equal(first.receipt.apiVersion, "v4");
-    assert.equal(first.receipt.package.version, "4.1.2");
+    assert.equal(first.receipt.package.version, packageManifest.version);
     assert.equal(first.receipt.openapi,
       "https://programmable.market/openapi/custom-launch-v4.json");
     const outputKeys = deepObjectKeys(first);
