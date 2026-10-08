@@ -1,4 +1,5 @@
 "use client";
+import { parseCustomLaunchReview, customLaunchReviewAllowsSigning, customLaunchReviewLabel, customLaunchReviewDescription, type CustomLaunchReview } from "@/lib/custom-launch-review";
 
 import { isGitHubUrl } from "@/lib/public-link-visibility";
 import { PublicExternalLink } from "@/components/public-external-link";
@@ -147,6 +148,7 @@ export type LaunchStatus =
   | "cancelled";
 
 export type LaunchResource = Readonly<{
+  manualReview?: CustomLaunchReview;
   schemaVersion:
     | "programmable.custom-launch.v1"
     | "programmable.custom-launch.v2"
@@ -952,6 +954,7 @@ function parseLaunch(value: unknown, account: string): LaunchResource | null {
     };
   }
   return {
+    ...(value.manualReview === undefined ? {} : { manualReview: parseCustomLaunchReview(value.manualReview) }),
     schemaVersion: value.schemaVersion as LaunchResource["schemaVersion"],
     launchId: value.launchId,
     requestId: value.requestId,
@@ -1134,6 +1137,7 @@ function walletTransaction(launch: LaunchResource) {
 }
 
 function fundingAuthorizationReview(launch: LaunchResource) {
+  if (launch.manualReview && !customLaunchReviewAllowsSigning(launch.manualReview)) return null;
   if (
     launch.routeId !== "custom-launch:create:v3"
     || launch.status !== "awaiting_funding_authorization"
@@ -1152,6 +1156,7 @@ function fundingAuthorizationReview(launch: LaunchResource) {
 }
 
 function routerTransactionReview(launch: LaunchResource) {
+  if (launch.manualReview && !customLaunchReviewAllowsSigning(launch.manualReview)) return null;
   if (
     launch.routeId !== "custom-launch:create:v3"
     || launch.status !== "authorized"
@@ -3643,7 +3648,7 @@ export function DeveloperLaunchHistory({
                     <h3>{projectMetadataSummary?.projectMetadata.token.name ?? `Launch ${shortId(resourceIdentity)}`}</h3>
                   </div>
                   <span className={styles.status} data-status={launch.status}>
-                    {statusCopy(launch.status)}
+                    {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status) ? customLaunchReviewLabel(launch.manualReview) : statusCopy(launch.status)}
                   </span>
                 </div>
                 <details
@@ -3652,7 +3657,7 @@ export function DeveloperLaunchHistory({
                 >
                   <summary>Review launch</summary>
                 <p className={styles.statusDescription}>
-                  {statusDescription(launch.status)}
+                  {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status) ? customLaunchReviewDescription(launch.manualReview) : statusDescription(launch.status)}
                 </p>
                 <details className={styles.detailDisclosure}>
                   <summary>Request details</summary>

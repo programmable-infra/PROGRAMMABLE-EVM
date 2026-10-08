@@ -1,5 +1,6 @@
 "use client";
 
+import { customLaunchReviewAllowsSigning } from "@/lib/custom-launch-review";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { formatEther, type Hex } from "viem";
@@ -27,7 +28,7 @@ export function DeveloperUniversalLaunchFlow({ entry, highlighted = false, autoP
   const plan = entry.sourceVersion === "custom_launch_plan_v1" ? readLaunchPlanResourceV1(resource) : null;
   const id = String(resource.planId ?? resource.launchId);
   const step = plan?.steps.find(item => item.status === "wallet_action_ready");
-  const ready = plan ? !!step && !plan.continuation : ["authorized", "awaiting_wallet_signature", "wallet_action_required"].includes(String(resource.status));
+  const ready = plan ? !!step && !plan.continuation && (!plan.manualReview || customLaunchReviewAllowsSigning(plan.manualReview)) : ["authorized", "awaiting_wallet_signature", "wallet_action_required"].includes(String(resource.status));
   const wallet = projectionObject(resource.wallet) ? resource.wallet : null;
   const summary = wallet && projectionObject(wallet.launchSummary) ? wallet.launchSummary : null;
   const title = plan?.plan.publication?.name ?? (typeof summary?.name === "string" ? summary.name : "Custom project");

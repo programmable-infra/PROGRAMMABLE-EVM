@@ -263,6 +263,7 @@ export interface LaunchPlanContinuationV1 {
 }
 
 export interface LaunchPlanRecordV1 {
+  readonly manualReview?: import("../custom-launch-review").CustomLaunchReview;
   readonly schemaVersion: "programmable.custom-launch-plan-resource.v1";
   readonly planId: string;
   readonly requestId: string;
