@@ -1,4 +1,5 @@
 "use client";
+import { useLaunchStatusPolling } from "./use-launch-status-polling";
 
 import Image from "next/image";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -120,7 +121,6 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const pendingQuote = useRef<{ key: string; promise: Promise<FoundationQuoteAsset | undefined> } | null>(null);
   const lock = useRef(false);
   const refreshLock = useRef(false);
-  const automaticRefreshes = useRef(0);
   const submittedContext = useRef<string | null>(null);
   const launchPreparation = useRef(new FoundationLaunchPreparation());
   const warmLaunch = useRef(onWarmLaunch);
@@ -408,7 +408,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       setPhase("signing");
       errorStage = "wallet";
       const receipt = await onConfirmLaunch(prepared);
-      if (active.current) { automaticRefreshes.current = 0; submittedContext.current = context; setResult(receipt); setPhase("result"); }
+      if (active.current) { submittedContext.current = context; setResult(receipt); setPhase("result"); }
     } catch (caught) {
       launchPreparation.current.invalidate();
       if (active.current) {
@@ -429,15 +429,13 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     finally { refreshLock.current = false; if (active.current) setRefreshing(false); }
   }, [result, onRefreshResult]);
 
-  useEffect(() => {
-    if (phase !== "result" || !result || !onRefreshResult || refreshing || contextKey !== submittedContext.current
-      || automaticRefreshes.current >= 10 || (result.status !== "submitted" && result.status !== "unconfirmed"
-        && !(result.status === "confirmed" && result.verificationStatus === "pending"))) return;
-    // Read only the saved transaction; a delayed receipt must never trigger another wallet request.
-    const timer = window.setTimeout(() => { automaticRefreshes.current += 1; void refreshResult(); },
-      Math.min(2_000 * 2 ** automaticRefreshes.current, 15_000));
-    return () => window.clearTimeout(timer);
-  }, [contextKey, onRefreshResult, phase, refreshResult, refreshing, result]);
+  useLaunchStatusPolling(`${contextKey}:${result?.transactionHash ?? ""}`,
+    phase === "result" && Boolean(result) && Boolean(onRefreshResult) && !refreshing,
+    async () => {
+      if (contextKey !== submittedContext.current || !result || result.status === "reverted"
+        || result.status === "confirmed" && result.verificationStatus !== "pending") return;
+      await refreshResult();
+    }, 15_000);
 
   function edit() {
     if (busy) return;

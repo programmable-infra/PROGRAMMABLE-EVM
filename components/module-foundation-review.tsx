@@ -1,5 +1,4 @@
 "use client";
-import { useLaunchStatusPolling } from "./use-launch-status-polling";
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -135,9 +134,6 @@ export function ModuleFoundationLaunchReview({ review, contextKey, symbol, busy,
 }
 
 export function ModuleFoundationTransactionResult({ result, onRefresh, refreshing = false }: { result: FoundationTransactionResult; onRefresh?: () => void; refreshing?: boolean }) {
-  useLaunchStatusPolling(result.transactionHash, Boolean(onRefresh) && !refreshing
-    && result.status !== "reverted" && (result.status !== "confirmed" || result.verificationStatus === "pending"),
-    () => onRefresh?.(), 10_000);
   const coinUrl = result.tokenUrl && (result.tokenUrl.startsWith("/") && !result.tokenUrl.startsWith("//") || foundationPublicUrl(result.tokenUrl)) ? result.tokenUrl : null;
   if (result.status === "confirmed" && result.verificationStatus === "verified" && coinUrl) return <section className={styles.resultPanel} aria-labelledby="foundation-result-title">
     <div className={styles.simulated}><CheckIcon size={20} aria-hidden="true" /><h2 id="foundation-result-title">Coin created</h2></div>
