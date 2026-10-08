@@ -484,9 +484,14 @@ export function evaluateReadModelOperationsSourceContracts(
         method: "GET",
         path: "/api/ops/health",
         source: "app/api/ops/health/route.ts",
-        status: "index-reset",
-        statusCode: 200,
-        providers: [],
+        reader: "lib/server/operations-health.ts",
+        schemaVersion: "programmable.operations-health.v2",
+        scope: "website-launch-indexes",
+        statuses: ["ready", "degraded", "unavailable"],
+        unavailableStatusCode: 503,
+        providerHealth: "not-checked",
+        readTimeoutMs: 5000,
+        cacheTtlMs: 15000,
       }) &&
       exactJson(
         retiredOperations,
@@ -522,7 +527,7 @@ export function evaluateReadModelOperationsSourceContracts(
         exactDeploymentBinding: true,
         manualRollback: true,
       }),
-    "the manifest exposes one intentional zero-provider Explore reset without changing Custom Launch, claims, API keys or protocol revenue",
+    "the manifest retains the zero-provider legacy Explore reset and binds separate observed catalog health without changing Custom Launch, claims, API keys or protocol revenue",
   );
 
   const resetHelper = source(RESET_HELPER_PATH);
@@ -567,14 +572,27 @@ export function evaluateReadModelOperationsSourceContracts(
     "the five Explore reads preserve local validation and then return only the static reset response",
   );
 
+  const healthRoute = source(operations?.health?.source);
+  const healthReader = source(operations?.health?.reader);
   check(
-    "ops-health-index-reset",
-    hasNoIndexingCapability(source(operations?.health?.source)) &&
-      source(operations?.health?.source)?.includes('status: "index-reset"') &&
-      source(operations?.health?.source)?.includes("providers: []") &&
-      source(operations?.health?.source)?.includes("status: 200") &&
-      source(operations?.health?.source)?.includes('"X-Programmable-Indexing-Status": "reset"'),
-    "health reports the intentional reset and an empty provider set without consulting provider state",
+    "ops-health-catalog-observations",
+    hasOnlyAllowedImports(healthRoute, new Set(["next/server", "@/lib/server/operations-health"])) &&
+      healthRoute?.includes("await readOperationsHealth()") &&
+      healthRoute.includes('health.status === "unavailable" ? 503 : 200') &&
+      healthRoute.includes('"Cache-Control": "no-store"') &&
+      healthRoute.includes('"X-Programmable-Indexing-Status": health.status') &&
+      typeof healthReader === "string" &&
+      importedSpecifiers(healthReader).every(specifier => ["server-only", "./ethereum-explore", "./robinhood-index/read"].includes(specifier)) &&
+      !/(?:\bfetch\s*\(|\bprocess\.env\b|\bcreate(?:Public|Wallet)Client\b|\bimport\s*\()/u.test(healthReader) &&
+      healthReader.includes("ethereum: readEthereumExploreCatalog, robinhood: readRobinhoodExploreCatalog") &&
+      healthReader.includes("const CACHE_TTL_MS = 15_000;") &&
+      healthReader.includes("const READ_TIMEOUT_MS = 5_000;") &&
+      healthReader.includes('schemaVersion: "programmable.operations-health.v2"') &&
+      healthReader.includes('scope: "website-launch-indexes"') &&
+      healthReader.includes('health: "not-checked"') &&
+      healthReader.includes("https://api.programmable.market/readyz") &&
+      healthReader.includes("https://api.programmable.market/v4/chains/4663/custom-launch-plans/readiness"),
+    "health reuses bounded cached catalog observations, distinguishes unmeasured provider health and links separate Custom Launch API readiness",
   );
 
   check(

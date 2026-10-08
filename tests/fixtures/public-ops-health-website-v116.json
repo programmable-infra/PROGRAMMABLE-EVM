@@ -1,0 +1,56 @@
+{
+  "operation": {
+    "operationId": "getOperationsHealth",
+    "summary": "Read the Explore indexing state",
+    "description": "Reports the intentional provider-free Explore index reset. It performs no provider or indexer health check.",
+    "tags": [
+      "Operations"
+    ],
+    "security": [],
+    "responses": {
+      "200": {
+        "description": "Provider-free Explore index reset state.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/OperationsHealth"
+            }
+          }
+        },
+        "headers": {
+          "Cache-Control": {
+            "description": "Reset responses are never stored by clients or shared caches.",
+            "schema": {
+              "const": "no-store"
+            }
+          },
+          "X-Programmable-Indexing-Status": {
+            "description": "Explore indexing is intentionally reset while it is rebuilt.",
+            "schema": {
+              "const": "reset"
+            }
+          }
+        }
+      }
+    }
+  },
+  "schema": {
+    "type": "object",
+    "description": "Provider-free status for the intentional Explore indexing reset.",
+    "required": [
+      "status",
+      "providers"
+    ],
+    "properties": {
+      "status": {
+        "const": "index-reset"
+      },
+      "providers": {
+        "type": "array",
+        "maxItems": 0,
+        "items": false
+      }
+    },
+    "additionalProperties": false
+  }
+}

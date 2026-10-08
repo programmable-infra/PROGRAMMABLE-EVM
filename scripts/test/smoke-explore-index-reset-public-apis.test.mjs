@@ -129,8 +129,20 @@ function responseSpec(url, method) {
   if (url.pathname === "/api/ops/health") {
     assert.equal(method, "GET");
     return {
-      body: { status: "index-reset", providers: [] },
-      headers: RUNTIME_HEADERS,
+      body: {
+        schemaVersion: "programmable.operations-health.v2", scope: "website-launch-indexes", status: "ready", checkedAt: NOW,
+        indexes: [
+          { chainId: 1, status: "ready", updatedAt: NOW, catalogUrl: "https://programmable.market/api/explore/ethereum" },
+          { chainId: 4663, status: "ready", updatedAt: NOW, catalogUrl: "https://programmable.market/api/explore/robinhood" },
+        ],
+        providers: [{ name: "codex", roles: ["ethereum-classic-launch-discovery", "ethereum-and-robinhood-market-data"], health: "not-checked" }],
+        customLaunchReadiness: [
+          { chainId: 1, readinessUrl: "https://api.programmable.market/readyz", capabilitiesUrl: "https://api.programmable.market/v3/capabilities" },
+          { chainId: 4663, readinessUrl: "https://api.programmable.market/v4/chains/4663/custom-launch-plans/readiness",
+            capabilitiesUrl: "https://api.programmable.market/v4/chains/4663/custom-launch-capabilities" },
+        ],
+      },
+      headers: { ...RUNTIME_HEADERS, "x-programmable-indexing-status": "ready" },
       status: 200,
     };
   }
@@ -180,6 +192,8 @@ test("staged smoke verifies every public and runtime reset contract in parallel"
     publicRoutesChecked: 6,
     retiredOperationsChecked: 10,
     providerCallsExpected: 0,
+    providerCallsScope: "legacy-reset-routes",
+    healthScope: "website-launch-indexes",
   });
   assert.equal(fixture.calls.length, 16);
   assert.equal(
@@ -380,6 +394,24 @@ test("smoke rejects chart and profile schema drift", async () => {
   );
 });
 
+test("smoke accepts accurate degraded and unavailable catalog health", async () => {
+  for (const state of ["degraded", "unavailable"]) {
+    const fixture = resetFetch(({ spec, url }) => {
+      if (url.pathname !== "/api/ops/health") return spec;
+      const body = { ...spec.body, status: state, indexes: spec.body.indexes.map((index, position) =>
+        state === "unavailable" || position === 0 ? { ...index, status: "unavailable", updatedAt: null } : index) };
+      return { ...spec, body, status: state === "unavailable" ? 503 : 200,
+        headers: { ...spec.headers, "x-programmable-indexing-status": state } };
+    });
+    const result = await runStagedExploreIndexResetSmokeV1({
+      environment: stagedEnvironment(), fetchImpl: fixture.fetchImpl,
+      appendOutput: () => undefined, now: () => new Date(NOW),
+    });
+    assert.equal(result.healthScope, "website-launch-indexes");
+    assert.equal(result.providerCallsScope, "legacy-reset-routes");
+  }
+});
+
 test("smoke rejects retired operation, paused trigger, and health drift", async () => {
   const scenarios = [
     ({ spec, url }) => url.pathname === "/api/ops/index-v2"
@@ -390,6 +422,12 @@ test("smoke rejects retired operation, paused trigger, and health drift", async 
       : spec,
     ({ spec, url }) => url.pathname === "/api/ops/health"
       ? { ...spec, body: { ...spec.body, providers: [{ name: "legacy" }] } }
+      : spec,
+    ({ spec, url }) => url.pathname === "/api/ops/health"
+      ? { ...spec, body: { ...spec.body, providers: [{ ...spec.body.providers[0], health: "healthy" }] } }
+      : spec,
+    ({ spec, url }) => url.pathname === "/api/ops/health"
+      ? { ...spec, body: { ...spec.body, indexes: spec.body.indexes.map(index => ({ ...index, status: "unavailable" })) } }
       : spec,
   ];
   for (const mutate of scenarios) {

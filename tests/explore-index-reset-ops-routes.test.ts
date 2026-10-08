@@ -4,8 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { POST as acknowledgeAlchemyWebhook } from
   "../app/api/alchemy/webhook/route";
-import { GET as readIndexResetHealth } from
-  "../app/api/ops/health/route";
 import { GET as retireAlchemyLaunchRefresh } from
   "../app/api/ops/alchemy-launch-refresh/route";
 import { GET as retireIndexV2 } from "../app/api/ops/index-v2/route";
@@ -128,18 +126,6 @@ describe("displayed-coin indexing reset operations", () => {
       status: "paused",
       code: "indexing_reset",
       operation,
-    });
-    expect(network).not.toHaveBeenCalled();
-  });
-
-  it("reports a deterministic provider-free health state", async () => {
-    const response = readIndexResetHealth();
-
-    expect(response.status).toBe(200);
-    assertResetHeaders(response);
-    await expect(response.json()).resolves.toEqual({
-      status: "index-reset",
-      providers: [],
     });
     expect(network).not.toHaveBeenCalled();
   });

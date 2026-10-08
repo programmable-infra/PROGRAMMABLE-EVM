@@ -28,3 +28,29 @@ evidence, including launches that have not created a market yet. Their market
 observations come from Codex. Claims continue to read contract balances and
 beneficiaries. Envio is no longer a live website catalog dependency. Historical
 release artifacts remain evidence of previous deployments.
+
+## Website indexing health
+
+[`GET /api/ops/health`](https://programmable.market/api/ops/health) reports
+`programmable.operations-health.v2` for the Ethereum and Robinhood website
+launch indexes. It reads the same verified catalogs as the chain Explore routes.
+Each read is bounded to five seconds and concurrent requests share an observation
+cached for 15 seconds. `checkedAt` is the observation time; each index's
+`updatedAt` is its catalog source time.
+
+The overall status is `ready` only when both indexes are ready, `unavailable`
+when both are unavailable, and `degraded` for partial, syncing, stale or mixed
+availability. An empty current catalog can be ready. Responses use `no-store`;
+both unavailable returns HTTP 503, while ready and degraded return HTTP 200.
+Legacy Explore reset routes retain their own status.
+
+The `providers` field identifies Codex's data roles with `health: not-checked`.
+Catalog readiness is not a direct probe of Codex's service or indexing watermark.
+
+Indexing health does not establish launch or simulator availability. Use the
+separate `customLaunchReadiness` links: Ethereum
+[`/readyz`](https://api.programmable.market/readyz) and
+[`/v3/capabilities`](https://api.programmable.market/v3/capabilities), or Robinhood
+[`custom-launch-plans/readiness`](https://api.programmable.market/v4/chains/4663/custom-launch-plans/readiness)
+and [`custom-launch-capabilities`](https://api.programmable.market/v4/chains/4663/custom-launch-capabilities).
+Require the selected chain's current create authorization before submitting.
