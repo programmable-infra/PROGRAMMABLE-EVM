@@ -26,11 +26,11 @@ function AccountReviews({ account }: { account: string }) {
   const request = useCallback(async (reviewId?: string, decision?: { review: ReviewDetail; choice: "approve" | "reject"; reason: string }) => {
     if (!account) throw new Error("Connect an admin wallet.");
     const [token, identityToken] = await Promise.all([getAccessToken(), getIdentityToken()]);
-    if (!token || !identityToken || !active.current) throw new Error("Reconnect your admin wallet.");
+    if (!token || !active.current) throw new Error("Reconnect your admin wallet.");
     const query = new URLSearchParams({ walletAddress: account });
     if (reviewId && !decision) query.set("reviewId", reviewId);
     const response = await fetch(`/api/admin/custom-launch-reviews?${query}`, {
-      method: decision ? "POST" : "GET", cache: "no-store", headers: { Authorization: `Bearer ${token}`, "X-Privy-Identity-Token": identityToken, "Content-Type": "application/json" },
+      method: decision ? "POST" : "GET", cache: "no-store", headers: { Authorization: `Bearer ${token}`, ...(identityToken ? { "X-Privy-Identity-Token": identityToken } : {}), "Content-Type": "application/json" },
       body: decision ? JSON.stringify({ reviewId: decision.review.reviewId, subjectHash: decision.review.subjectHash, revision: decision.review.revision, decision: decision.choice, reason: decision.reason }) : undefined,
     });
     const value = await response.json();
@@ -72,7 +72,7 @@ function AccountReviews({ account }: { account: string }) {
   return <>
       <button disabled={busy} onClick={() => void load()}>Refresh</button>
       <div className={styles.layout}><section aria-label="Launch review queue">
-        {!busy && reviews.length === 0 && <p>No launches awaiting review.</p>}
+        {!busy && !error && reviews.length === 0 && <p>No launches awaiting review.</p>}
         {reviews.map(review => <button className={styles.row} key={review.reviewId} disabled={busy} onClick={() => void select(review.reviewId)}>
           <strong>{review.chainId === "1" ? "Ethereum" : "Robinhood"} · {customLaunchReviewLabel(review)}</strong>
           <span>{review.controller}</span><small>{new Date(review.submittedAt).toLocaleString()}</small>
