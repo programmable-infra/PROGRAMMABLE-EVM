@@ -1238,13 +1238,18 @@ assertJsonEqual(
 assert.match(licenseSource, /^MIT License\n/u, "CLI license file must contain the MIT grant");
 assert.match(
   readmeSource,
-  /## Install the current public Ethereum V3 release/u,
-  "packaged README must scope public installation to Ethereum V3",
+  /## Verify the historical Ethereum 3\.3\.9 release/u,
+  "packaged README must identify the earlier Ethereum release as historical",
 );
 assert.match(
   readmeSource,
-  /published CLI `3\.3\.9`/u,
-  "packaged README must identify the exact published V3 CLI",
+  /historical CLI `3\.3\.9` artifact for profile `3\.3\.0` compatibility/u,
+  "packaged README must bind the historical V3 CLI to its compatible profile",
+);
+assert.match(
+  readmeSource,
+  /For fresh Ethereum packs, read current capabilities and verify a published client supporting that exact profile\./u,
+  "packaged README must direct new Ethereum packs to the active profile and a compatible published client",
 );
 assertV4ReleaseInstructions(readmeSource, "packaged README");
 assertV4ReleaseInstructions(v4ExampleReadmeSource, "V4 example README");
