@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { WEBSITE_ADMIN_WALLET } from "../lib/admin-access";
 import { createManualReviewBridgeV1 } from "../lib/server/custom-launch/manual-review-bridge-v1";
-import { customLaunchReviewAllowsSigning, customLaunchReviewLabel, type CustomLaunchReview } from "../lib/custom-launch-review";
+import { customLaunchReviewAllowsSigning, customLaunchReviewDescription, customLaunchReviewLabel, type CustomLaunchReview } from "../lib/custom-launch-review";
 
 const review: CustomLaunchReview = { schemaVersion: "programmable.custom-launch-manual-review.v1", reviewId: "10000000-0000-4000-8000-000000000001",
   subjectHash: `sha256:${"1".repeat(64)}`, chainId: "1", controller: WEBSITE_ADMIN_WALLET, state: "approved", revision: 2,
@@ -18,6 +18,14 @@ function request(body: unknown) { return new Request(`https://programmable.marke
 }); }
 const decision = { reviewId: review.reviewId, subjectHash: review.subjectHash, revision: 1, decision: "approve", reason: "Reviewed" };
 describe("manual launch approval", () => {
+  it("shows a fresh server approval without enabling signing before its start time", () => {
+    const now = Date.parse(review.approvedAt!) - 500;
+    expect(customLaunchReviewLabel(review, now)).toBe("Approved");
+    expect(customLaunchReviewAllowsSigning(review, now)).toBe(false);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try { expect(customLaunchReviewDescription(review)).toMatch(/^Approved\. Launch by /); }
+    finally { clock.mockRestore(); }
+  });
   it("only enables signing inside the exact approval window", () => {
     expect(customLaunchReviewAllowsSigning(review, Date.parse(review.approvedAt!))).toBe(true);
     expect(customLaunchReviewAllowsSigning(review, Date.parse(review.expiresAt!))).toBe(false);
