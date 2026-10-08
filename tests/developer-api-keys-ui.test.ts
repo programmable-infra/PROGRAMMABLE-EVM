@@ -821,6 +821,19 @@ describe("developer API key interface", () => {
 });
 
 describe("developer launch history interface", () => {
+  it("refreshes review decisions even when the launch timestamp is unchanged", () => {
+    const review = { schemaVersion: "programmable.custom-launch-manual-review.v1" as const,
+      reviewId: "20000000-0000-4000-8000-000000000001", subjectHash: `sha256:${"ab".repeat(32)}`,
+      chainId: "1" as const, controller: "0x" + "11".repeat(20), state: "pending" as const,
+      revision: 1, submittedAt: "2026-10-09T00:00:00Z", approvedAt: null, expiresAt: null, reason: null };
+    const current = { ...v3Launch("prepared", 1), manualReview: review };
+    const changed = { ...current, manualReview: { ...review, state: "rejected" as const, revision: 2, reason: "Refresh the deadline" } };
+    expect(selectMonotonicLaunchResource(current, changed)).toBe(changed);
+    expect(selectMonotonicLaunchResource(changed, current)).toBe(changed);
+    const finalized = { ...changed, status: "finalized" as const };
+    expect(selectMonotonicLaunchResource(finalized, changed)).toBe(finalized);
+  });
+
   it("accepts compact authorized V2 list rows and defers output to detail", () => {
     const resource = {
       schemaVersion: "programmable.custom-launch.v2",

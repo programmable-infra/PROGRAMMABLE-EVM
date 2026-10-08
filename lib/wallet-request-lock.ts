@@ -1,3 +1,6 @@
+import { errorIsExplicitWalletRejection } from "./wallet-rejection";
+export { errorIsExplicitWalletRejection } from "./wallet-rejection";
+
 const WALLET_REQUEST_LOCK_PREFIX = "programmable:wallet-request:v1";
 const WALLET_REQUEST_TAB_KEY = "programmable:wallet-request-tab:v1";
 const WALLET_REQUEST_CHANGE_EVENT = "programmable:wallet-request-lock-change";
@@ -176,21 +179,6 @@ function browserRuntime(): WalletRequestLockRuntime {
   });
 }
 
-export function errorIsExplicitWalletRejection(error: unknown): boolean {
-  const queue: unknown[] = [error];
-  const seen = new Set<object>();
-  // Provider and SDK wrappers commonly preserve the EIP-1193 rejection in cause/originalError.
-  for (let index = 0; index < queue.length && index < 16; index++) {
-    const value = queue[index];
-    if (!value || typeof value !== "object" || Array.isArray(value) || seen.has(value)) continue;
-    seen.add(value);
-    const item = value as Record<string, unknown>;
-    if (item.code === 4001 || item.code === "4001"
-      || (typeof item.message === "string" && /user rejected|user denied/iu.test(item.message))) return true;
-    queue.push(item.cause, item.error, item.data, item.originalError);
-  }
-  return false;
-}
 
 function removeExactLease(
   runtime: WalletRequestLockRuntime,

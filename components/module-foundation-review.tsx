@@ -137,8 +137,9 @@ export function ModuleFoundationTransactionResult({ result, onRefresh, refreshin
   const coinUrl = result.tokenUrl && (result.tokenUrl.startsWith("/") && !result.tokenUrl.startsWith("//") || foundationPublicUrl(result.tokenUrl)) ? result.tokenUrl : null;
   if (result.status === "confirmed" && result.verificationStatus === "verified" && coinUrl) return <section className={styles.resultPanel} aria-labelledby="foundation-result-title">
     <div className={styles.simulated}><CheckIcon size={20} aria-hidden="true" /><h2 id="foundation-result-title">Coin created</h2></div>
-    <p role="status">Opening your coin…</p>
-    <div className={styles.actions}><Link className={styles.primaryButton} href={coinUrl}>View Coin <ArrowUpRightIcon size={16} aria-hidden="true" /></Link></div>
+    <p role="status">Your launch is confirmed onchain. Opening your coin…</p>
+    {result.metadataStatus !== "indexed" ? <p className={styles.help}>Explore indexing is still being confirmed. Your coin page opens independently.</p> : null}
+    <div className={styles.actions}><Link className={styles.primaryButton} href={coinUrl}>View Coin <ArrowUpRightIcon size={16} aria-hidden="true" /></Link><Link className={styles.secondaryButton} href="/profile">Creator rewards</Link></div>
     <details className={styles.transactionDetails}><summary>Transaction details</summary><FoundationAddress value={result.transactionHash} label="transaction hash" />
       {foundationPublicUrl(result.explorerUrl) ? <a className={styles.textButton} href={result.explorerUrl} target="_blank" rel="noreferrer">View transaction <ArrowUpRightIcon size={16} aria-hidden="true" /></a> : null}
     </details>

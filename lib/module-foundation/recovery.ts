@@ -1,4 +1,4 @@
-/** Bounded read-only recovery. The caller still verifies the exact transaction before clearing its record. */
+/** Read-only recovery with bounded frequency while the page is visible. The caller still verifies the exact transaction before clearing its record. */
 export function watchFoundationRecovery({ reconcile, visible }: {
   reconcile: () => Promise<unknown>;
   visible: () => boolean;
@@ -11,7 +11,9 @@ export function watchFoundationRecovery({ reconcile, visible }: {
     timer = setTimeout(async () => {
       if (cancelled || !visible()) return;
       try { await reconcile(); }
-      catch { if (!cancelled && ++attempt < delays.length) schedule(); }
+      catch {
+        if (!cancelled) { attempt = Math.min(attempt + 1, delays.length - 1); schedule(); }
+      }
     }, delays[attempt]);
   };
   schedule();

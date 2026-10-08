@@ -1,5 +1,7 @@
 # Programmable Custom Launch API
 
+For pending reviews, provider errors and delayed indexing, follow the [launch status and recovery guide](/developers/custom-launch-recovery-v1.md). It explains the API next-action headers and when to poll, repair or use the wallet handoff.
+
 Start with [Launch through the API](https://programmable.market/docs/developers/custom-launch-quickstart) for network selection, API keys, fees, funding, submission and recovery. This document is the detailed reference for the supported request versions. Use the selected API's schema and client together.
 
 ## Shared token and hook: MultiRole V2
@@ -23,7 +25,7 @@ The 4.1 funding and CLI instructions below apply to that existing profile; Multi
 
 ## Fees and analytics
 
-Robinhood Native20 Custom Launches charge **20 bps (0.20%)** for Programmable per successful buy or sell, separately from creator and pool fees. The [fees guide](https://programmable.market/docs/economics) defines the calculation and claim path. The [Dune dashboard](https://dune.com/programmablehq/analytics) reports finalized Custom Launch stamps, creator rewards in ETH and protocol revenue in ETH. Fee totals include unclaimed accruals from supported native fee events; gas, liquidity, withdrawals and historical fee models without those events are excluded. The dashboard refreshes every 24 hours.
+Current Programmable-routed Custom Launch trades on Ethereum and Robinhood charge **30 bps (0.30%)** for the platform, separately from creator and pool fees. External routing is a separate capability and does not imply this fee is hook-enforced everywhere. Historical Robinhood Native20 contracts retain their deployed 20 bps fee model. The [fees guide](https://programmable.market/docs/economics) defines the calculation and claim path. The [Dune dashboard](https://dune.com/programmablehq/analytics) reports finalized Custom Launch stamps, creator rewards in ETH and protocol revenue in ETH. Fee totals include unclaimed accruals from supported native fee events; gas, liquidity, withdrawals and historical fee models without those events are excluded. The dashboard refreshes every 24 hours.
 
 ## Start with the launch details
 

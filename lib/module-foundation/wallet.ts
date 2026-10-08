@@ -1,3 +1,4 @@
+import { errorIsExplicitWalletRejection } from "../wallet-rejection";
 import { findFoundationTransactionByNonce } from "./transaction-by-nonce";
 import { decodeFoundationEthereumTransaction } from "./ethereum-graph";
 import { assertFoundationEthereumTransaction } from "./ethereum-graph-builder";
@@ -293,7 +294,7 @@ export async function submitFoundationWalletStep(value: FoundationWalletPreparat
       return hash;
     } catch (error) {
       const failure = error as { code?: number; walletRequestAttempted?: boolean; walletRequestRejected?: boolean };
-      if (failure.walletRequestAttempted === false || failure.walletRequestRejected === true || failure.code === 4001) {
+      if (failure.walletRequestAttempted === false || errorIsExplicitWalletRejection(error)) {
         // Cancelling a retry cannot prove that the original wallet request was cancelled too.
         if (previous) localStorage.setItem(storeKey(value.account, value.transaction.chainId), JSON.stringify(previous));
         else localStorage.removeItem(storeKey(value.account, value.transaction.chainId));

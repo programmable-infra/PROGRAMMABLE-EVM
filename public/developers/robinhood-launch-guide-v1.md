@@ -1,5 +1,7 @@
 # Robinhood launch workflow
 
+For pending reviews, provider errors and delayed indexing, follow the [launch status and recovery guide](/developers/custom-launch-recovery-v1.md). It explains the API next-action headers and when to poll, repair or use the wallet handoff.
+
 Check architecture coverage before building a launch for Robinhood Chain Mainnet (`4663`, `eip155:4663`). This guide
 connects the public reports, API credentials, preflight, immutable request and wallet handoff. It does not activate
 a deployment or authorize a request.

@@ -8,6 +8,17 @@ const account = `0x${"12".repeat(20)}`;
 const connected = { account, chainId: "0x1237", authenticated: true, sessionReady: true };
 
 describe("Module Mode wallet boundary", () => {
+  it("clears explicit cancellations inside provider wrappers but preserves uncertain sends", () => {
+    for (const error of [{ data: { originalError: { code: "4001" } } }, { error: { name: "UserRejectedRequestError" } }]) {
+      expect(isModuleModeWalletRejection(error)).toBe(true);
+      expect(moduleModeSubmissionIsUncertain(error, true)).toBe(false);
+    }
+    const timeout = { code: -32603, data: { originalError: { message: "RPC timed out" } } };
+    expect(moduleModeSubmissionIsUncertain(timeout, true)).toBe(true);
+    const circular: { cause?: unknown } = {}; circular.cause = circular;
+    expect(moduleModeSubmissionIsUncertain(circular, true)).toBe(true);
+  });
+
   it("switches through the wallet context's decimal network contract before allowing preparation", async () => {
     const state = { ...connected, chainId: "0x1" };
     const switchNetwork = vi.fn(async (chainId: string) => {

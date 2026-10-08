@@ -47,6 +47,10 @@ const control = {
 };
 declare global { interface Window { __customLaunchFixture: typeof control } }
 window.__customLaunchFixture = control;
+if (mode === "manual-review") record = { ...record, status: "accepted", steps: [],
+  manualReview: { schemaVersion: "programmable.custom-launch-manual-review.v1", reviewId: "20000000-0000-4000-8000-000000000001",
+    subjectHash: `sha256:${"ab".repeat(32)}`, chainId: "4663", controller, state: "pending", revision: 1,
+    submittedAt: new Date().toISOString(), approvedAt: null, expiresAt: null, reason: null } };
 if (mode === "stamp") record = { ...record, steps: [ { ...record.steps[0], status: "final", transactionHash: hash },
   bindStep({ ...record.steps[0], stepId: "stamp", actionIds: ["platform:stampPlanV1"], transaction: { ...record.steps[0].transaction, nonce: "8" } }) ] };
 if (mode === "issuer") record = { ...record, status: "analysis_pending", steps: [{ ...record.steps[0], status: "final", transactionHash: hash }] };
@@ -125,4 +129,8 @@ function SessionRefreshFixture() {
       }} /></>;
 }
 createRoot(document.getElementById("root")!).render(<main className={`${styles.page} page-width`}><header className={styles.hero}><div><p style={{ color: "var(--webde-muted)", fontSize: 12 }}>Local QA fixture · no real wallet or funds</p><h1>Launch history</h1><p className={styles.intro}>Track progress and complete your wallet steps.</p></div></header>
+  {mode === "manual-review" ? <button onClick={() => {
+    record = { ...record, manualReview: { ...record.manualReview!, state: "rejected", revision: 2,
+      reason: "Please clarify liquidity ownership before approval." } };
+  }}>Fixture: request changes</button> : null}
   {mode === "session-refresh" ? <SessionRefreshFixture /> : <DeveloperUniversalLaunchHistory account={controller} initialLaunchId={record.planId} getAccessToken={async () => "fixture-session"} getIdentityToken={async () => null} sendWallet={sendWallet} />}</main>);
