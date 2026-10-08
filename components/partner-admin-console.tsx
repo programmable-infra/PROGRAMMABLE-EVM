@@ -680,7 +680,7 @@ export function PartnerAdminConsole() {
       </p>
       <header className={styles.hero}>
         <div>
-          <p className={styles.kicker}><Link href="/admin/modules">Admin Dashboard</Link> · Partners</p>
+          <p className={styles.kicker}><Link href="/admin/modules">Admin Dashboard</Link> · <Link href="/admin/custom-launch-reviews">Custom launch reviews</Link> · Partners</p>
           <h1>Partner access</h1>
           <p>
             Give a partner its own launch infrastructure without sharing a

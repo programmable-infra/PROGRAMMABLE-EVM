@@ -1,3 +1,4 @@
+import { customLaunchReviewAllowsSigning, customLaunchReviewDescription, customLaunchReviewLabel } from "../custom-launch-review";
 import type { LaunchPlanRecordV1, LaunchWalletStepV1 } from "./launch-plan-v1";
 import type { Hex } from "viem";
 
@@ -41,6 +42,9 @@ export function launchFlowStateV1(record: LaunchPlanRecordV1): { title: string; 
   if (waiting) return { title: waiting.status === "mined" ? "Waiting for finality" : "Transaction submitted", description: atomic
     ? "Tracking your combined launch and Stamp automatically. Your program opens after independent finality and website indexing."
     : "Tracking continues automatically. The next wallet step becomes available after this transaction is independently final.", terminal: false };
+  if (record.manualReview && !customLaunchReviewAllowsSigning(record.manualReview)) return {
+    title: customLaunchReviewLabel(record.manualReview), description: customLaunchReviewDescription(record.manualReview), terminal: false,
+  };
   if (record.continuation?.status === "replan_required") return { title: "Launch update required",
     description: "The launch service has changed. Ask your bot to replan this launch using its completed steps. Keep this launch ID and every transaction receipt.", terminal: false };
   const ready = record.steps.find(step => step.status === "wallet_action_ready");

@@ -112,6 +112,7 @@ export function ModuleReviewAdminConsole() {
       <details className={styles.tools} onKeyDown={event => { if (event.key === "Escape") { event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
         <summary><Settings2 size={17} aria-hidden="true" />Tools<ChevronDown size={14} aria-hidden="true" /></summary>
         <div className={styles.toolsMenu}>
+          <Link className={styles.textLink} href="/admin/custom-launch-reviews">Custom launch reviews <ArrowRight size={15} aria-hidden="true" /></Link>
           <Link className={styles.textLink} href="/admin/partners">Partner access <ArrowRight size={15} aria-hidden="true" /></Link>
           {account && <PublicationSessionDownload ready={publicationReady} readSession={() => publicationSession.current}
             getAccessToken={getAccessToken} getIdentityToken={getIdentityToken} />}

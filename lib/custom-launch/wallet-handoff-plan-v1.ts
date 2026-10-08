@@ -1,3 +1,4 @@
+import { parseCustomLaunchReview, customLaunchReviewAllowsSigning } from "../custom-launch-review";
 import { getAddress, getContractAddress, keccak256, sha256, stringToHex, toHex, type Address, type Hex } from "viem";
 import { canonicalBrowserJsonV2, canonicalBrowserSha256V2 } from "./browser-authority-v2";
 import { computeExpectedGraphResultHashV2, computeStampRequestHashV2, decodeCustomGraphRouteV2, decodeLaunchAndStampV2, encodeLaunchAndStampV2, permitDigestV2 } from "./multi-role-router-codec-v2";
@@ -60,6 +61,7 @@ export function readLaunchPlanResourceV1(value: unknown): LaunchPlanRecordV1 {
     || !["atomic_graph_v2", "atomic_execute_and_stamp_v2", "controller_multi_step_v1", "observe_and_stamp_v1"].includes(String(plan.executor))
     || !Array.isArray(plan.components) || !Array.isArray(plan.actions) || !Array.isArray(plan.dependencies)
     || !Array.isArray(plan.expectedEffects) || !Array.isArray(plan.markets) || !projectionObject(plan.budgets)) return fail();
+  if (resource.manualReview !== undefined) parseCustomLaunchReview(resource.manualReview);
   if (resource.walletUrl !== undefined && resource.walletUrl !== launchPlanWalletUrlV1(resource.planId)) return fail("The website handoff does not match this launch.");
   if (resource.continuation !== undefined) {
     const continuation = record(resource.continuation);
@@ -147,6 +149,7 @@ export async function prepareUniversalLaunchWalletV1(provider: LaunchWalletProvi
   if (input.sourceVersion === "custom_launch_plan_v1") {
     const original = readLaunchPlanResourceV1(input.reviewedResource);
     const current = readLaunchPlanResourceV1(fresh);
+    if (current.manualReview && !customLaunchReviewAllowsSigning(current.manualReview, nowMilliseconds)) return fail("This launch needs Programmable approval before signing.");
     if (current.continuation) return fail("This launch needs an updated plan. Ask your bot to replan using the existing completed steps.");
     if (original.planId !== current.planId || original.planHash !== current.planHash || current.plan.controller.address.toLowerCase() !== controller.toLowerCase()
       || !["wallet_action_ready", "broadcast", "mined"].includes(current.status)) return fail();

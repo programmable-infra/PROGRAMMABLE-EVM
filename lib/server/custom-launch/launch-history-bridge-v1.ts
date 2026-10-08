@@ -1,4 +1,5 @@
 import "server-only";
+import { parseCustomLaunchReview, type CustomLaunchReview } from "@/lib/custom-launch-review";
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { isIP } from "node:net";
@@ -156,6 +157,7 @@ export type DeveloperCustomLaunchV2 = Readonly<{
 }>;
 
 export type DeveloperCustomLaunchV3 = Readonly<{
+  manualReview?: CustomLaunchReview;
   schemaVersion: "programmable.custom-launch.v3";
   launchId: string;
   requestId: string;
@@ -1832,6 +1834,7 @@ function parseLaunch(
         liquidityIntent: parseV3LiquidityIntent(record.liquidityIntent),
         ...projectMetadataPair!,
         ...parseOptionalWalletHandoff(record),
+        ...(record.manualReview === undefined ? {} : { manualReview: parseCustomLaunchReview(record.manualReview) }),
       });
 }
 
