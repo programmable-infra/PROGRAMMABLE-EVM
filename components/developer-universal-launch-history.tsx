@@ -1,4 +1,6 @@
 "use client";
+import { useLaunchStatusPolling } from "./use-launch-status-polling";
+import { launchStatusFingerprint, launchStatusUpdateMessage } from "@/lib/custom-launch-status-update";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Hex } from "viem";
@@ -43,6 +45,7 @@ export function DeveloperUniversalLaunchHistory(props: Props) {
   const [cursors, setCursors] = useState<Partial<Record<UniversalLaunchSource, string | null>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [launchUpdate, setLaunchUpdate] = useState("");
   const [sourceUnavailable, setSourceUnavailable] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const credentials = useRef({ getAccessToken, getIdentityToken });
@@ -69,7 +72,7 @@ export function DeveloperUniversalLaunchHistory(props: Props) {
     const controller = new AbortController();
     const loaders = credentials.current;
     const sharedTokens = Promise.all([loaders.getAccessToken(), loaders.getIdentityToken()]);
-    let timer: number | undefined;
+
     void Promise.allSettled(sources.map(async source => {
       const tokens = await sharedTokens;
       if (props.initialLaunchId) {
@@ -93,11 +96,28 @@ export function DeveloperUniversalLaunchHistory(props: Props) {
       setSourceUnavailable(unavailable);
       setError(unavailable ? successful.some(result => result.entries.length) ? "Some custom launch sources could not be refreshed. Existing records remain available." : "Launch data is temporarily unavailable. Keep this link and refresh to retry." : null);
       setLoading(false);
-      const selected = successful.flatMap(result => result.entries).find(entry => String(entry.resource.planId ?? entry.resource.launchId) === props.initialLaunchId);
-      if (!unavailable && selected?.resource.status === "accepted") timer = window.setTimeout(() => setRefresh(value => value + 1), 20_000);
+
     });
-    return () => { controller.abort(); if (timer !== undefined) window.clearTimeout(timer); };
+    return () => { controller.abort(); };
   }, [request, account, props.initialLaunchId, refresh]);
+  useLaunchStatusPolling(account, !loading, async signal => {
+    for (const entry of entries) {
+      if (signal.aborted) return;
+      if (["expired", "publicly_visible"].includes(String(entry.resource.status)) && !entry.resource.manualReview) continue;
+      const id = String(entry.resource.planId ?? entry.resource.launchId);
+      const updated = parseEntries(await request(entry.sourceVersion, id, { signal }), account).entries
+        .find(candidate => identity(candidate) === identity(entry));
+      if (signal.aborted || !updated) continue;
+      if (launchStatusFingerprint(updated.resource) !== launchStatusFingerprint(entry.resource)) {
+        setLaunchUpdate(launchStatusUpdateMessage(updated.resource));
+      }
+      // Preserve object identity when polling returned identical bytes, so a
+      // prepared wallet review is not needlessly discarded and rebuilt.
+      if (JSON.stringify(updated.resource) !== JSON.stringify(entry.resource)) {
+        setEntries(current => current.map(candidate => identity(candidate) === identity(entry) ? updated : candidate));
+      }
+    }
+  });
   async function more(source: UniversalLaunchSource) {
     const cursor = cursors[source]; if (!cursor) return;
     setLoading(true);
@@ -111,6 +131,7 @@ export function DeveloperUniversalLaunchHistory(props: Props) {
   return <section className={styles.history} aria-label="Custom project launch history">
     <div className={styles.heading}><button type="button" className={shared.secondaryButton} onClick={() => setRefresh(value => value + 1)} disabled={loading}>Refresh custom projects</button></div>
     <p role="status" className={styles.intro}>{loading ? "Loading custom projects…" : error ?? (entries.length ? "" : "No Custom Launch Plan or MultiRole requests for this controller.")}</p>
+    {launchUpdate ? <p role="status" aria-live="polite" className={styles.intro}>{launchUpdate}</p> : null}
     {props.initialLaunchId && !loading && !entries.some(entry => String(entry.resource.planId ?? entry.resource.launchId) === props.initialLaunchId) ? <LaunchHistoryMissingState launchId={props.initialLaunchId} unavailable={sourceUnavailable} /> : null}
     <ul className={styles.launchList}>{entries.map((entry, index) => <DeveloperUniversalLaunchFlow key={identity(entry)} entry={entry} highlighted={String(entry.resource.planId ?? entry.resource.launchId) === props.initialLaunchId}
       autoPrepare={String(entry.resource.planId ?? entry.resource.launchId) === props.initialLaunchId || !props.initialLaunchId && index === 0} sendWallet={props.sendWallet}

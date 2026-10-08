@@ -1,4 +1,6 @@
 "use client";
+import { useLaunchStatusPolling } from "./use-launch-status-polling";
+import { launchStatusFingerprint, launchStatusUpdateMessage } from "@/lib/custom-launch-status-update";
 import { parseCustomLaunchReview, customLaunchReviewAllowsSigning, customLaunchReviewLabel, customLaunchReviewDescription, type CustomLaunchReview } from "@/lib/custom-launch-review";
 
 import { isGitHubUrl } from "@/lib/public-link-visibility";
@@ -2368,6 +2370,7 @@ export function DeveloperLaunchHistory({
   >({});
   const [error, setError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [launchUpdate, setLaunchUpdate] = useState("");
   const requestSequenceRef = useRef(0);
   const refreshControllerRef = useRef<AbortController | null>(null);
   const loadMoreInFlightRef = useRef(false);
@@ -2775,6 +2778,24 @@ export function DeveloperLaunchHistory({
       }
     });
   };
+
+  useLaunchStatusPolling(account, state === "ready", async signal => {
+    if (sendInFlightRef.current || fundingInFlightRef.current || hydrateInFlightRef.current
+      || checkInFlightRef.current || refreshing || loadingMore) return;
+    // Read the exact visible resources, including records on later history pages.
+    const active = launches.filter(launch => !["failed", "cancelled"].includes(launch.status)
+      && (launch.status !== "finalized" || launch.manualReview?.state === "pending"));
+    for (const launch of active) {
+      if (signal.aborted) return;
+      if (pollingIds[launchResourceKey(launch)]) continue;
+      const updated = await readLaunchResource(launch, signal);
+      if (signal.aborted) return;
+      if (launchStatusFingerprint(updated) !== launchStatusFingerprint(launch)) {
+        setLaunchUpdate(`${updated.projectMetadata?.token.name ?? "Custom launch"}: ${launchStatusUpdateMessage(updated)}`);
+      }
+      updateLaunch(updated);
+    }
+  });
 
   const checkOnchainStatus = async (launch: LaunchResource) => {
     const key = launchResourceKey(launch);
@@ -3545,6 +3566,7 @@ export function DeveloperLaunchHistory({
         </button>
       </div>
 
+      {launchUpdate ? <p role="status" aria-live="polite" className={styles.intro}>{launchUpdate}</p> : null}
       {state === "loading" ? <HistorySkeleton /> : null}
 
       {state === "error" ? (

@@ -1,3 +1,4 @@
+import { errorIsExplicitWalletRejection } from "@/lib/wallet-rejection";
 import { sha256, type Address, type Hex } from "viem";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
@@ -87,17 +88,7 @@ export function assertModuleModeWalletUnchanged(current: ModuleModeWalletSnapsho
 }
 
 /** Only a definite user rejection permits a fresh send attempt without reconciliation. */
-export function isModuleModeWalletRejection(error: unknown): boolean {
-  let current = error;
-  const seen = new Set<unknown>();
-  while (current && typeof current === "object" && !seen.has(current)) {
-    seen.add(current);
-    const candidate = current as { code?: unknown; name?: unknown; cause?: unknown; walletRequestRejected?: unknown };
-    if (candidate.code === 4001 || candidate.code === "4001" || candidate.name === "UserRejectedRequestError" || candidate.walletRequestRejected === true) return true;
-    current = candidate.cause;
-  }
-  return false;
-}
+export const isModuleModeWalletRejection = errorIsExplicitWalletRejection;
 
 export function moduleModeSubmissionIsUncertain(error: unknown, providerCalled: boolean) {
   if (!providerCalled || isModuleModeWalletRejection(error)) return false;
