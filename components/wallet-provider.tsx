@@ -281,6 +281,7 @@ export function shouldEagerLoadWalletRuntime(pathname: string) {
     "/developers/api-keys",
     "/admin/partners",
     "/admin/modules",
+    "/admin/custom-launch-reviews",
     "/ops/privy-policy-owner",
   ].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
