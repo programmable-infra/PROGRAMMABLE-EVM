@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { describe, expect, it, vi } from "vitest";
 
@@ -1375,6 +1376,10 @@ describe("public Custom Launch CLI surface", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "programmable-direct-native-v3-"));
     const projectRoot = join(temporaryRoot, "project");
     const cli = join(root, "packages/launch/bin/programmable-launch.mjs");
+    const configPath = join(projectRoot, "programmable-launch.config.json");
+    const fetchFixturePath = join(temporaryRoot, "capabilities-fetch.mjs");
+    const capabilitiesRequestsPath = join(temporaryRoot, "capabilities-requests.txt");
+    const capabilitiesRequest = "GET https://api.programmable.market/v3/capabilities";
     const environment = {
       ...process.env,
       PROGRAMMABLE_LAUNCH_WALLET: "0x1111111111111111111111111111111111111111",
@@ -1387,6 +1392,20 @@ describe("public Custom Launch CLI surface", () => {
     };
 
     try {
+      writeFileSync(fetchFixturePath, `
+import { appendFileSync } from "node:fs";
+import { jsonResponse, validCapabilities36 } from ${JSON.stringify(pathToFileURL(
+  join(root, "packages/launch/test/fixtures/capabilities.mjs"),
+).href)};
+globalThis.fetch = async (url, options = {}) => {
+  const request = (options.method ?? "GET") + " " + url;
+  if (request !== ${JSON.stringify(capabilitiesRequest)}) {
+    throw new Error("Unexpected CLI fetch: " + request);
+  }
+  appendFileSync(${JSON.stringify(capabilitiesRequestsPath)}, request + "\\n");
+  return jsonResponse(validCapabilities36());
+};
+`);
       cpSync(exampleRoot, projectRoot, { recursive: true });
       mkdirSync(join(projectRoot, "release-modules"), { recursive: true });
       for (const fileName of [
@@ -1432,11 +1451,15 @@ describe("public Custom Launch CLI surface", () => {
       expect(exampleBuildSource.match(/profileVersion: "3\.3\.0"/gu))
         .toHaveLength(2);
       expect(exampleBuildSource).not.toContain('profileVersion: "2.0.0"');
+      const config = JSON.parse(readFileSync(configPath, "utf8"));
+      expect(Object.hasOwn(config, "profileVersion")).toBe(false);
       const packOutput = JSON.parse(execFileSync(process.execPath, [
+        "--import",
+        fetchFixturePath,
         cli,
         "pack",
         "--config",
-        join(projectRoot, "programmable-launch.config.json"),
+        configPath,
         "--output",
         join(projectRoot, "launch.json"),
       ], {
@@ -1445,11 +1468,13 @@ describe("public Custom Launch CLI surface", () => {
         encoding: "utf8",
       }));
       const validateOutput = JSON.parse(execFileSync(process.execPath, [
+        "--import",
+        fetchFixturePath,
         cli,
         "validate",
         join(projectRoot, "launch.json"),
         "--config",
-        join(projectRoot, "programmable-launch.config.json"),
+        configPath,
       ], {
         cwd: projectRoot,
         env: environment,
@@ -1469,7 +1494,7 @@ describe("public Custom Launch CLI surface", () => {
         schemaVersion: "programmable.custom-launch-create-request.v3",
         launchProfile: {
           schemaVersion: "programmable.direct-native-hook-graph-profile.v3",
-          profileVersion: "3.3.0",
+          profileVersion: "3.6.0",
           profileRevision: 3,
           productionLaunchAuthorized: true,
         },
@@ -1486,6 +1511,8 @@ describe("public Custom Launch CLI surface", () => {
       });
       expect(request.behaviorScenarioInputs).toBeUndefined();
       expect(JSON.stringify(request)).not.toContain('"signature"');
+      expect(readFileSync(capabilitiesRequestsPath, "utf8"))
+        .toBe(`${capabilitiesRequest}\n`);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

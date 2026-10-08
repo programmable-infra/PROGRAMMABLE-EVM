@@ -12,6 +12,7 @@ import {
   PREFLIGHT_PATH_V3,
   WALLET_HANDOFF_BASE_URL,
 } from "../../src/constants.mjs";
+import { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 as POLICY } from "../../src/profile-v36.mjs";
 
 export function validCapabilities(overrides = {}) {
   return {
@@ -58,6 +59,34 @@ export function validCapabilities(overrides = {}) {
     walletHandoffBaseUrl: WALLET_HANDOFF_BASE_URL,
     ...overrides,
   };
+}
+
+export function validCapabilities36() {
+  const value = validCapabilities();
+  value.profile.profileVersion = "3.6.0";
+  value.projectMetadata.requiredForProfileVersion = "3.6.0";
+  value.projectMetadata.strictNewPackPolicyProfileVersion = "3.6.0";
+  value.projectMetadata.requiredForProfileVersions = ["3.2.0", "3.3.0", "3.4.0", "3.5.0", "3.6.0"];
+  value.projectMetadata.strictMetadataProfileVersions = ["3.3.0", "3.4.0", "3.5.0", "3.6.0"];
+  value.programmableTradeFeePolicy = {
+    policy: structuredClone(POLICY),
+    policyHash: "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3",
+    collectionStatus: "required-per-trade-evidence",
+    launchAdmissionEstablishesFeeCollection: false,
+  };
+  value.profile36Release = {
+    profileVersion: "3.6.0", selected: true, productionLaunchAuthorized: true,
+    staticAdmissionBaseline: "3.3.0", customHookAllowlistRequired: false, mandatoryCanonicalFeeVaultTarget: false,
+    exactSettlementDataflowClosureRequired: false, selectionIsFeeExecutionProof: false, websiteBoundarySupportMustPrecedeSelection: true,
+  };
+  value.feePolicy = {
+    programmableHundredthsOfBip: "3000", denominator: "1000000", requiredForProfileVersion: "3.6.0", releaseModule: null,
+  };
+  value.graph = { minimumTargets: 3, maximumTargets: 16 };
+  value.requestProfiles = {
+    current: "3.6.0", freshSubmissionExactVersions: ["3.6.0"], newProfileVersionsAreImplicitlyAccepted: false,
+  };
+  return value;
 }
 
 export function validProjectMetadataCapabilities() {
