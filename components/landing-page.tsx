@@ -116,19 +116,20 @@ export function LandingPage() {
           <picture className={styles.heroGardenFrame}>
             <source
               media="(max-width: 42.5rem)"
-              srcSet="/brand/atmosphere/programmable-floral-foreground-mobile-v1.avif"
+              srcSet="/brand/atmosphere/programmable-floral-foreground-mobile-v2.avif"
               type="image/avif"
             />
             <source
               media="(max-width: 60rem)"
-              srcSet="/brand/atmosphere/programmable-floral-foreground-tablet-v1.avif"
+              srcSet="/brand/atmosphere/programmable-floral-foreground-tablet-v2.avif"
               type="image/avif"
             />
             <Image
               className={styles.heroGarden}
-              src="/brand/atmosphere/programmable-floral-foreground-v1.avif"
+              src="/brand/atmosphere/programmable-floral-foreground-v2.avif"
               alt=""
               fill
+              unoptimized
               fetchPriority="high"
               loading="eager"
               sizes="100vw"

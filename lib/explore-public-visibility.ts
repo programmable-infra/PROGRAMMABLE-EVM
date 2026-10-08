@@ -71,6 +71,8 @@ export const OWNER_HIDDEN_EXPLORE_IDENTITIES_V1 = Object.freeze([
   Object.freeze({ chainId: 1, identity: "0x1a6a3948b0c54670b634dd2a54598793ee192895" }),
   Object.freeze({ chainId: 1, identity: "0xe2f175af5edf2ba4793ecdad94888fcdc5e1ab5f" }),
   Object.freeze({ chainId: 1, identity: "0xface73b63787960282f2d4682d3752beb25271ad" }),
+  Object.freeze({ chainId: 1, identity: "0x705f60fadb9728ca976e727ae9d746cc4d303be2" }), // ETH 3.6 release canary
+  Object.freeze({ chainId: 1, identity: "0x2bbc1677a495746a7fad51851dcba8bc37c5a213" }), // WECWDCWDE
 ]);
 /**
  * Controls only public discovery. Direct token lookup remains available so
