@@ -67,6 +67,7 @@ describe("agent-readable public surface", () => {
       chainId: 4663,
       recommendedForNewRobinhoodProjects: true,
       capabilities: `${CUSTOM_LAUNCH_API_ORIGIN}/v4/chains/4663/custom-launch-capabilities`,
+      openApi: `${CUSTOM_LAUNCH_API_ORIGIN}/v4/chains/4663/custom-launch-contract/openapi.json`,
     });
     const multiRole = discovery.workflows.multiRoleProject;
     expect(multiRole).toMatchObject({

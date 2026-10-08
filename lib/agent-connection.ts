@@ -34,7 +34,7 @@ export const PROGRAMMABLE_AGENT_ENTRY = Object.freeze({
       manifest: "https://api.programmable.market/v4/chains/4663/custom-launch-contract/manifest.json",
       setup: "https://api.programmable.market/v4/chains/4663/custom-launch-contract/agent-setup.json",
       guide: "https://api.programmable.market/v4/chains/4663/custom-launch-contract/guide.md",
-      openApi: "https://programmable.market/openapi/custom-launch-v4.2.json",
+      openApi: "https://api.programmable.market/v4/chains/4663/custom-launch-contract/openapi.json",
       capabilities: "https://api.programmable.market/v4/chains/4663/custom-launch-capabilities",
       tradeFee: CUSTOM_LAUNCH_ROUTED_FEE_DISCOVERY_V2,
       indexing: {
