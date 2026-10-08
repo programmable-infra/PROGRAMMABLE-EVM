@@ -8,35 +8,52 @@ import styles from "./custom-launch-review-console.module.css";
 type ReviewRow = CustomLaunchReview & { launchId: string; requestSummary: Record<string, unknown> };
 type ReviewDetail = CustomLaunchReview & { launchId: string; request: Record<string, unknown>; technicalStatus: Record<string, unknown> };
 export function CustomLaunchReviewConsole() {
-  const { authReady, authenticated, connecting, getAccessToken, getIdentityToken, openWallet, wallet } = useWallet();
+  const { authReady, authenticated, connecting, openWallet, wallet } = useWallet();
   const account = authenticated && isWebsiteAdminWallet(wallet?.account) ? wallet?.account : null;
-  const identity = useRef(account); identity.current = account;
+  return <main className={styles.page}>
+    <header><Link href="/admin/partners">Partner access</Link><h1>Custom launch reviews</h1><p>Approve a launch to open its one-hour launch window.</p></header>
+    {account ? <AccountReviews key={account} account={account} /> :
+      <section><p>{!authReady ? "Loading…" : authenticated ? "Connect an authorized admin wallet to continue." : "Sign in with your admin wallet."}</p><button disabled={connecting || !authReady} onClick={() => openWallet()}>Connect wallet</button></section>}
+  </main>;
+}
+
+function AccountReviews({ account }: { account: string }) {
+  const { getAccessToken, getIdentityToken } = useWallet();
+  const active = useRef(true);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [reviews, setReviews] = useState<ReviewRow[]>([]), [detail, setDetail] = useState<ReviewDetail | null>(null);
-  const [busy, setBusy] = useState(false), [error, setError] = useState(""), [reason, setReason] = useState("");
-  const request = useCallback(async (reviewId?: string, decision?: "approve" | "reject") => {
+  const [busy, setBusy] = useState(true), [error, setError] = useState(""), [reason, setReason] = useState("");
+  const request = useCallback(async (reviewId?: string, decision?: { review: ReviewDetail; choice: "approve" | "reject"; reason: string }) => {
     if (!account) throw new Error("Connect an admin wallet.");
     const [token, identityToken] = await Promise.all([getAccessToken(), getIdentityToken()]);
-    if (!token || !identityToken || identity.current !== account) throw new Error("Reconnect your admin wallet.");
+    if (!token || !identityToken || !active.current) throw new Error("Reconnect your admin wallet.");
     const query = new URLSearchParams({ walletAddress: account });
     if (reviewId && !decision) query.set("reviewId", reviewId);
     const response = await fetch(`/api/admin/custom-launch-reviews?${query}`, {
       method: decision ? "POST" : "GET", cache: "no-store", headers: { Authorization: `Bearer ${token}`, "X-Privy-Identity-Token": identityToken, "Content-Type": "application/json" },
-      body: decision && detail ? JSON.stringify({ reviewId: detail.reviewId, subjectHash: detail.subjectHash, revision: detail.revision, decision, reason }) : undefined,
+      body: decision ? JSON.stringify({ reviewId: decision.review.reviewId, subjectHash: decision.review.subjectHash, revision: decision.review.revision, decision: decision.choice, reason: decision.reason }) : undefined,
     });
     const value = await response.json();
     if (!response.ok) throw new Error(response.status === 409 ? "This review changed. Refresh before deciding." : response.status === 403 ? "This wallet is not authorized to review launches." : "Could not load launch reviews. Try again.");
-    if (identity.current !== account) throw new Error("Wallet changed. Refresh to continue.");
+    if (!active.current) throw new Error("Wallet changed. Refresh to continue.");
     return value;
-  }, [account, getAccessToken, getIdentityToken, detail, reason]);
+  }, [account, getAccessToken, getIdentityToken]);
   const load = useCallback(async () => {
     setBusy(true); setError("");
     try { const value = await request(); value.reviews.forEach(parseCustomLaunchReview); setReviews(value.reviews); }
     catch (e) { setError(e instanceof Error ? e.message : "Unable to load reviews."); }
     finally { setBusy(false); }
   }, [request]);
-  // Reload on wallet identity changes; editing a decision must not trigger a fetch.
-  const loadRef = useRef(load); loadRef.current = load;
-  useEffect(() => { setReviews([]); setDetail(null); setReason(""); if (account) void loadRef.current(); }, [account]);
+  useEffect(() => {
+    let current = true;
+    request().then(value => {
+      value.reviews.forEach(parseCustomLaunchReview);
+      if (current) setReviews(value.reviews);
+    }).catch(error => {
+      if (current) setError(error instanceof Error ? error.message : "Unable to load reviews.");
+    }).finally(() => { if (current) setBusy(false); });
+    return () => { current = false; };
+  }, [request]);
   async function select(reviewId: string) {
     setBusy(true); setError(""); setDetail(null); setReason("");
     try { const value = await request(reviewId); parseCustomLaunchReview(value.review); setDetail(value.review); }
@@ -46,15 +63,13 @@ export function CustomLaunchReviewConsole() {
     if (!detail) return;
     setBusy(true); setError("");
     try {
-      const value = await request(detail.reviewId, decision); const updated = parseCustomLaunchReview(value.review);
+      const value = await request(detail.reviewId, { review: detail, choice: decision, reason }); const updated = parseCustomLaunchReview(value.review);
       setDetail(current => current ? { ...current, ...updated } : null);
       setReviews(current => current.map(item => item.reviewId === updated.reviewId ? { ...item, ...updated } : item));
     } catch (e) { setError(e instanceof Error ? e.message : "Decision could not be saved."); } finally { setBusy(false); }
   }
   const canDecide = detail && customLaunchReviewLabel(detail) !== "Approved";
-  return <main className={styles.page}>
-    <header><Link href="/admin/partners">Partner access</Link><h1>Custom launch reviews</h1><p>Approve a launch to open its one-hour launch window.</p></header>
-    {!account ? <section><p>{!authReady ? "Loading…" : authenticated ? "Connect an authorized admin wallet to continue." : "Sign in with your admin wallet."}</p><button disabled={connecting || !authReady} onClick={() => openWallet()}>Connect wallet</button></section> : <>
+  return <>
       <button disabled={busy} onClick={() => void load()}>Refresh</button>
       <div className={styles.layout}><section aria-label="Launch review queue">
         {!busy && reviews.length === 0 && <p>No launches awaiting review.</p>}
@@ -72,7 +87,6 @@ export function CustomLaunchReviewConsole() {
         {canDecide && <><label>Note to the team <textarea maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} disabled={busy} /></label>
           <div className={styles.actions}><button disabled={busy} onClick={() => void decide("approve")}>Approve for 1 hour</button><button disabled={busy} onClick={() => void decide("reject")}>Request changes</button></div></>}
       </> : <p>Select a launch to review its submitted configuration and checks.</p>}</section></div>
-    </>}
     {error && <p role="alert">{error}</p>}
-  </main>;
+  </>;
 }
