@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import yaml from "js-yaml";
 import {
   classifyVerifyPaths,
   CONTRACT_RELEASE_TEST_PATHS,
@@ -9,6 +10,7 @@ import {
   READ_MODEL_CONTRACT_DOC_PATHS,
   ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS,
   ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+  ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS,
   ROBINHOOD_V41_CLI_COORDINATE_PATH,
 } from "./classify-verify-paths.mjs";
 
@@ -24,6 +26,8 @@ const none = {
   robinhood_phase_b_evidence_exact: false,
   robinhood_v41_phase_b_evidence: false,
   robinhood_v41_phase_b_evidence_exact: false,
+  robinhood_v413_runtime_evidence: false,
+  robinhood_v413_runtime_evidence_exact: false,
 };
 
 test("routes only the exact Robinhood Phase B backend pair through its short-lived evidence gate", () => {
@@ -77,6 +81,39 @@ test("routes only the exact Robinhood V4.1 pair through its own fresh evidence g
     ...ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
     "components/token-card.tsx",
   ]), { ...none, interface: true, robinhood_v41_phase_b_evidence: true });
+});
+
+test("CLI 4.1.3 runtime imports require their own complete unmixed capture pair", () => {
+  const pair = ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS;
+  assert.deepEqual(classifyVerifyPaths(pair), { ...none,
+    robinhood_v413_runtime_evidence: true, robinhood_v413_runtime_evidence_exact: true });
+  for (const file of pair) {
+    assert.deepEqual(classifyVerifyPaths([file]), { ...none, robinhood_v413_runtime_evidence: true });
+  }
+  for (const additional of ["README.md", "scripts/programmable-launch-v413-runtime-refresh.mjs",
+    ".github/workflows/verify.yml", "components/token-card.tsx"]) {
+    const scope = classifyVerifyPaths([...pair, additional]);
+    assert.equal(scope.robinhood_v413_runtime_evidence, true);
+    assert.equal(scope.robinhood_v413_runtime_evidence_exact, false);
+    if (additional.startsWith("scripts/") || additional.startsWith(".github/")) {
+      for (const key of ["contracts", "custom_v2", "database", "dependencies", "indexer", "interface", "read_model"]) {
+        assert.equal(scope[key], true, key);
+      }
+    }
+  }
+  for (const historical of [ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATHS, ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS]) {
+    for (const paths of [[...pair, ...historical], ...pair.flatMap(file => historical.map(old => [file, old]))]) {
+      const scope = classifyVerifyPaths(paths);
+      assert.equal(scope.robinhood_v413_runtime_evidence, true);
+      assert.equal(scope.robinhood_v413_runtime_evidence_exact, false);
+      assert.equal(scope.robinhood_phase_b_evidence_exact, false);
+      assert.equal(scope.robinhood_v41_phase_b_evidence_exact, false);
+    }
+  }
+  for (const file of ["release/robinhood-chain-4663/v4.1.3/backend-promotion-input.json",
+    `${pair[1]}.mjs`, "release/robinhood-chain-4663/v4.1.4/backend-promotion-input.public.json"]) {
+    assert.deepEqual(classifyVerifyPaths([file]), classifyVerifyPaths([], { forceAll: true }));
+  }
 });
 
 test("rejects complete and partial cross-version evidence imports in both lanes", () => {
@@ -501,4 +538,59 @@ test("wires successor activation and exact evidence validation into protected Ve
   assert.match(verify, /--backend-attestation-bundle \\\n\s+release\/robinhood-chain-4663\/v4\.1\/backend-promotion-input\.attestation\.json/u);
   assert.ok(verify.includes('--repository-root "$GITHUB_WORKSPACE"'));
   assert.doesNotMatch(verify, /continue-on-error|\|\| true|--allow/u);
+});
+
+test("protected Verify authenticates fresh CLI runtime captures and rejects weakened gates", () => {
+  const workflow = yaml.load(readFileSync(".github/workflows/verify.yml", "utf8"));
+  const runtimeKey = "robinhood_v413_runtime_evidence";
+  const exactKey = `${runtimeKey}_exact`;
+  const exactCondition = `needs.scope.outputs.${exactKey} == 'true'`;
+  const step = (document, name) => {
+    const matches = document.jobs.contracts.steps.filter(value => value.name === name);
+    assert.equal(matches.length, 1, name); return matches[0];
+  };
+  const verifyName = "Verify exact fresh CLI 4.1.3 runtime backend evidence";
+  const check = document => {
+    for (const key of [runtimeKey, exactKey]) {
+      assert.equal(document.jobs.scope.outputs[key], `\${{ steps.scope.outputs.${key} }}`);
+      assert.ok(document.jobs.scope.steps.find(value => value.id === "scope").run
+        .includes(`echo '${key}=false' >> "$RUNNER_TEMP/verify-scope.txt"`));
+    }
+    const reject = step(document, "Reject partial or mixed CLI 4.1.3 runtime evidence imports");
+    assert.equal(reject.if, `needs.scope.outputs.${runtimeKey} == 'true' && needs.scope.outputs.${exactKey} != 'true'`);
+    assert.equal(reject.run, "exit 1");
+    for (const name of ["Check out repository", "Set up Node.js"]) {
+      assert.ok(step(document, name).if.includes(`needs.scope.outputs.${runtimeKey} == 'true'`));
+    }
+    for (const name of ["Install locked dependencies for exact Robinhood Phase B backend evidence",
+      "Install exact Cosign verifier for Robinhood Phase B backend evidence"]) {
+      assert.ok(step(document, name).if.includes(exactCondition));
+    }
+    const verify = step(document, verifyName);
+    assert.equal(verify.if, exactCondition);
+    for (const file of ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS) assert.ok(verify.run.includes(file));
+    for (const gate of ['set -euo pipefail', 'git ls-files --stage -- "$evidence_path"', '"100644"',
+      'test -f "$evidence_path"', 'test ! -L "$evidence_path"', `stat -c '%a' "$evidence_path"`, '"644"',
+      'node contracts/scripts/finalize-robinhood-custom-launch-v41-deployment.mjs', 'verify-backend-import',
+      '--stage release/robinhood-chain-4663/programmable-stage-bundle.json', '--repository-root "$GITHUB_WORKSPACE"']) {
+      assert.ok(verify.run.includes(gate), gate);
+    }
+    assert.doesNotMatch(verify.run, /continue-on-error|\|\| true|--allow|\bpromote\b|\bapply\b/u);
+    assert.ok(step(document, "Skip unaffected contracts").if.includes(`needs.scope.outputs.${runtimeKey} != 'true'`));
+    assert.equal(document.jobs.contracts.steps.some(value => value["continue-on-error"] === true), false);
+  };
+  check(workflow);
+  for (const change of [
+    document => { delete document.jobs.scope.outputs[exactKey]; },
+    document => { step(document, "Reject partial or mixed CLI 4.1.3 runtime evidence imports").run = "true"; },
+    document => { step(document, "Set up Node.js").if = "false"; },
+    document => { step(document, "Install exact Cosign verifier for Robinhood Phase B backend evidence").if = "false"; },
+    document => { step(document, verifyName).if = "false"; },
+    document => { step(document, verifyName).run = step(document, verifyName).run.replace("verify-backend-import", "promote"); },
+    document => { step(document, verifyName).run = step(document, verifyName).run.replaceAll("v4.1.3/", "v4.1/"); },
+    document => { step(document, verifyName).run = step(document, verifyName).run.replace('test ! -L "$evidence_path"', "true"); },
+    document => { step(document, verifyName)["continue-on-error"] = true; },
+  ]) {
+    const mutation = structuredClone(workflow); change(mutation); assert.throws(() => check(mutation));
+  }
 });
