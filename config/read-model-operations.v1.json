@@ -60,9 +60,14 @@
     "method": "GET",
     "path": "/api/ops/health",
     "source": "app/api/ops/health/route.ts",
-    "status": "index-reset",
-    "statusCode": 200,
-    "providers": []
+    "reader": "lib/server/operations-health.ts",
+    "schemaVersion": "programmable.operations-health.v2",
+    "scope": "website-launch-indexes",
+    "statuses": ["ready", "degraded", "unavailable"],
+    "unavailableStatusCode": 503,
+    "providerHealth": "not-checked",
+    "readTimeoutMs": 5000,
+    "cacheTtlMs": 15000
   },
   "retiredOperations": [
     {

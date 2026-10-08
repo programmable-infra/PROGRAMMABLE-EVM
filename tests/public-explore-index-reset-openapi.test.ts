@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { programmablePublicOpenApi } from "../lib/public-openapi";
 
-function validator(name: "OperationsHealth" | "MarketChartError") {
+function validator(name: "MarketChartError") {
   const ajv = new Ajv2020({ allErrors: true, strict: false });
   addFormats(ajv);
   return ajv.compile({
@@ -15,47 +15,6 @@ function validator(name: "OperationsHealth" | "MarketChartError") {
 }
 
 describe("provider-neutral Explore reset OpenAPI contract", () => {
-  it("documents provider-free operations health", () => {
-    const operation = programmablePublicOpenApi.paths["/api/ops/health"].get;
-    const validate = validator("OperationsHealth");
-
-    expect(operation.summary).toBe("Read the Explore indexing state");
-    expect(operation.description).toContain("performs no provider or indexer");
-    expect(Object.keys(operation.responses)).toEqual(["200"]);
-    expect(operation.responses["200"].headers).toEqual({
-      "Cache-Control": {
-        description:
-          "Reset responses are never stored by clients or shared caches.",
-        schema: { const: "no-store" },
-      },
-      "X-Programmable-Indexing-Status": {
-        description:
-          "Explore indexing is intentionally reset while it is rebuilt.",
-        schema: { const: "reset" },
-      },
-    });
-    expect(
-      validate({
-        status: "index-reset",
-        providers: [],
-      }),
-      JSON.stringify(validate.errors),
-    ).toBe(true);
-    expect(
-      validate({
-        status: "index-reset",
-        providers: [{ name: "unexpected" }],
-      }),
-    ).toBe(false);
-    expect(
-      validate({
-        status: "index-reset",
-        providers: [],
-        checkedAt: "2026-09-04T00:00:00.000Z",
-      }),
-    ).toBe(false);
-  });
-
   it("documents only the provider-neutral chart reset response", () => {
     const operation =
       programmablePublicOpenApi.paths["/api/explore/token/chart"].get;

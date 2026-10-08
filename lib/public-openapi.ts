@@ -46,7 +46,7 @@ export const programmablePublicOpenApi = {
   openapi: "3.1.0",
   info: {
     title: "Programmable developer APIs",
-    version: "1.16.0",
+    version: "1.17.0",
     summary:
       "Ethereum and Robinhood Explore feeds, Custom launch contracts and release discovery.",
     description:
@@ -104,19 +104,23 @@ export const programmablePublicOpenApi = {
     "/api/ops/health": {
       get: {
         operationId: "getOperationsHealth",
-        summary: "Read the Explore indexing state",
+        summary: "Read website launch indexing health",
         description:
-          "Reports the intentional provider-free Explore index reset. It performs no provider or indexer health check.",
+          "Reads the existing Ethereum and Robinhood launch catalogs with a five-second bound and a shared 15-second observation cache. The overall status describes these website indexes only. Codex roles are reported with direct provider health not checked. Follow the separate Custom Launch API readiness and capabilities URLs for launch and simulator availability. Legacy Explore reset routes retain their own status.",
         tags: ["Operations"],
         security: [],
         responses: {
           "200": {
             ...jsonResponse(
               component("OperationsHealth"),
-              "Provider-free Explore index reset state.",
+              "Website launch indexes are ready or degraded.",
             ),
-            headers: exploreIndexResetStateResponseHeaders,
+            headers: {
+              "Cache-Control": { description: "Health responses are not stored by clients or shared caches.", schema: { const: "no-store" } },
+              "X-Programmable-Indexing-Status": { description: "Overall website launch indexing status.", schema: { enum: ["ready", "degraded", "unavailable"] } },
+            },
           },
+          "503": jsonResponse(component("OperationsHealth"), "Both website launch indexes are unavailable; the same no-store and indexing-status headers apply."),
         },
       },
     },
@@ -1665,14 +1669,46 @@ export const programmablePublicOpenApi = {
       OperationsHealth: {
         type: "object",
         description:
-          "Provider-free status for the intentional Explore indexing reset.",
-        required: ["status", "providers"],
+          "Observed website catalog availability, separate from direct provider health and Custom Launch API readiness. Ready requires both indexes to be ready; unavailable requires both to be unavailable; all other combinations are degraded. An empty current catalog is valid. checkedAt is the cached observation time and updatedAt is each catalog's source time.",
+        required: ["schemaVersion", "scope", "status", "checkedAt", "indexes", "providers", "customLaunchReadiness"],
         properties: {
-          status: { const: "index-reset" },
+          schemaVersion: { const: "programmable.operations-health.v2" },
+          scope: { const: "website-launch-indexes" },
+          status: { enum: ["ready", "degraded", "unavailable"] },
+          checkedAt: { type: "string", format: "date-time" },
+          indexes: {
+            type: "array", minItems: 2, maxItems: 2, items: false,
+            prefixItems: [
+              { chainId: 1, catalogUrl: `${SITE_ORIGIN}/api/explore/ethereum`, statuses: ["ready", "partial", "stale", "unavailable"] },
+              { chainId: 4663, catalogUrl: `${SITE_ORIGIN}/api/explore/robinhood`, statuses: ["ready", "syncing", "stale", "unavailable"] },
+            ].map(index => ({
+              type: "object", required: ["chainId", "status", "updatedAt", "catalogUrl"], additionalProperties: false,
+              properties: {
+                chainId: { const: index.chainId }, status: { enum: index.statuses },
+                updatedAt: { type: ["string", "null"], format: "date-time" },
+                catalogUrl: { const: index.catalogUrl },
+              },
+            })),
+          },
           providers: {
-            type: "array",
-            maxItems: 0,
-            items: false,
+            type: "array", minItems: 1, maxItems: 1,
+            items: {
+              type: "object", required: ["name", "roles", "health"], additionalProperties: false,
+              properties: {
+                name: { const: "codex" }, health: { const: "not-checked" },
+                roles: { const: ["ethereum-classic-launch-discovery", "ethereum-and-robinhood-market-data"] },
+              },
+            },
+          },
+          customLaunchReadiness: {
+            type: "array", minItems: 2, maxItems: 2, items: false,
+            prefixItems: [
+              { chainId: 1, readinessUrl: `${CUSTOM_LAUNCH_API_ORIGIN}/readyz`, capabilitiesUrl: `${CUSTOM_LAUNCH_API_ORIGIN}/v3/capabilities` },
+              { chainId: 4663, readinessUrl: `${CUSTOM_LAUNCH_API_ORIGIN}/v4/chains/4663/custom-launch-plans/readiness`, capabilitiesUrl: `${CUSTOM_LAUNCH_API_ORIGIN}/v4/chains/4663/custom-launch-capabilities` },
+            ].map(chain => ({
+              type: "object", required: ["chainId", "readinessUrl", "capabilitiesUrl"], additionalProperties: false,
+              properties: { chainId: { const: chain.chainId }, readinessUrl: { const: chain.readinessUrl }, capabilitiesUrl: { const: chain.capabilitiesUrl } },
+            })),
           },
         },
         additionalProperties: false,

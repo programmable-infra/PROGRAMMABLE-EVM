@@ -14,7 +14,7 @@ import { resolveDirectNativeProfile, validateEmbeddedDirectNativeProfile, hashDi
 import { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 as POLICY,
   directNativeProgrammableTradeFeePolicyHashV36 } from "../src/profile-v36.mjs";
 import { validateLaunchFile } from "../src/validate.mjs";
-import { jsonResponse, validCapabilities } from "./fixtures/capabilities.mjs";
+import { jsonResponse, validCapabilities, validCapabilities36 as capabilities36 } from "./fixtures/capabilities.mjs";
 
 const POLICY_HASH = "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3";
 const selection = {
@@ -26,24 +26,6 @@ const selection = {
   feeCurrency: "declared-quote-currency", claimMode: "claim-authority-selected-recipient",
   applicantSelectedBuyHundredthsOfBip: "30000", applicantSelectedSellHundredthsOfBip: "0",
 };
-
-function capabilities36() {
-  const value = validCapabilities();
-  value.profile.profileVersion = "3.6.0";
-  value.projectMetadata.requiredForProfileVersion = "3.6.0";
-  value.projectMetadata.strictNewPackPolicyProfileVersion = "3.6.0";
-  value.projectMetadata.requiredForProfileVersions = ["3.2.0", "3.3.0", "3.4.0", "3.5.0", "3.6.0"];
-  value.projectMetadata.strictMetadataProfileVersions = ["3.3.0", "3.4.0", "3.5.0", "3.6.0"];
-  value.programmableTradeFeePolicy = { policy: structuredClone(POLICY), policyHash: POLICY_HASH,
-    collectionStatus: "required-per-trade-evidence", launchAdmissionEstablishesFeeCollection: false };
-  value.profile36Release = { profileVersion: "3.6.0", selected: true, productionLaunchAuthorized: true,
-    staticAdmissionBaseline: "3.3.0", customHookAllowlistRequired: false, mandatoryCanonicalFeeVaultTarget: false,
-    exactSettlementDataflowClosureRequired: false, selectionIsFeeExecutionProof: false, websiteBoundarySupportMustPrecedeSelection: true };
-  value.feePolicy = { programmableHundredthsOfBip: "3000", denominator: "1000000", requiredForProfileVersion: "3.6.0", releaseModule: null };
-  value.graph = { minimumTargets: 3, maximumTargets: 16 };
-  value.requestProfiles = { current: "3.6.0", freshSubmissionExactVersions: ["3.6.0"], newProfileVersionsAreImplicitlyAccepted: false };
-  return value;
-}
 
 test("3.6 profile has exact backend policy/hash, three targets and the unchanged static admission baseline", () => {
   const prior = resolveDirectNativeProfile(selection, { profileVersion: "3.3.0" });

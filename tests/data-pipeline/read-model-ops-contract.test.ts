@@ -30,7 +30,7 @@ describe("Explore index-reset operations source contract", () => {
       "ops-index-reset-config",
       "ops-index-reset-response-helper",
       "ops-public-explore-routes-static",
-      "ops-health-index-reset",
+      "ops-health-catalog-observations",
       "ops-retired-indexing-operations-static",
       "ops-cron-exact-set",
       "ops-protocol-revenue-binding",
@@ -98,16 +98,26 @@ describe("Explore index-reset operations source contract", () => {
     expect(failures).toContain("ops-provider-environment-cannot-reactivate");
   });
 
-  it("rejects a provider-bearing health response", () => {
-    const path = "app/api/ops/health/route.ts";
+  it("rejects an unmeasured healthy-provider claim", () => {
+    const path = "lib/server/operations-health.ts";
     const changed = source(path).replace(
-      "providers: []",
-      'providers: [{ name: "gmgn" }]',
+      'health: "not-checked"',
+      'health: "healthy"',
     );
 
     expect(failureIds(evaluate({ [path]: changed }))).toContain(
-      "ops-health-index-reset",
+      "ops-health-catalog-observations",
     );
+  });
+
+  it("rejects a direct provider probe or unbounded health read", () => {
+    const path = "lib/server/operations-health.ts";
+    for (const changed of [
+      `${source(path)}\nvoid fetch("https://example.invalid");\n`,
+      source(path).replace("const READ_TIMEOUT_MS = 5_000;", "const READ_TIMEOUT_MS = 60_000;"),
+    ]) {
+      expect(failureIds(evaluate({ [path]: changed }))).toContain("ops-health-catalog-observations");
+    }
   });
 
   it("rejects restoration of an Explore index cron", () => {

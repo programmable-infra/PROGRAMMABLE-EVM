@@ -197,11 +197,47 @@ function exactOperationBody(body, expectedStatus, operation) {
     body.operation === operation;
 }
 
-function exactHealthBody(body) {
-  return exactObjectKeys(body, ["providers", "status"]) &&
-    body.status === "index-reset" &&
-    Array.isArray(body.providers) &&
-    body.providers.length === 0;
+function exactHealthBody(body, nowMs) {
+  if (!exactObjectKeys(body, ["schemaVersion", "scope", "status", "checkedAt", "indexes", "providers", "customLaunchReadiness"])
+    || body.schemaVersion !== "programmable.operations-health.v2" || body.scope !== "website-launch-indexes"
+    || typeof body.checkedAt !== "string" || !Number.isFinite(Date.parse(body.checkedAt))
+    || Math.abs(nowMs - Date.parse(body.checkedAt)) > MAXIMUM_GENERATED_AT_SKEW_MS
+    || !Array.isArray(body.indexes) || body.indexes.length !== 2) return false;
+  const indexes = [
+    { chainId: 1, path: "ethereum", statuses: ["ready", "partial", "stale", "unavailable"] },
+    { chainId: 4663, path: "robinhood", statuses: ["ready", "syncing", "stale", "unavailable"] },
+  ];
+  if (!indexes.every((expected, index) => {
+    const actual = body.indexes[index];
+    return exactObjectKeys(actual, ["chainId", "status", "updatedAt", "catalogUrl"])
+      && actual.chainId === expected.chainId && expected.statuses.includes(actual.status)
+      && (actual.updatedAt === null || typeof actual.updatedAt === "string" && Number.isFinite(Date.parse(actual.updatedAt)))
+      && actual.catalogUrl === `https://programmable.market/api/explore/${expected.path}`;
+  })) return false;
+  const status = body.indexes.every(index => index.status === "ready") ? "ready"
+    : body.indexes.every(index => index.status === "unavailable") ? "unavailable" : "degraded";
+  if (body.status !== status || !Array.isArray(body.providers) || body.providers.length !== 1) return false;
+  const provider = body.providers[0];
+  if (!exactObjectKeys(provider, ["name", "roles", "health"]) || provider.name !== "codex" || provider.health !== "not-checked"
+    || JSON.stringify(provider.roles) !== JSON.stringify(["ethereum-classic-launch-discovery", "ethereum-and-robinhood-market-data"])) return false;
+  const readiness = [
+    { chainId: 1, readiness: "/readyz", capabilities: "/v3/capabilities" },
+    { chainId: 4663, readiness: "/v4/chains/4663/custom-launch-plans/readiness", capabilities: "/v4/chains/4663/custom-launch-capabilities" },
+  ];
+  return Array.isArray(body.customLaunchReadiness) && body.customLaunchReadiness.length === 2
+    && readiness.every((expected, index) => {
+      const actual = body.customLaunchReadiness[index];
+      return exactObjectKeys(actual, ["chainId", "readinessUrl", "capabilitiesUrl"])
+        && actual.chainId === expected.chainId && actual.readinessUrl === `https://api.programmable.market${expected.readiness}`
+        && actual.capabilitiesUrl === `https://api.programmable.market${expected.capabilities}`;
+    });
+}
+
+function hasHealthResponse(response, body) {
+  return response.status === (body?.status === "unavailable" ? 503 : 200)
+    && response.headers.get("cache-control") === "no-store"
+    && response.headers.get("x-programmable-indexing-status") === body?.status
+    && response.headers.get("retry-after") === null;
 }
 
 function hasResetHeaders(response, { publicRoute }) {
@@ -257,8 +293,8 @@ async function requestResetContract(input) {
   const label = `index-reset API ${input.path}`;
   const body = await parseBoundedJson(response, label);
   if (
-    response.status !== input.expectedStatus ||
-    !hasResetHeaders(response, { publicRoute: input.publicRoute }) ||
+    !(input.validateResponse ? input.validateResponse(response, body)
+      : response.status === input.expectedStatus && hasResetHeaders(response, { publicRoute: input.publicRoute })) ||
     !input.validateBody(body, input.nowMs)
   ) {
     throw new Error(`${label} does not match the exact reset contract`);
@@ -344,6 +380,7 @@ async function runExploreIndexResetSmoke(input) {
     expectedStatus: 200,
     publicRoute: false,
     validateBody: exactHealthBody,
+    validateResponse: hasHealthResponse,
   });
 
   await Promise.all([
@@ -372,6 +409,8 @@ async function runExploreIndexResetSmoke(input) {
     publicRoutesChecked: PUBLIC_PROBES.length,
     retiredOperationsChecked: RUNTIME_PROBE_COUNT,
     providerCallsExpected: 0,
+    providerCallsScope: "legacy-reset-routes",
+    healthScope: "website-launch-indexes",
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);
   return result;
