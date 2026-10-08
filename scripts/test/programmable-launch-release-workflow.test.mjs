@@ -110,6 +110,7 @@ function failures(value) {
     "startsWith(inputs.version, '4.')",
     'finalizer="contracts/scripts/finalize-robinhood-custom-launch-deployment.mjs"',
     'finalizer="contracts/scripts/finalize-robinhood-custom-launch-v41-deployment.mjs"',
+    'finalizer="scripts/programmable-launch-v413-runtime-refresh.mjs"',
     'promotion_evidence="$evidence/v4.1"',
     'node scripts/programmable-launch-v41-release-binding.mjs verify-release-ready',
     'node scripts/programmable-launch-v411-release-binding.mjs verify-release-ready',
@@ -117,6 +118,7 @@ function failures(value) {
     'scripts/test/programmable-launch-v412-release-binding.test.mjs',
     'node scripts/programmable-launch-v413-release-binding.mjs verify-release-ready',
     'scripts/test/programmable-launch-v413-release-binding.test.mjs',
+    'scripts/test/programmable-launch-v413-runtime-refresh.test.mjs',
     '*) echo "Unsupported V4 release version" >&2; exit 1 ;;',
 
     "node scripts/programmable-launch-release-assets.mjs build",
@@ -236,6 +238,9 @@ function failures(value) {
     const selectedTests = new Set(branch.split(" "));
     for (const relative of [...apiTests, ...helpers.map(helper => `scripts/test/programmable-launch-${helper}-release-binding.test.mjs`)]) {
       if (!selectedTests.has(relative)) missing.push(`${version} must retain ${relative}`);
+    }
+    if (version === "4.1.3" && !selectedTests.has("scripts/test/programmable-launch-v413-runtime-refresh.test.mjs")) {
+      missing.push("4.1.3 must verify runtime revalidation");
     }
   }
   const freshStep = value.split("      - name: Freshly revalidate exact V4 Phase B immediately before mutation")[1]
@@ -365,7 +370,10 @@ test("4.1.1 through 4.1.3 dispatch select separate client bindings and preserve 
     assert.match(selected[1].stdout, /scripts\/test\/programmable-launch-v411-release-binding\.test\.mjs/);
     assert.equal(selected[1].stdout.includes("scripts/test/programmable-launch-v412-release-binding.test.mjs"), ["4.1.2", "4.1.3"].includes(version));
     assert.equal(selected[1].stdout.includes("scripts/test/programmable-launch-v413-release-binding.test.mjs"), version === "4.1.3");
-    assert.match(selected[2].stdout, /finalizer=contracts\/scripts\/finalize-robinhood-custom-launch-v41-deployment\.mjs/);
+    assert.equal(selected[1].stdout.includes("scripts/test/programmable-launch-v413-runtime-refresh.test.mjs"), version === "4.1.3");
+    assert.match(selected[2].stdout, version === "4.1.3"
+      ? /finalizer=scripts\/programmable-launch-v413-runtime-refresh\.mjs/
+      : /finalizer=contracts\/scripts\/finalize-robinhood-custom-launch-v41-deployment\.mjs/);
     assert.match(selected[2].stdout, /evidence=\/fixture\/evidence\/v4\.1/);
   }
   for (const version of ["4.1.4", "4.2.0", "4.1.1-preview", "4.1.2-preview", "4.1.3-preview"]) {
@@ -414,7 +422,9 @@ test("release workflow contract mutations fail closed", () => {
     source.replace('scripts/test/programmable-launch-v412-release-binding.test.mjs', 'skipped-client-response-contract'),
     source.replace('node scripts/programmable-launch-v413-release-binding.mjs verify-release-ready', 'echo unbound-ethereum-client-patch'),
     source.replace('scripts/test/programmable-launch-v413-release-binding.test.mjs', 'skipped-ethereum-client-contract'),
-    source.replace('promotion_evidence="$evidence/v4.1"', 'promotion_evidence="$evidence"'),
+    source.replace('scripts/test/programmable-launch-v413-runtime-refresh.test.mjs', 'skipped-runtime-revalidation'),
+    source.replaceAll('promotion_evidence="$evidence/v4.1"', 'promotion_evidence="$evidence"'),
+    source.replace('finalizer="scripts/programmable-launch-v413-runtime-refresh.mjs"', 'finalizer="contracts/scripts/finalize-robinhood-custom-launch-v41-deployment.mjs"'),
     source.replace("node scripts/programmable-launch-v4-release-binding.mjs verify-release-ready", "echo unbound"),
     source.replace("npm run release:custom-launch:v4:clean-room:test", "echo skipped-clean-room-contract"),
     source.replaceAll(

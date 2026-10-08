@@ -16,6 +16,8 @@ const EMPTY_SCOPE = Object.freeze({
   robinhood_phase_b_evidence_exact: false,
   robinhood_v41_phase_b_evidence: false,
   robinhood_v41_phase_b_evidence_exact: false,
+  robinhood_v413_runtime_evidence: false,
+  robinhood_v413_runtime_evidence_exact: false,
 });
 
 const FULL_SCOPE_KEYS = Object.freeze([
@@ -44,6 +46,15 @@ export const ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS = Object.freeze([
 
 const ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET = new Set(
   ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS,
+);
+
+export const ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS = Object.freeze([
+  "release/robinhood-chain-4663/v4.1.3/backend-promotion-input.attestation.json",
+  "release/robinhood-chain-4663/v4.1.3/backend-promotion-input.public.json",
+]);
+
+const ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATH_SET = new Set(
+  ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS,
 );
 
 export const ROBINHOOD_V41_CLI_COORDINATE_PATH =
@@ -296,16 +307,23 @@ export function classifyVerifyPaths(
   scope.robinhood_v41_phase_b_evidence_exact =
     uniquePaths.size === ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS.length
     && robinhoodV41EvidencePaths.length === ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATHS.length;
+  const robinhoodV413RuntimePaths = [...uniquePaths].filter((candidate) =>
+    ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATH_SET.has(candidate));
+  scope.robinhood_v413_runtime_evidence = robinhoodV413RuntimePaths.length > 0;
+  scope.robinhood_v413_runtime_evidence_exact =
+    uniquePaths.size === ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS.length
+    && robinhoodV413RuntimePaths.length === ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS.length;
 
   for (const path of paths) {
     if (!path) continue;
 
     // Each version's short-lived, cryptographically attested evidence pair has
-    // a dedicated protected Contracts check. Both checks reject partial, mixed,
+    // a dedicated protected Contracts check. These checks reject partial, mixed,
     // and cross-version imports and verify the exact subject, Sigstore identity,
     // stage binding, and unchanged ten-minute authorization window before merge.
     if (ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)
-      || ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)) continue;
+      || ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)
+      || ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATH_SET.has(path)) continue;
 
     // This exact JSON document selects an immutable CLI release; it does not
     // change Solidity, database, indexer, or dependency inputs. The Interface
