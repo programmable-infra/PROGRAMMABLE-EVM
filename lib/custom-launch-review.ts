@@ -31,12 +31,17 @@ export function customLaunchReviewAllowsSigning(review: CustomLaunchReview, now 
 }
 
 export function customLaunchReviewLabel(review: CustomLaunchReview, now = Date.now()) {
-  if (review.state === "approved") return customLaunchReviewAllowsSigning(review, now) ? "Approved" : "Approval expired";
+  if (review.state === "approved") {
+    const approved = Date.parse(review.approvedAt ?? ""), expires = Date.parse(review.expiresAt ?? "");
+    // A fresh server approval can be slightly ahead of the browser clock.
+    // Its status is approved even while signing waits for the start time.
+    return expires > now && expires - approved === 3_600_000 ? "Approved" : "Approval expired";
+  }
   return review.state === "pending" ? "Review pending" : review.state === "rejected" ? "Changes requested" : "Approval expired";
 }
 
 export function customLaunchReviewDescription(review: CustomLaunchReview) {
-  if (customLaunchReviewAllowsSigning(review)) return `Approved. Launch by ${new Date(review.expiresAt!).toLocaleString()}.`;
+  if (customLaunchReviewLabel(review) === "Approved") return `Approved. Launch by ${new Date(review.expiresAt!).toLocaleString()}.`;
   if (review.state === "pending") return "Your launch is waiting for Programmable approval. No extra application is needed. This page updates automatically.";
   if (review.state === "rejected") return review.reason || "Programmable requested changes to this launch.";
   return "The one-hour approval window has ended. A new approval is required before signing.";
