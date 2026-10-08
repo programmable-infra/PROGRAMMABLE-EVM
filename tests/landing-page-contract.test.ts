@@ -53,7 +53,7 @@ describe("landing page contract", () => {
     expect(manifest).toContain('"theme_color": "#000000"');
 
     expect(landing).toContain(
-      'src="/brand/atmosphere/programmable-floral-foreground-v1.avif"',
+      'src="/brand/atmosphere/programmable-floral-foreground-v2.avif"',
     );
     expect(landing).toContain("const HERO_TWINKLE_COUNT = 120");
     expect(landing).toContain("const duration = 2.8");
@@ -69,7 +69,7 @@ describe("landing page contract", () => {
     expect(landing).not.toContain("liquid-glass-distortion");
 
     for (const asset of [
-      "programmable-floral-foreground-v1.avif",
+      "programmable-floral-foreground-v2.avif",
       "programmable-floral-hooks-v1.avif",
     ]) {
       const assetPath = join(root, "public/brand/atmosphere", asset);
@@ -78,9 +78,9 @@ describe("landing page contract", () => {
     }
 
     for (const [asset, maximumBytes] of [
-      ["programmable-floral-foreground-v1.avif", 1_000_000],
-      ["programmable-floral-foreground-tablet-v1.avif", 550_000],
-      ["programmable-floral-foreground-mobile-v1.avif", 400_000],
+      ["programmable-floral-foreground-v2.avif", 450_000],
+      ["programmable-floral-foreground-tablet-v2.avif", 240_000],
+      ["programmable-floral-foreground-mobile-v2.avif", 160_000],
     ] as const) {
       expect(
         statSync(join(root, "public/brand/atmosphere", asset)).size,
