@@ -62,6 +62,12 @@ describe("24-hour review and launch windows", () => {
     expect(customLaunchReviewAllowsSigning(started, now)).toBe(true);
     expect(customLaunchReviewAllowsSigning(started, Date.parse(approved.expiresAt))).toBe(false);
   });
+  it("keeps signing available after 23 hours and ends exactly at approval expiry", () => {
+    const started = { ...approved, launchRequestedAt: review.approvedAt, launchDeadline: approved.expiresAt };
+    expect(customLaunchReviewAllowsSigning(started, Date.parse(approved.expiresAt) - 1)).toBe(true);
+    expect(customLaunchReviewAllowsSigning(started, Date.parse(approved.expiresAt))).toBe(false);
+    expect(customLaunchReviewAllowsSigning({ ...started, launchDeadline: "2026-10-09T05:00:00Z" }, Date.parse(approved.expiresAt) - 1)).toBe(false);
+  });
   it("marks pending applications overdue after 24 hours without changing their state", () => {
     const pending = { ...review, state: "pending" as const, approvedAt: null, expiresAt: null };
     const due = Date.parse(pending.submittedAt) + 86400000;

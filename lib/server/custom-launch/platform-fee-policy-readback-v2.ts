@@ -1473,8 +1473,8 @@ export async function readPlatformFeePolicyForRouterEntryV2(
   await Promise.all([
     exactCode(
       client,
-      getAddress(CANONICAL_LAUNCH_STAMP_V1.routerAddress),
-      CANONICAL_LAUNCH_STAMP_V1.routerRuntimeCodeHash,
+      getAddress(stamp.routerAddress),
+      stamp.routerRuntimeCodeHash,
       blockNumber,
     ),
     exactCode(

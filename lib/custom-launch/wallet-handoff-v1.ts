@@ -18,6 +18,14 @@ export const CUSTOM_LAUNCH_WALLET_TRANSACTION_SELECTOR_V1 =
 export const CUSTOM_LAUNCH_MAINNET_ROUTER_V1 =
   CANONICAL_LAUNCH_STAMP_V1.routerAddress;
 
+export const CUSTOM_LAUNCH_MAINNET_ROUTER_24H_V1 = "0xBE4bF6Ac8c6F012E1C8f25747A9fBccB2FDAC4C3" as const;
+export function isCustomLaunchRouterV1(value: unknown): boolean {
+  return sameAddress(value, CUSTOM_LAUNCH_MAINNET_ROUTER_V1) || sameAddress(value, CUSTOM_LAUNCH_MAINNET_ROUTER_24H_V1);
+}
+export function customLaunchMaximumLifetimeSecondsV1(router: unknown): bigint {
+  return sameAddress(router, CUSTOM_LAUNCH_MAINNET_ROUTER_24H_V1) ? 86_400n : 3_600n;
+}
+
 const UINT256_MAXIMUM = (1n << 256n) - 1n;
 const MINIMUM_WALLET_SUBMISSION_WINDOW_SECONDS = 30n;
 const WALLET_TRANSACTION_KEYS = Object.freeze([
@@ -125,13 +133,13 @@ export function prepareCustomLaunchWalletActionForAuthorizationSchema(
   const to = requiredAddress(transaction.to);
   if (
     !sameAddress(from, controller)
-    || !sameAddress(to, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
-    || !sameAddress(permit.router, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
+    || !isCustomLaunchRouterV1(to)
+    || !sameAddress(permit.router, to)
     || !sameAddress(permit.launchWallet, controller)
     || !sameAddress(unsignedTransaction.from, controller)
-    || !sameAddress(unsignedTransaction.to, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
-    || !sameAddress(signedPermit.router, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
-    || !sameAddress(observationWindow.router, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
+    || !sameAddress(unsignedTransaction.to, to)
+    || !sameAddress(signedPermit.router, to)
+    || !sameAddress(observationWindow.router, to)
   ) return invalid();
 
   const valueWei = canonicalUint256(transaction.valueWei);
@@ -166,7 +174,7 @@ export function prepareCustomLaunchWalletActionForAuthorizationSchema(
   if (
     !Array.isArray(decodedPermit)
     || !numericEquals(decodedPermit[0], 1n)
-    || !sameAddress(decodedPermit[1], CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
+    || !sameAddress(decodedPermit[1], to)
     || !sameAddress(decodedPermit[2], controller)
     || !numericEquals(decodedPermit[3], 1n)
     || !sameHex(decodedPermit[4], routePayloadHash)
@@ -207,12 +215,12 @@ export function assertCustomLaunchWalletActionV1(
   if (
     action.chainId !== "1"
     || !sameAddress(from, controller)
-    || !sameAddress(to, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
+    || !isCustomLaunchRouterV1(to)
     || typeof action.value !== "string"
     || action.value !== toHex(valueWei.parsed)
     || !Array.isArray(decodedPermit)
     || !numericEquals(decodedPermit[0], 1n)
-    || !sameAddress(decodedPermit[1], CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
+    || !sameAddress(decodedPermit[1], to)
     || !sameAddress(decodedPermit[2], controller)
     || !numericEquals(decodedPermit[3], 1n)
     || !numericEquals(decodedPermit[10], valueWei.parsed)

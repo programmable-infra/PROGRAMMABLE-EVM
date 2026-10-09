@@ -15,7 +15,7 @@ export const CUSTOM_LAUNCH_PLAN_ATOMIC_EXECUTOR_V2 = "atomic_execute_and_stamp_v
 export const CUSTOM_LAUNCH_PLAN_ATOMIC_SELECTOR_V2 = "0x506aba45" as const;
 export const CUSTOM_LAUNCH_PLAN_ATOMIC_ENVELOPE_SCHEMA_V2 = "programmable.custom-launch-plan-atomic-envelope.v2" as const;
 export const CUSTOM_LAUNCH_PLAN_ATOMIC_LIMITS_V2 = Object.freeze({ calls: 32, callDataBytes: 1_048_576,
-  components: 64, markets: 32, signatureBytes: 16_384, lifetimeSeconds: 3600 });
+  components: 64, markets: 32, signatureBytes: 16_384, lifetimeSeconds: 86400 });
 
 export const CUSTOM_LAUNCH_PLAN_ATOMIC_ORDER_FIELDS_V2 = [
   { name: "chainId", type: "uint256" }, { name: "executor", type: "address" },

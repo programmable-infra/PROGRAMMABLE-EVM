@@ -320,3 +320,6 @@ export const HOOK_PERMISSION_BITS = Object.freeze({
   afterAddLiquidityReturnDelta: 1,
   afterRemoveLiquidityReturnDelta: 0,
 });
+
+export const ROUTER_24H = "0xBE4bF6Ac8c6F012E1C8f25747A9fBccB2FDAC4C3";
+export const ROUTER_24H_RUNTIME_CODE_HASH = "0xf2d611fb92718c63cf5767300e79d7c9b49480b2e9001448b96c1385f4edb6f3";

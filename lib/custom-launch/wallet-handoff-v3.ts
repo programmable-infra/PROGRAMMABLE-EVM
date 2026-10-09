@@ -19,7 +19,8 @@ import {
 
 import {
   assertCustomLaunchWalletActionV1,
-  CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+  isCustomLaunchRouterV1,
+  customLaunchMaximumLifetimeSecondsV1,
   CUSTOM_LAUNCH_WALLET_TRANSACTION_SELECTOR_V1,
   type CustomLaunchWalletActionV1,
 } from "./wallet-handoff-v1";
@@ -685,7 +686,7 @@ export function prepareCustomLaunchRouterReviewV3(
     valueWei: valueWei.source,
   }), connectedController);
   if (
-    !sameAddress(action.to, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
+    !isCustomLaunchRouterV1(action.to)
     || customLaunchWalletTransactionPreimageHashV2(action)
       !== transactionPreimageHash
   ) return invalid();
@@ -762,7 +763,7 @@ function assertExactCustomGraphRouterCalldataV3(
       name: "ProgrammableLaunchStampRouter",
       version: "1",
       chainId: 1,
-      verifyingContract: CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+      verifyingContract: action.to,
     },
     primaryType: "ProgrammableLaunchPermitV1",
     types: {
@@ -797,7 +798,8 @@ function assertExactCustomGraphRouterCalldataV3(
   const now = BigInt(Math.floor(Date.now() / 1_000));
   if (
     permitChainId !== 1n
-    || !sameAddress(permitRouter, CUSTOM_LAUNCH_MAINNET_ROUTER_V1)
+    || !sameAddress(permitRouter, action.to)
+    || deadline <= validAfter || deadline - validAfter > customLaunchMaximumLifetimeSecondsV1(action.to)
     || !sameAddress(permitWallet, action.from)
     || permitKind !== 1n
     || permitRouteHash !== keccak256(routePayload)
@@ -869,7 +871,7 @@ function assertExactCustomGraphRouterCalldataV3(
         routeNonce,
         targetIdHash,
         applicantSalt,
-        CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+        action.to,
       ],
     );
     const predictedAddress = getCreate2Address({
@@ -926,7 +928,7 @@ function assertExactCustomGraphRouterCalldataV3(
       routeNamespace,
       routeNonce,
       topologyHash,
-      CUSTOM_LAUNCH_MAINNET_ROUTER_V1,
+      action.to,
       totalValue,
       targetCommitmentsHash,
     ],
@@ -1186,7 +1188,7 @@ function assertSimulatingOutputV3(
   const permitWindow = exactRecord(output.permitWindow, PERMIT_WINDOW_KEYS);
   const validAfter = canonicalUint256(permitWindow.validAfter).parsed;
   const deadline = canonicalUint256(permitWindow.deadline).parsed;
-  if (deadline <= validAfter || deadline - validAfter > MAXIMUM_FUNDING_VALIDITY_SECONDS) {
+  if (deadline <= validAfter || deadline - validAfter > 86_400n) {
     return invalid();
   }
   const transaction = assertExactWalletTransactionV3(output.walletTransaction);
@@ -1377,7 +1379,7 @@ function assertSignedPermitV3(
     || exactLowerBytes32(permit.safeMessageDigest) !== permit.safeMessageDigest
     || exactLowerHexData(permit.signature) !== permit.signature
     || deadline <= validAfter
-    || deadline - validAfter > MAXIMUM_FUNDING_VALIDITY_SECONDS) return invalid();
+    || deadline - validAfter > customLaunchMaximumLifetimeSecondsV1(permit.router)) return invalid();
   exactSha256(permit.artifactHash);
   exactNonzeroLowerBytes32(permit.permitDigest);
 }

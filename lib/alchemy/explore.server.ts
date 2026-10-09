@@ -137,7 +137,7 @@ export type AlchemyRouterCustomIdentitySourceV1 = Readonly<{
   generatedAt: string;
   status: "current" | "last-known-good";
   reorgDetected: boolean;
-  slice: AlchemyLaunchStampRouterRegistry;
+  slice: Pick<AlchemyLaunchStampRouterRegistry, "cursor" | "tokens">;
 }>;
 
 export async function readAlchemyRouterCustomIdentitySourceV1(): Promise<

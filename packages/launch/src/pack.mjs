@@ -85,7 +85,7 @@ const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
-export async function buildLaunch({ configPath, directNativeProfileVersion }) {
+export async function buildLaunch({ configPath, directNativeProfileVersion, directNativeRouter }) {
   const absoluteConfig = path.resolve(configPath);
   const { config, apiVersion } = await readPackConfig(absoluteConfig);
   if (apiVersion === "v4") {
@@ -115,6 +115,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   const directNativeProfile = apiVersion === "v3"
     ? resolveDirectNativeProfile(launchProfileSelection, {
         profileVersion: directNativeProfileVersion ?? configuredDirectNativeProfileVersion,
+        router: directNativeRouter,
       })
     : null;
   if (directNativeProfileVersion !== undefined && apiVersion !== "v3") {
@@ -222,6 +223,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
       ? [launchProfileSelection.targetRoles.customModuleTargetId]
       : [],
     enforceV4PermissionDependencies: apiVersion === "v3",
+    ...(directNativeProfile ? { chainContext: directNativeProfile } : {}),
   });
   const { verificationBundle, verificationBundleHash } = buildVerificationBundle(
     units,
@@ -312,6 +314,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
     const routeNamespace = deriveRouteNamespace(
       sourceBundle.bundleContentSha256,
       launchWallet,
+      directNativeProfile,
     );
     const fundingSignaturePatch = launchProfileSelection.fundingMode
       === "eip-3009-receive-with-authorization"
@@ -397,6 +400,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
       === "eip-3009-receive-with-authorization"
       ? buildFundingAuthorization(config.fundingAuthorization, {
           launchWallet,
+          router: launchProfile.router,
           predictedInitializer: launchProfileBinding.predictedInitializer,
           routeNamespace,
           routeNonce: nonce,
@@ -518,8 +522,8 @@ export async function buildLaunch({ configPath, directNativeProfileVersion }) {
   return result;
 }
 
-export async function packLaunch({ configPath, outputPath, receiptPath, directNativeProfileVersion }) {
-  const built = await buildLaunch({ configPath, directNativeProfileVersion });
+export async function packLaunch({ configPath, outputPath, receiptPath, directNativeProfileVersion, directNativeRouter }) {
+  const built = await buildLaunch({ configPath, directNativeProfileVersion, directNativeRouter });
   const resolvedOutput = path.resolve(outputPath ?? path.join(built.configDirectory, "launch.json"));
   const resolvedReceipt = path.resolve(receiptPath ?? `${resolvedOutput}.receipt.json`);
   await atomicWrite(resolvedOutput, built.requestBytes, 0o600);

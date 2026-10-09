@@ -10,6 +10,7 @@ export type CustomLaunchReview = Readonly<{
   approvedAt: string | null;
   expiresAt: string | null;
   reason: string | null;
+  requiresRepack?: boolean;
   reviewDueAt?: string;
   reviewOverdue?: boolean;
   launchRequestedAt?: string | null;
@@ -26,6 +27,7 @@ export function parseCustomLaunchReview(value: unknown): CustomLaunchReview {
     || (v.approvedAt !== null && !Number.isFinite(Date.parse(v.approvedAt)))
     || (v.expiresAt !== null && !Number.isFinite(Date.parse(v.expiresAt)))
     || (v.reason !== null && typeof v.reason !== "string")
+    || (v.requiresRepack !== undefined && typeof v.requiresRepack !== "boolean")
     || (v.reviewDueAt !== undefined && !Number.isFinite(Date.parse(v.reviewDueAt)))
     || (v.reviewOverdue !== undefined && typeof v.reviewOverdue !== "boolean")
     || (v.launchRequestedAt !== undefined && v.launchRequestedAt !== null && !Number.isFinite(Date.parse(v.launchRequestedAt)))
@@ -35,13 +37,13 @@ export function parseCustomLaunchReview(value: unknown): CustomLaunchReview {
 
 export function customLaunchReviewAllowsSigning(review: CustomLaunchReview, now = Date.now()) {
   const approved = Date.parse(review.approvedAt ?? ""), expires = Date.parse(review.expiresAt ?? "");
-  if (review.state !== "approved" || approved > now || expires <= now || ![3_600_000, 86_400_000].includes(expires - approved)
+  if (review.requiresRepack === true || review.state !== "approved" || approved > now || expires <= now || ![3_600_000, 86_400_000].includes(expires - approved)
     || review.launchRequestedAt === null || review.launchDeadline === null) return false;
   if (expires - approved === 86_400_000 && (!review.launchRequestedAt || !review.launchDeadline)) return false;
   if (review.launchRequestedAt !== undefined) {
     const started = Date.parse(review.launchRequestedAt), deadline = Date.parse(review.launchDeadline ?? "");
     if (!Number.isFinite(started) || !Number.isFinite(deadline) || started < approved || started > now || deadline <= now
-      || deadline > expires || deadline <= started || deadline - started > 3_600_000) return false;
+      || deadline > expires || deadline <= started || deadline - started > 86_400_000) return false;
   }
   return true;
 }
@@ -55,6 +57,7 @@ export function customLaunchReviewOverdue(review: CustomLaunchReview, now = Date
 }
 
 export function customLaunchReviewLabel(review: CustomLaunchReview, now = Date.now()) {
+  if (review.requiresRepack === true) return "Update required";
   if (review.state === "approved") {
     const approved = Date.parse(review.approvedAt ?? ""), expires = Date.parse(review.expiresAt ?? "");
     // A fresh server approval can be slightly ahead of the browser clock.
@@ -65,6 +68,7 @@ export function customLaunchReviewLabel(review: CustomLaunchReview, now = Date.n
 }
 
 export function customLaunchReviewDescription(review: CustomLaunchReview) {
+  if (review.requiresRepack === true) return "Repack this launch with the current contract bindings for the 24-hour signing window, then submit it for review.";
   if (customLaunchReviewLabel(review) === "Approved") return `Approved. Launch by ${new Date(review.expiresAt!).toLocaleString()}.`;
   if (review.state === "pending") return customLaunchReviewOverdue(review)
     ? "Review is overdue. Your application remains open. Your 24-hour launch window starts only after approval."

@@ -74,6 +74,8 @@ import {
   PERMIT_AUTHORITY_RUNTIME_CODE_HASH,
   RECEIVE_WITH_AUTHORIZATION_TYPEHASH,
   ROUTER,
+  ROUTER_24H,
+  ROUTER_24H_RUNTIME_CODE_HASH,
   ROUTER_RUNTIME_CODE_HASH,
 } from "./constants.mjs";
 import { createCliDiagnosticError } from "./diagnostics.mjs";
@@ -304,6 +306,9 @@ export function resolveDirectNativeProfile(selection, options = {}) {
     profileContract,
     options.profileVersion,
   );
+  const currentRouter = profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36
+    ? options.router ?? ROUTER_24H : ROUTER;
+  if (![ROUTER, ROUTER_24H].includes(currentRouter)) throw new TypeError("Unknown Ethereum launch router");
   return {
     schemaVersion: profileContract.profileSchema,
     profileId: DIRECT_NATIVE_PROFILE_ID,
@@ -311,8 +316,8 @@ export function resolveDirectNativeProfile(selection, options = {}) {
     profileVersion,
     productionLaunchAuthorized: true,
     chainId: MAINNET_CHAIN_ID,
-    router: ROUTER,
-    routerRuntimeCodeHash: ROUTER_RUNTIME_CODE_HASH,
+    router: currentRouter,
+    routerRuntimeCodeHash: currentRouter === ROUTER_24H ? ROUTER_24H_RUNTIME_CODE_HASH : ROUTER_RUNTIME_CODE_HASH,
     permitAuthority: PERMIT_AUTHORITY,
     permitAuthorityRuntimeCodeHash: PERMIT_AUTHORITY_RUNTIME_CODE_HASH,
     graphFactory: GRAPH_FACTORY,
@@ -378,7 +383,7 @@ export function validateEmbeddedDirectNativeProfile(value) {
     claimMode: "claim-authority-selected-recipient",
     applicantSelectedBuyHundredthsOfBip: "0",
     applicantSelectedSellHundredthsOfBip: "0",
-  }, { profileVersion: value?.profileVersion });
+  }, { profileVersion: value?.profileVersion, router: value?.router });
   if (canonicalizeJson(value) !== canonicalizeJson(expected)) {
     throw new TypeError("direct-native request does not contain the closed embedded launchProfile");
   }
@@ -657,7 +662,7 @@ export function validateDirectNativePermitWindow(value, { nowSeconds } = {}) {
   validateAuthorizationWindow({
     validAfter: normalized.validAfter,
     validBefore: normalized.deadline,
-  }, nowSeconds);
+  }, nowSeconds, 86_400n);
   return normalized;
 }
 
@@ -794,7 +799,7 @@ export function buildFundingAuthorization(input, context) {
       keccak256(stringToHex(FUNDING_INTENT_HASH_DOMAIN)),
       BigInt(MAINNET_CHAIN_ID),
       MAINNET_USDC,
-      ROUTER,
+      context.router ?? ROUTER,
       GRAPH_FACTORY,
       context.routeNamespace,
       context.routeNonce,
@@ -1528,14 +1533,14 @@ function canonicalPatchOffset(value, calldata, label) {
   return value;
 }
 
-function validateAuthorizationWindow(value, nowSeconds) {
+function validateAuthorizationWindow(value, nowSeconds, maximumSeconds = 3_600n) {
   const validAfter = BigInt(value.validAfter);
   const validBefore = BigInt(value.validBefore);
   if (validBefore <= validAfter) {
     throw new TypeError("authorization window requires deadline after validAfter");
   }
-  if (validBefore - validAfter > 3_600n) {
-    throw new TypeError("authorization window must not exceed 3600 seconds");
+  if (validBefore - validAfter > maximumSeconds) {
+    throw new TypeError(`authorization window must not exceed ${maximumSeconds} seconds`);
   }
   if (nowSeconds !== undefined) {
     if (!Number.isSafeInteger(nowSeconds) || nowSeconds < 0) {

@@ -25,6 +25,7 @@ vi.mock("../lib/alchemy/explore.server", () => ({
 vi.mock(
   "../lib/server/custom-launch/finalized-custom-launch-metadata-feed-v1",
   () => ({
+    readProductionFinalizedCustomLaunchMetadataFeedV1: async () => ({ status: "current", launches: [] }),
     enrichRouterCustomSnapshotWithFinalizedMetadataV1:
       mocks.enrichRouterCustomSnapshotWithFinalizedMetadataV1,
   }),

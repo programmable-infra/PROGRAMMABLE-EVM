@@ -83,12 +83,13 @@ function AccountReviews({ account }: { account: string }) {
         <h2>{customLaunchReviewLabel(detail, now)}</h2><p className={styles.address}>{detail.controller}</p>
         {detail.state === "pending" && <p>{customLaunchReviewOverdue(detail, now) ? "Review overdue. The application remains open." : `Review due ${new Date(detail.reviewDueAt ?? Date.parse(detail.submittedAt) + 86_400_000).toLocaleString()}.`}</p>}
         {detail.expiresAt && <p>Launch window ends {new Date(detail.expiresAt).toLocaleString()}.</p>}
+        {detail.requiresRepack && <p>The team must repack with the current contract bindings before a 24-hour approval can be issued.</p>}
         {detail.reason && <p>{detail.reason}</p>}
         <h3>Technical checks</h3><pre>{JSON.stringify(detail.technicalStatus, null, 2)}</pre>
         <details><summary>Submitted launch and source</summary><pre>{JSON.stringify(detail.request, null, 2)}</pre></details>
         <p className={styles.address}>Reviewed version: {detail.subjectHash}</p>
         {canDecide && <><label>Note to the team <textarea maxLength={2000} value={reason} onChange={event => setReason(event.target.value)} disabled={busy} /></label>
-          <div className={styles.actions}><button disabled={busy} onClick={() => void decide("approve")}>Approve for 24 hours</button><button disabled={busy} onClick={() => void decide("reject")}>Request changes</button></div></>}
+          <div className={styles.actions}><button disabled={busy || detail.requiresRepack === true} onClick={() => void decide("approve")}>Approve for 24 hours</button><button disabled={busy} onClick={() => void decide("reject")}>Request changes</button></div></>}
       </> : <p>Select a launch to review its submitted configuration and checks.</p>}</section></div>
     {error && <p role="alert">{error}</p>}
   </>;

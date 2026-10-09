@@ -351,7 +351,7 @@ The top-level fields are:
 - `pool`: exact token/hook target IDs, fee, tick spacing, and `quoteCurrency` address; use
   `0x0000000000000000000000000000000000000000` for native ETH or the exact ERC-20 address for a token quote
 - `projectMetadata`: the required public token declaration and presentation input described below
-- `permitWindow`: exact `validAfter` and `deadline`, no more than one hour apart
+- `permitWindow`: exact `validAfter` and `deadline`, no more than 24 hours apart on the current router. The approved launch must be signed by the approval expiry; Start does not extend that expiry. Historical routers retain their original one-hour transaction limit.
 - `launchProfile`: target roles, liquidity model, funding mode, fee accounting and claim binding
 - `agentAttestation`: stable agent ID, explicit millisecond UTC `checkedAt`, and checks that point to exact evidence files
 
