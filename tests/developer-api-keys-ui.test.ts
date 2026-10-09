@@ -890,7 +890,7 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain("&version=${version}");
     expect(historySource).toContain("Wallet action required");
     expect(historySource).toContain(
-      "Review the exact Ethereum Mainnet transaction, then ask your wallet to send it.",
+      "Ready to launch. Confirm the transaction in your wallet.",
     );
     expect(historySource).not.toContain("Your agent&apos;s first accepted request");
     expect(historyStyles).not.toContain("height: clamp(");
