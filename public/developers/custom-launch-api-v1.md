@@ -7,7 +7,9 @@ Submitting a custom launch also creates its review on Ethereum and Robinhood. Th
 
 Approval opens a separate 24-hour window ending at `manualReview.expiresAt`. When the controller is ready, use **Start launch** in the wallet handoff, or call `POST /v1/custom-launch-reviews/start` with the same wallet API key and JSON `{ "chainId": "1", "launchId": "<request ID>" }`. For Robinhood, use `"4663"` and the plan ID. Poll the existing resource after starting.
 
-The start response includes `launchRequestedAt` and `launchDeadline`. Existing contracts limit the prepared transaction to one hour, capped by the approval expiry. Starting again is idempotent; it does not extend either deadline or replace an issued transaction. Complete signing within `launchDeadline`. If an issued transaction expires, preserve the launch ID and receipts and follow the recovery guidance; Ethereum permit reissue is not supported.
+The start response includes `launchRequestedAt` and `launchDeadline`. For the current 24-hour contracts, `launchDeadline` equals the approval expiry: the team has 24 hours from approval to complete signing. Start does not add another window. Starting again is idempotent; it does not extend either deadline or replace an issued transaction. Complete signing within `launchDeadline`. If an issued transaction expires, preserve the launch ID and receipts and follow the recovery guidance; Ethereum permit reissue is not supported.
+
+Previously issued transactions retain their original deadlines. If `manualReview.requiresRepack` is true or the API returns `REVIEW_REPLAN_REQUIRED`, repack with the current live contracts and CLI before requesting a new review. Do not reuse the retired one-hour execution contracts for a new approval.
 
 Keep deadlines embedded in your own contract calls long enough for both review and launch windows. Programmable refreshes only the outer transaction window; it never changes reviewed source or custom calldata.
 
