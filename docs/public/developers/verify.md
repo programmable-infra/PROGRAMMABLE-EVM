@@ -18,7 +18,7 @@ Start with the chain and token address. Then select the launch source and its ve
 
 Use the selected source's deployment addresses, ABI, runtime hashes and finality rules. Check the successful transaction, emitted events and recorded contract relationships at the same canonical block.
 
-Foundation uses factory records and does not require a Custom Launch stamp. Earlier module releases have their own adapters. Custom V4 uses Router V1; MultiRole V2 uses Router V2 and permits one address to hold both token and hook roles.
+Robinhood Foundation uses factory records and does not require a Custom Launch stamp. Earlier module releases have their own adapters. Custom V4 uses Router V1; MultiRole V2 uses Router V2 and permits one address to hold both token and hook roles.
 
 Keep Robinhood inclusion, Ethereum posting and Ethereum finality separate. The API resource ID and onchain launch ID are also different. Follow the selected reference's exact fields.
 
@@ -29,6 +29,8 @@ Read the [Developer manifest](https://developers.programmable.family/api/v2/mani
 Scan events from the published start block and apply the manifest's finality policy. Match the launch ID, token, hook, PoolManager and pool ID with the point lookup, `launchStamp` and `stampProof` at the same block. The hosted feed helps discover records; it does not replace these checks.
 
 A shared infrastructure component must not be used to identify a single launch. The token lookup identifies the launch, while the pool lookup identifies the market used for trading.
+
+Ethereum Module Mode also has a `custom-graph` Router stamp. After verifying that stamp, follow [Ethereum module verification](foundation-indexing.md#ethereum-module-launches) to bind the module implementation and graph initializer. Do not require a Robinhood factory event or exclude a launch because the Router category is `custom`.
 
 ## Record the outcome
 

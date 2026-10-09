@@ -4,13 +4,23 @@ description: Verify Foundation coins, their Uniswap v4 pools and selected module
 
 # Index Foundation launches
 
-Foundation creates an ERC-20 coin and its Uniswap v4 pool on Robinhood Chain, `eip155:4663`. Use the factory's launch record to verify the coin, pool and selected modules. The same procedure covers coins with no modules.
+Foundation creates an ERC-20 coin and its Uniswap v4 pool on Robinhood Chain, `eip155:4663`, and Ethereum Mainnet, `eip155:1`. Select the chain's source below before verifying the coin, pool and selected modules. Coins with no selected modules use the same launch source.
 
-Foundation does not require a Custom Launch Router stamp. Existing Native and Engine coins use [separate source adapters](module-mode-indexing.md).
+Robinhood Foundation uses a factory record. Ethereum Foundation uses a canonical Router stamp and a verified module graph. Existing Robinhood Native and Engine coins use [separate source adapters](module-mode-indexing.md).
+
+## Ethereum module launches
+
+Read [Ethereum Foundation discovery](https://programmable.market/api/module-foundation?chainId=1). For an existing coin, use `GET /api/module-foundation?chainId=1&token={checksummedTokenAddress}`. The response binds the module implementation, graph factory, runtime hashes, release digest and source commit. The [Ethereum release descriptor](https://github.com/programmablehq/PROGRAMMABLE/blob/production/contracts/deployments/ethereum-module-release-v1.json) supplies the versioned source.
+
+Discover Ethereum identities from the [canonical Router snapshot](https://programmable.market/api/indexers/v1/router-custom-identities). These launches have `custom-graph` provenance; the public `custom` category does not exclude Module Mode. Verify the Router stamp and its token, hook and pool proofs first. Then use `isEthereumModuleLaunchCandidate` and `decodeFoundationEthereumGraphLaunch` from the pinned source's `lib/module-foundation/ethereum-release.ts` and `ethereum-graph.ts` to identify the module implementation and decode its initializer. A matching display label alone is insufficient.
+
+Verify the graph proxy, implementation, initializer, token, hook and pool using `readFoundationEthereumGraphLaunch` in `lib/server/module-foundation/ethereum-graph.ts`. Preserve the canonical token address as the coin identity; the graph account is not the token. Runtime, implementation and source checks determine the module family, independently of the coin's name or selected module IDs.
+
+The Robinhood factory events and `launchOf(token)` procedure below do not apply to this Ethereum graph. After verifying the graph, use its bound pool, ledger, module descriptors and token metadata for the corresponding reads below.
 
 ## Resolve the launch source
 
-Read [Foundation discovery](https://programmable.market/api/module-foundation) for the current release. For an existing coin, use `GET /api/module-foundation?token={checksummedTokenAddress}` to find its original release. Keep verified historical bindings when the active factory changes; current discovery alone is not a history of every factory.
+Read [Robinhood Foundation discovery](https://programmable.market/api/module-foundation?chainId=4663) for the current release. For an existing coin, use `GET /api/module-foundation?chainId=4663&token={checksummedTokenAddress}` to find its original release. Enumerate the [retained factory releases](https://api.programmable.market/v1/modules/foundation/releases) and follow each `availabilityPath`. Keep verified historical bindings when the active factory changes; current discovery alone is not a history of every factory.
 
 The response supplies `factoryVersion`, `releaseDigest`, `sourceCommit`, `startBlock`, and the factory and hook-deployer runtime hashes. Verify these against its source and deployment evidence. Check the RPC chain, deployed code and required infrastructure before accepting the source. A failed lookup leaves the result unknown.
 

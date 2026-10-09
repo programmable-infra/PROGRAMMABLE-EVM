@@ -7,6 +7,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("server-only", () => ({}));
+vi.mock("../lib/server/module-foundation/recent-launch-store", () => ({
+  findRecentFoundationLaunch: vi.fn(async () => null),
+}));
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mocks.cookie }),
 }));

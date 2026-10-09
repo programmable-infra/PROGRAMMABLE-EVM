@@ -15,6 +15,7 @@ import { genericTokenDetailMetadata } from "@/lib/token-detail-metadata";
 import { tokenDetailPageChainId } from "@/lib/token-page-chain";
 import { isRobinhoodFoundationLaunch, robinhoodLaunchDescription } from "@/lib/robinhood-launches";
 import { ethereumFoundationPresentation } from "@/lib/launch-presentation-details";
+import { findRecentFoundationLaunch } from "@/lib/server/module-foundation/recent-launch-store";
 
 type TokenPageSearchParams = Promise<
   Record<string, string | string[] | undefined>
@@ -44,6 +45,13 @@ export async function generateMetadata({
       description: robinhoodLaunchDescription(token),
       alternates: { canonical: `/token/${token.tokenAddress}` },
     };
+    const chainId = resolvedSearchParams.chain === "1" ? 1 : 4663;
+    const recent = await findRecentFoundationLaunch(chainId, address).catch(() => null);
+    if (recent) return {
+      title: `${recent.row.name || address} · Programmable`,
+      description: `Programmable launch on ${chainId === 1 ? "Ethereum" : "Robinhood Chain"}.`,
+      alternates: { canonical: `/token/${recent.row.tokenAddress}${chainId === 1 ? "?chain=1" : ""}` },
+    };
   }
   return genericTokenDetailMetadata(address, true, tokenDetailPageChainId(resolvedSearchParams.chain) ?? 1);
 }
@@ -67,6 +75,18 @@ export default async function TokenPage({
   }
   const resolved = await resolveTokenPage(address, resolvedSearchParams.chain);
   if (resolved === null) notFound();
+  // Explore can display a receipt-confirmed launch before the finalized index
+  // catches up. Use the same verified observation for direct links, without
+  // changing the finalized resolver used by transaction and claim readers.
+  if (resolved.chainId === null || !resolved.token) {
+    const chainId = resolvedSearchParams.chain === "1" ? 1 : 4663;
+    const recent = await findRecentFoundationLaunch(chainId, address).catch(() => null);
+    if (recent) return <TokenRouteChainSync key={chainId} chainId={chainId}>
+      <ModuleFoundationMarketHost chainId={chainId} token={getAddress(address)}
+        transactionHash={recent.row.transactionHash as Hex} initialLaunch={recent.row}
+        initialName={recent.row.name || undefined} initialPresentation={Promise.resolve(recent.presentation)} />
+    </TokenRouteChainSync>;
+  }
   if (resolved.chainId === 4663) {
     // Start the optional observation while verified identity and chart render.
     const initialPresentation = readRobinhoodTokenPresentation(address).then(result => result.presentation).catch(() => null);
