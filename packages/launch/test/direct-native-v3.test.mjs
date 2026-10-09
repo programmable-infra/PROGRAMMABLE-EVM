@@ -310,9 +310,13 @@ test("V3 selection closes funding, accounting, claim, and applicant-selected rat
     validAfter: "900",
     deadline: "1200",
   }), { validAfter: "900", deadline: "1200" });
+  assert.deepEqual(validateDirectNativePermitWindow({
+    validAfter: "900",
+    deadline: "87300",
+  }), { validAfter: "900", deadline: "87300" });
   assert.throws(
-    () => validateDirectNativePermitWindow({ validAfter: "900", deadline: "4501" }),
-    /must not exceed 3600 seconds/u,
+    () => validateDirectNativePermitWindow({ validAfter: "900", deadline: "87301" }),
+    /must not exceed 86400 seconds/u,
   );
 });
 
