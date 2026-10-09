@@ -1141,6 +1141,22 @@ export function routerCustomClaimClassification(source) {
     : "ready";
 }
 
+// Unknown adapters are outside a verified-source claim. A broken provenance or
+// a failed binding for an otherwise supported adapter still blocks submission.
+export function routerClaimCoverage(launches) {
+  const unsupported = [], blocked = [];
+  for (const launch of launches) {
+    const unresolved = launch.launchKind === 1
+      ? routerCustomClaimClassification(launch) === "blocked"
+      : launch.launchKind === 2 && launch.claimMode === "unsupported";
+    if (!unresolved) continue;
+    if (launch.claimMode === "unsupported" && launch.provenanceVerified === true &&
+        launch.runtimeVerified === true) unsupported.push(launch);
+    else blocked.push(launch);
+  }
+  return { unsupported, blocked };
+}
+
 export function customClaimDefinitionClassification(claim, current = {}) {
   const source = { ...claim, ...current };
   if (claim?.origin === "launch-stamp-router")

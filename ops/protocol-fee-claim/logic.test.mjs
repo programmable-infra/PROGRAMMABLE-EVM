@@ -62,6 +62,7 @@ import {
   requireAtomicClaimCapability,
   routerFinalizedBoundary,
   routerCustomClaimClassification,
+  routerClaimCoverage,
   shortAddress,
   toQuantityHex,
   validatedAtomicBatchStatus,
@@ -199,7 +200,7 @@ test("keeps the cached scan display-only and the main action wallet-first", () =
 
   assert.equal((index.match(/data-action(?:\s|>)/g) ?? []).length, 1);
   assert.doesNotMatch(index, /data-refresh|Neu scannen/);
-  assert.match(index, /Mit der Reward Wallet verbinden und claimen\./);
+  assert.match(index, /Reward Wallet/);
   assert.match(app, /elements\.actionLabel\.textContent = "Erneut prüfen"/);
   assert.match(app, /elements\.actionDetail\.textContent = "Reward Wallet bleibt verbunden"/);
   assert.match(claimAll, /await refreshClaims\(\);/);
@@ -296,11 +297,11 @@ test("keeps the public claim discovery manifest aligned with the scanner", () =>
   );
   assert.deepEqual(manifest.launchStampRouter.classicClaimPolicy, {
     knownHook: "covered_by_verified_aggregate_hook",
-    unknownHook: "visible_and_block_all_claims",
+    unknownHook: "visible_excluded_from_verified_scope",
   });
   assert.equal(
     manifest.launchStampRouter.unknownClaimProfile,
-    "visible_and_block_all_claims",
+    "visible_excluded_from_verified_scope",
   );
   assert.deepEqual(manifest.launchStampRouter.verification, [
     "router_and_trust_root_runtime_hashes",

@@ -58,6 +58,7 @@ import {
   shortAddress,
   toQuantityHex,
   routerCustomClaimClassification,
+  routerClaimCoverage,
   validatedAtomicBatchStatus,
   walletSendDefinitelyNotSubmitted,
   walletSendDuplicateBatchId,
@@ -1199,15 +1200,8 @@ function claimSafetyError({ ignoreConfirmedBatch = false } = {}) {
     )
   )
     return "Mindestens eine Custom-V2-Source-Bindung stimmt nicht";
-  if (
-    state.router.launches.some(
-      (launch) =>
-        (launch.launchKind === 1 &&
-          routerCustomClaimClassification(launch) === "blocked") ||
-        (launch.launchKind === 2 && launch.claimMode === "unsupported"),
-    )
-  )
-    return "Mindestens ein Router-Launch hat noch kein freigegebenes Claim-Profil";
+  if (routerClaimCoverage(state.router.launches).blocked.length > 0)
+    return "Mindestens eine Router-Claim-Bindung konnte nicht verifiziert werden";
   if (HOOKS.some(({ id }) => state.hooks.get(id)?.verified !== true))
     return "Mindestens eine Classic- oder Stock-Bindung stimmt nicht";
   if (CLAIMS.some(({ id }) => state.claims.get(id)?.status === "failed"))
@@ -1302,12 +1296,13 @@ function renderSummary() {
   const customV2BindingBlockers = state.customV2.sources.filter(
     (source) => customV2SourceClassification(source) === "blocked",
   );
-  const routerBindingBlockers = state.router.launches.filter(
-    (launch) =>
-      (launch.launchKind === 1 &&
-        routerCustomClaimClassification(launch) === "blocked") ||
-      (launch.launchKind === 2 && launch.claimMode === "unsupported"),
-  );
+  const { blocked: routerBindingBlockers, unsupported: excludedRouterClaims } =
+    routerClaimCoverage(state.router.launches);
+  const coverageNotice = document.querySelector("[data-coverage-notice]");
+  coverageNotice.hidden = excludedRouterClaims.length === 0;
+  coverageNotice.textContent = excludedRouterClaims.length
+    ? `${excludedRouterClaims.length} weitere Quellen sind noch nicht unterstützt und nicht in diesem Claim enthalten. Ihre Gebühren bleiben unverändert. Details stehen unten.`
+    : "";
 
   const connected = state.account !== null;
   const correctWallet = connected && isTreasury(state.account);
@@ -1342,7 +1337,7 @@ function renderSummary() {
         : "Noch nicht geprüft"
       : `${displayClaimCount} ${displayClaimCount === 1 ? "Claim" : "Claims"}${displayAssetCount > 0 ? ` · +${displayAssetCount} Assets` : ""}`;
   elements.totalLabel.textContent = displayCurrent
-    ? "Jetzt offen"
+    ? "Geprüfte Gebühren"
     : displaySnapshot
       ? loading
         ? "Letzter Stand · wird aktualisiert"
@@ -1449,8 +1444,8 @@ function renderSummary() {
     elements.actionDetail.textContent = "Claim bleibt sicher gesperrt";
     elements.action.disabled = true;
   } else if (routerBindingBlockers.length > 0) {
-    elements.actionLabel.textContent = "Neue Quelle prüfen";
-    elements.actionDetail.textContent = `${routerBindingBlockers.length} neue ${routerBindingBlockers.length === 1 ? "Quelle" : "Quellen"} noch nicht freigegeben`;
+    elements.actionLabel.textContent = "Quellenbindung prüfen";
+    elements.actionDetail.textContent = "Eine Contract-Bindung konnte nicht verifiziert werden";
     elements.action.disabled = true;
   } else if (claimable.length > MAX_BATCH_CALLS) {
     elements.actionLabel.textContent = "Zu viele offene Claims";
@@ -1469,9 +1464,9 @@ function renderSummary() {
     elements.actionDetail.textContent = "Gemeinsamer Claim nicht unterstützt";
     elements.action.disabled = true;
   } else {
-    elements.actionLabel.textContent = "Alles claimen";
+    elements.actionLabel.textContent = "Geprüfte Fees claimen";
     const claimLabel = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
-    elements.actionDetail.textContent = `${claimLabel} · eine Bestätigung`;
+    elements.actionDetail.textContent = `${claimLabel} · eine Bestätigung${excludedRouterClaims.length ? " · weitere Quellen ausgeschlossen" : ""}`;
     elements.action.disabled = state.busy;
   }
 
@@ -3379,7 +3374,7 @@ async function claimAll() {
       );
       return submitStoredBatchAndWait(submissionLock);
     });
-    setStatus("Alle verfügbaren Fees wurden geclaimt");
+    setStatus("Die ausgewählten geprüften Fees wurden geclaimt");
     await refreshClaims();
   } catch (error) {
     const message =
@@ -3413,7 +3408,7 @@ async function resumeStoredBatch() {
       setStatus("Der gespeicherte Claim-Batch wird mit derselben ID fortgesetzt");
       return submitStoredBatchAndWait(lock);
     });
-    setStatus("Alle verfügbaren Fees wurden geclaimt");
+    setStatus("Die ausgewählten geprüften Fees wurden geclaimt");
     await refreshClaims();
   } catch (error) {
     const message =
