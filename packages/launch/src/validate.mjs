@@ -136,7 +136,7 @@ export async function validateLaunchFile({ launchPath, configPath }) {
     const rebuilt = await buildLaunch({
       configPath,
       ...(isV3
-        ? { directNativeProfileVersion: request?.launchProfile?.profileVersion, directNativeRouter: request?.launchProfile?.router }
+        ? { directNativeProfileVersion: request?.launchProfile?.profileVersion, directNativeRouter: request?.launchProfile?.router, directNativeTradeFeePolicy: request?.launchProfile?.programmableTradeFeePolicy }
         : {}),
     });
     diagnostics = rebuilt.diagnostics ?? [];
@@ -437,6 +437,7 @@ function validateV3LaunchRequest(request) {
     request.launchProfileSelection,
     {
       profileVersion: launchProfile.profileVersion,
+      profile: launchProfile,
       graphBundle: common.graph.graphBundle,
       predictions: common.graph.predictions,
       routeNamespace: deriveRouteNamespace(

@@ -6,7 +6,7 @@ import { customTradePermit2Abi, customTradeRouterAbi, customTradeTokenAbi } from
 import { parsePreparedTransaction, type PreparedTradeTransaction } from "@/lib/prepared-transaction";
 import { isLaunchStampProvenanceV1, type CanonicalTokenExploreEntry, type LaunchStampProvenanceV1 } from "@/lib/tokens";
 import { computeOfficialV4PoolId } from "@/lib/uniswap/liquidity-launcher-sdk";
-import { ETHEREUM_ROUTING_FEE_BOUNDARY_V1, ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, ETHEREUM_ROUTING_FEE_POLICY_V1,
+import { ETHEREUM_ROUTING_FEE_BOUNDARY_V1,
   validateEthereumFeeClassificationV1, type EthereumFeeClassificationV1 } from "@/lib/custom-launch/ethereum-routing-fee-policy-v1";
 import { assertIssuedEthereumNative30RuntimeProofV1, rebuildEthereumNative30RuntimeProofV1,
   type EthereumNative30RuntimeProofV1 } from "@/lib/custom-launch/ethereum-native30-runtime-v1";
@@ -47,7 +47,7 @@ export interface EthereumStampedSwapRequest {
 }
 export interface EthereumSwapRuntimeBinding { address: Address; runtimeCodeHash: Hex }
 export interface EthereumSwapFeeV1 {
-  policyHash: typeof ETHEREUM_ROUTING_FEE_POLICY_HASH_V1;
+  policyHash: `sha256:${string}`;
   mode: "programmable_routed" | "pool_enforced_native30";
   rateBps: 30;
   routedRateBps: 0 | 30;
@@ -146,11 +146,21 @@ export function ethereumStampedRuntimeBindings(route: EthereumStampedSwapRoute):
 export const ethereumNative30Market = (route: EthereumStampedSwapRoute) => ({ chainId: "1" as const,
   poolManager: getAddress(route.stamp.poolManagerAddress), ...route.stamp.poolKey });
 export const ethereumRouteRequiresFee = (route: EthereumStampedSwapRoute) => route.feeClassification?.profileVersion === "3.6.0";
+/** Select only the exact policy authenticated by this launch's finalized stamp. */
+export function ethereumRouteFeePolicy(route: EthereumStampedSwapRoute) {
+  const binding = route.feeClassification?.routingFeePolicy;
+  if (!ethereumRouteRequiresFee(route) || !binding) throw new TypeError("Verified Ethereum fee policy required.");
+  validateEthereumFeeClassificationV1(route.feeClassification!, route.stamp);
+  return binding;
+}
+
 
 function swapTransaction(route: EthereumStampedSwapRoute, request: EthereumStampedSwapRequest, minimum: bigint,
   native30Proof?: EthereumNative30RuntimeProofV1): PreparedTradeTransaction {
   if (native30Proof) assertIssuedEthereumNative30RuntimeProofV1(native30Proof, ethereumNative30Market(route));
-  const charge = ethereumRouteRequiresFee(route) && !native30Proof;
+  const feePolicy = ethereumRouteRequiresFee(route) ? ethereumRouteFeePolicy(route) : null;
+  if (native30Proof && feePolicy) requireValue(same(native30Proof.recipient, feePolicy.policy.native30Waiver.recipient), "The pool fee recipient differs from the launch policy.");
+  const charge = feePolicy !== null && !native30Proof;
   const upfrontFee = charge && request.side === "buy" ? BigInt(request.amountIn) * 30n / 10_000n : 0n;
   const amountIn = BigInt(request.amountIn) - upfrontFee;
   requireValue(minimum > 0n && minimum <= UINT128_MAX, "The swap returned no usable output.");
@@ -159,11 +169,11 @@ function swapTransaction(route: EthereumStampedSwapRoute, request: EthereumStamp
     amountIn: amountIn.toString(), amountOutMinimum: minimum.toString(), hookData: "0x" }], URVersion.V2_0);
   planner.addAction(Actions.SETTLE_ALL, [request.side === "buy" ? NATIVE : request.token, amountIn.toString()], URVersion.V2_0);
   if (charge && request.side === "sell") planner.addAction(Actions.TAKE_PORTION,
-    [NATIVE, ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient, 30], URVersion.V2_0);
+    [NATIVE, feePolicy!.policy.defaultCollection.recipient, 30], URVersion.V2_0);
   planner.addAction(Actions.TAKE_ALL, [request.side === "buy" ? request.token : NATIVE, minimum.toString()], URVersion.V2_0);
   const plannerRoute = new RoutePlanner();
   if (upfrontFee > 0n) plannerRoute.addCommand(CommandType.TRANSFER,
-    [NATIVE, ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient, upfrontFee.toString()], false, UniversalRouterVersion.V2_0);
+    [NATIVE, feePolicy!.policy.defaultCollection.recipient, upfrontFee.toString()], false, UniversalRouterVersion.V2_0);
   plannerRoute.addCommand(CommandType.V4_SWAP, [planner.finalize()], false, UniversalRouterVersion.V2_0);
   // Return any native refund to msgSender. A hook may reduce the settled input;
   // remaining transaction value must never stay in the public router.
@@ -213,9 +223,9 @@ export function validateEthereumStampedPreparation(value: unknown, route: Ethere
   const transaction = parsePreparedTransaction(prepared.transaction);
   let native30Proof: EthereumNative30RuntimeProofV1 | undefined;
   if (ethereumRouteRequiresFee(route)) {
-    const fee = prepared.fee;
-    requireValue(fee && fee.policyHash === ETHEREUM_ROUTING_FEE_POLICY_HASH_V1 && fee.rateBps === 30
-      && same(fee.recipient, ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient)
+    const fee = prepared.fee, feePolicy = ethereumRouteFeePolicy(route);
+    requireValue(fee && fee.policyHash === feePolicy.policyHash && fee.rateBps === 30
+      && same(fee.recipient, feePolicy!.policy.defaultCollection.recipient)
       && [fee.grossNativeAmount, fee.platformFeeAmount, fee.netNativeAmount].every(amount => typeof amount === "string" && /^(0|[1-9][0-9]{0,77})$/.test(amount)), "The platform fee is invalid.");
     if (fee.mode === "pool_enforced_native30") {
       native30Proof = rebuildEthereumNative30RuntimeProofV1(fee.native30Proof, ethereumNative30Market(route));

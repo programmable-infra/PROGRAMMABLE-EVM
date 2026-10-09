@@ -1,4 +1,4 @@
-import { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 } from "./profile-v36.mjs";
+import { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36, assertDirectNativeProgrammableTradeFeePolicyV36 } from "./profile-v36.mjs";
 import { validateCanonicalSettlementFeeVaultV2Graph, validateCanonicalSettlementFeeVaultV2Build } from "./canonical-settlement-fee-vault-v2.mjs";
 import {
   decodeFunctionData,
@@ -306,6 +306,10 @@ export function resolveDirectNativeProfile(selection, options = {}) {
     profileContract,
     options.profileVersion,
   );
+  const tradeFeePolicy = profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36
+    ? assertDirectNativeProgrammableTradeFeePolicyV36(options.programmableTradeFeePolicy ?? DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36) : null;
+  const recipient = tradeFeePolicy?.defaultCollection.recipient ?? PLATFORM_FEE_CLAIM_AUTHORITY;
+  if (normalized.claimMode === "immutable-payout-recipient" && normalized.payoutRecipient !== recipient) throw new TypeError("Payout recipient differs from the exact profile policy");
   const currentRouter = profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36
     ? options.router ?? ROUTER_24H : ROUTER;
   if (![ROUTER, ROUTER_24H].includes(currentRouter)) throw new TypeError("Unknown Ethereum launch router");
@@ -346,9 +350,10 @@ export function resolveDirectNativeProfile(selection, options = {}) {
       normalized.assessmentBase,
       normalized.feeCurrency,
       [DIRECT_NATIVE_PROFILE_VERSION_V35, DIRECT_NATIVE_PROFILE_VERSION_V36].includes(profileVersion) ? "3000" : PLATFORM_FEE_RATE_PPM,
+      recipient,
     ),
     ...(profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36
-      ? { programmableTradeFeePolicy: DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 }
+      ? { programmableTradeFeePolicy: tradeFeePolicy }
       : {}),
     ...([DIRECT_NATIVE_PROFILE_VERSION_V3, DIRECT_NATIVE_PROFILE_VERSION_V35, DIRECT_NATIVE_PROFILE_VERSION_V36,
       DIRECT_NATIVE_PROFILE_VERSION_V3_COMPLETE_METADATA_LEGACY].includes(profileVersion)
@@ -361,6 +366,10 @@ export function resolveDirectNativeProfile(selection, options = {}) {
 }
 
 export function validateEmbeddedDirectNativeProfile(value) {
+  if (value?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36) {
+    try { assertDirectNativeProgrammableTradeFeePolicyV36(value.programmableTradeFeePolicy); }
+    catch { throw new TypeError("direct-native request does not contain the closed embedded launchProfile"); }
+  }
   const profileContract = directNativeProfileContract(
     value,
     "profileSchema",
@@ -383,7 +392,7 @@ export function validateEmbeddedDirectNativeProfile(value) {
     claimMode: "claim-authority-selected-recipient",
     applicantSelectedBuyHundredthsOfBip: "0",
     applicantSelectedSellHundredthsOfBip: "0",
-  }, { profileVersion: value?.profileVersion, router: value?.router });
+  }, { profileVersion: value?.profileVersion, router: value?.router, programmableTradeFeePolicy: value?.programmableTradeFeePolicy });
   if (canonicalizeJson(value) !== canonicalizeJson(expected)) {
     throw new TypeError("direct-native request does not contain the closed embedded launchProfile");
   }
@@ -402,6 +411,9 @@ export function hashDirectNativeProfile(profile) {
 
 export function buildDirectNativeProfileBinding(selection, context) {
   const normalized = validateDirectNativeProfileSelection(selection);
+  const profile = context.profile ? validateEmbeddedDirectNativeProfile(context.profile) : null;
+  const recipient = profile?.platformFeePolicy.claimAuthority ?? PLATFORM_FEE_CLAIM_AUTHORITY;
+  if (normalized.claimMode === "immutable-payout-recipient" && normalized.payoutRecipient !== recipient) throw new TypeError("Payout recipient differs from the exact profile policy");
   const profileContract = directNativeProfileContract(
     normalized,
     "selectionSchema",
@@ -459,10 +471,11 @@ export function buildDirectNativeProfileBinding(selection, context) {
         normalized.assessmentBase,
         normalized.feeCurrency,
         ratePpm,
+        recipient,
       ),
       schemaVersion: PLATFORM_FEE_BINDING_SCHEMA,
       targetId: targetRoles.platformFeeBindingTargetId,
-      claimBinding: platformFeeClaimBinding(normalized),
+      claimBinding: platformFeeClaimBinding(normalized, recipient),
       economics: {
         buy: platformFeeEconomics(
           normalized.applicantSelectedBuyHundredthsOfBip,
@@ -512,7 +525,9 @@ export function validateDirectNativeProfileBinding(value, context) {
 
 export function validateDirectNativeProfileGraph(profile, binding, graphBundle) {
   validateEmbeddedDirectNativeProfile(profile);
-  if (profile.profileRevision !== binding.profileRevision
+  if (profile.platformFeePolicy.claimAuthority !== binding.platformFeeBinding.claimAuthority
+    || profile.platformFeePolicy.claimAuthority !== binding.platformFeeBinding.claimBinding.claimAuthority
+    || profile.profileRevision !== binding.profileRevision
     || profile.fundingPolicy.mode !== binding.fundingMode
     || profile.platformFeePolicy.accountingMode
       !== binding.platformFeeBinding.accountingMode
@@ -1606,7 +1621,7 @@ function canonicalClaimMode(value) {
 
 function canonicalImmutablePayoutRecipient(value) {
   const payoutRecipient = getAddress(value);
-  if (payoutRecipient !== PLATFORM_FEE_CLAIM_AUTHORITY) {
+  if (![PLATFORM_FEE_CLAIM_AUTHORITY, "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"].includes(payoutRecipient)) {
     throw new TypeError(
       "direct-native immutable payout recipient must be the platform claim authority",
     );
@@ -1729,9 +1744,10 @@ function canonicalLiquidityAssessment(value, expectedVectors) {
   };
 }
 
-function platformFeePolicy(accountingMode, assessmentBase, feeCurrency, ratePpm = PLATFORM_FEE_RATE_PPM) {
+function platformFeePolicy(accountingMode, assessmentBase, feeCurrency, ratePpm = PLATFORM_FEE_RATE_PPM, recipient = PLATFORM_FEE_CLAIM_AUTHORITY) {
   return {
     ...PLATFORM_FEE_POLICY_COMMON,
+    claimAuthority: recipient,
     programmableFeeHundredthsOfBip: ratePpm,
     accountingMode: canonicalAccountingMode(accountingMode),
     ...canonicalPlatformFeeAssessment(assessmentBase, feeCurrency),
@@ -1766,17 +1782,17 @@ function fundingPolicy(mode) {
   };
 }
 
-function platformFeeClaimBinding(selection) {
+function platformFeeClaimBinding(selection, recipient = PLATFORM_FEE_CLAIM_AUTHORITY) {
   if (selection.claimMode === "immutable-payout-recipient") {
     return {
       mode: "immutable-payout-recipient",
-      claimAuthority: PLATFORM_FEE_CLAIM_AUTHORITY,
+      claimAuthority: recipient,
       payoutRecipient: selection.payoutRecipient,
     };
   }
   return {
     mode: "claim-authority-selected-recipient",
-    claimAuthority: PLATFORM_FEE_CLAIM_AUTHORITY,
+    claimAuthority: recipient,
     destinationConstraint: "nonzero-address",
   };
 }

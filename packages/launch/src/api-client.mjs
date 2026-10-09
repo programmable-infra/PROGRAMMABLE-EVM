@@ -2341,6 +2341,8 @@ function assertProfile36RequestMatchesCapabilities(request, capabilities) {
   assertCapabilitiesField(capabilities.profile?.profileVersion === DIRECT_NATIVE_PROFILE_VERSION_V36,
     "profile.requestProfileVersion");
   assertDirectNativeProgrammableTradeFeePolicyV36(request.launchProfile.programmableTradeFeePolicy);
+  assertCapabilitiesField(canonicalizeJson(request.launchProfile.programmableTradeFeePolicy)
+    === canonicalizeJson(capabilities.programmableTradeFeePolicy?.policy), "profile.currentTreasuryPolicy");
 }
 
 function assertProfile36Capabilities(value) {
@@ -2348,7 +2350,7 @@ function assertProfile36Capabilities(value) {
   assertCapabilitiesField(isPlainObject(report), "programmableTradeFeePolicy");
   try { assertDirectNativeProgrammableTradeFeePolicyV36(report?.policy); }
   catch { assertCapabilitiesField(false, "programmableTradeFeePolicy.policy"); }
-  assertCapabilitiesField(report.policyHash === directNativeProgrammableTradeFeePolicyHashV36(), "programmableTradeFeePolicy.policyHash");
+  assertCapabilitiesField(report.policyHash === directNativeProgrammableTradeFeePolicyHashV36(report.policy), "programmableTradeFeePolicy.policyHash");
   assertCapabilitiesField(report.collectionStatus === "required-per-trade-evidence"
     && report.launchAdmissionEstablishesFeeCollection === false, "programmableTradeFeePolicy.collectionStatus");
   const release = value.profile36Release;

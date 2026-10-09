@@ -598,3 +598,17 @@ The declared platform value is 3000 ppm (30 bps or 0.3%). Programmable trade col
 ### CLI 4.1.4 signing window
 
 Fresh Ethereum profile 3.6 packs use the 24-hour successor router. Approved launches may start and sign until 24 hours after approval; starting never extends approval. Previously packed requests retain their original router and deadlines when validated. Unstarted requests with old bindings must be repacked for a new review.
+
+### Ethereum treasury revision
+
+The `programmable.ethereum-routed-native-fee.v2` policy sends the 30 bps platform share to
+`0xD88539d3c4C460136a733A3Fd60cf6BF269079da`, matching Module Mode on Ethereum and Robinhood
+and the Robinhood Custom routed policy. Fresh automatic packs use the policy returned by
+current API capabilities. Exact retries retain the policy in their original request.
+
+The optional `EthereumNative30HookV3` and `EthereumNativeFeeVaultV3` source package is under
+`contracts/ethereum-native30-v3`. Its platform recipient is fixed, creator fees have a
+separate ledger, and anyone may pay gas to claim to the fixed recipient. V2 deployed vaults
+retain their original recipient and accounting. A deployed immutable vault cannot be
+redirected by changing API configuration. A pool fee waiver requires the exact hook and
+vault runtime plus trade accrual evidence; changing a getter or declaration is insufficient.

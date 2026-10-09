@@ -11,7 +11,7 @@ import { sha256Digest } from "../src/io.mjs";
 import { buildLaunch, packLaunch } from "../src/pack.mjs";
 import { packFreshLaunch } from "../src/pack-current-profile.mjs";
 import { resolveDirectNativeProfile, validateEmbeddedDirectNativeProfile, hashDirectNativeProfile } from "../src/profile-direct-native-v1.mjs";
-import { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 as POLICY,
+import { DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36 as POLICY, DIRECT_NATIVE_PROGRAMMABLE_TRADE_FEE_POLICY_V36_TREASURY_V2 as TREASURY_POLICY,
   directNativeProgrammableTradeFeePolicyHashV36 } from "../src/profile-v36.mjs";
 import { validateLaunchFile } from "../src/validate.mjs";
 import { jsonResponse, validCapabilities, validCapabilities36 as capabilities36 } from "./fixtures/capabilities.mjs";
@@ -174,3 +174,30 @@ async function fixture(t) {
   const configPath = path.join(root, "config.json"); await writeFile(configPath, JSON.stringify(config));
   return { root, configPath, config };
 }
+
+
+test("new treasury follows current capabilities and reproduces exactly without changing old packs", async t => {
+  const f = await fixture(t);
+  const before = await buildLaunch({ configPath: f.configPath });
+  const current = await buildLaunch({ configPath: f.configPath, directNativeTradeFeePolicy: TREASURY_POLICY });
+  const request = JSON.parse(current.requestBytes);
+  assert.equal(request.launchProfile.platformFeePolicy.claimAuthority, TREASURY_POLICY.defaultCollection.recipient);
+  assert.equal(request.launchProfileSelection.platformFeeBinding.claimAuthority, TREASURY_POLICY.defaultCollection.recipient);
+  assert.notEqual(current.requestSha256, before.requestSha256);
+  const packed = await packLaunch({ configPath: f.configPath, directNativeTradeFeePolicy: TREASURY_POLICY });
+  const validated = await validateLaunchFile({ launchPath: packed.outputPath, configPath: f.configPath });
+  assert.equal(validated.reproducedFromConfig, true);
+  assert.equal(validated.requestSha256, current.requestSha256);
+  const caps = capabilities36();
+  caps.programmableTradeFeePolicy.policy = TREASURY_POLICY;
+  caps.programmableTradeFeePolicy.policyHash = directNativeProgrammableTradeFeePolicyHashV36(TREASURY_POLICY);
+  caps.currentTradeFeePolicy = { ...caps.currentTradeFeePolicy, ...TREASURY_POLICY.defaultCollection, policyVersion: TREASURY_POLICY.policyVersion };
+  assert.equal((await getLaunchCapabilities({ maxAttempts: 1, fetchImpl: async () => jsonResponse(caps) })).resource.programmableTradeFeePolicy.policyHash,
+    "sha256:e2025776ad3b12e6277575259cccf11444810365975209083fea534d8e70b4b5");
+  const config = { ...f.config }; delete config.profileVersion;
+  await writeFile(f.configPath, JSON.stringify(config));
+  const options = await packFreshLaunch({ configPath: f.configPath, packLaunchImpl: async value => value,
+    fetchImpl: async () => jsonResponse(caps) });
+  assert.deepEqual(options.directNativeTradeFeePolicy, TREASURY_POLICY);
+  assert.equal(JSON.parse(before.requestBytes).launchProfile.platformFeePolicy.claimAuthority, POLICY.defaultCollection.recipient);
+});

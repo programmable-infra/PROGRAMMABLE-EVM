@@ -85,7 +85,7 @@ const NONZERO_HEX32 = /^0x(?!0{64}$)[0-9a-f]{64}$/;
 const DECIMAL = /^(?:0|[1-9][0-9]*)$/;
 const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
-export async function buildLaunch({ configPath, directNativeProfileVersion, directNativeRouter }) {
+export async function buildLaunch({ configPath, directNativeProfileVersion, directNativeRouter, directNativeTradeFeePolicy }) {
   const absoluteConfig = path.resolve(configPath);
   const { config, apiVersion } = await readPackConfig(absoluteConfig);
   if (apiVersion === "v4") {
@@ -116,6 +116,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion, dire
     ? resolveDirectNativeProfile(launchProfileSelection, {
         profileVersion: directNativeProfileVersion ?? configuredDirectNativeProfileVersion,
         router: directNativeRouter,
+        programmableTradeFeePolicy: directNativeTradeFeePolicy,
       })
     : null;
   if (directNativeProfileVersion !== undefined && apiVersion !== "v3") {
@@ -357,6 +358,7 @@ export async function buildLaunch({ configPath, directNativeProfileVersion, dire
       launchProfileSelection,
       {
         profileVersion: directNativeProfile.profileVersion,
+        profile: directNativeProfile,
         graphBundle,
         predictions,
         routeNamespace,
@@ -522,8 +524,8 @@ export async function buildLaunch({ configPath, directNativeProfileVersion, dire
   return result;
 }
 
-export async function packLaunch({ configPath, outputPath, receiptPath, directNativeProfileVersion, directNativeRouter }) {
-  const built = await buildLaunch({ configPath, directNativeProfileVersion, directNativeRouter });
+export async function packLaunch({ configPath, outputPath, receiptPath, directNativeProfileVersion, directNativeRouter, directNativeTradeFeePolicy }) {
+  const built = await buildLaunch({ configPath, directNativeProfileVersion, directNativeRouter, directNativeTradeFeePolicy });
   const resolvedOutput = path.resolve(outputPath ?? path.join(built.configDirectory, "launch.json"));
   const resolvedReceipt = path.resolve(receiptPath ?? `${resolvedOutput}.receipt.json`);
   await atomicWrite(resolvedOutput, built.requestBytes, 0o600);

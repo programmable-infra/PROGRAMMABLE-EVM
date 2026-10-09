@@ -7,7 +7,7 @@ import { packLaunch } from "./pack.mjs";
  * Exact validation/reproduction and stored requests keep their original version. */
 export async function packFreshLaunch(options) {
   const { value: config } = await readStrictJsonFile(options.configPath);
-  let directNativeProfileVersion;
+  let directNativeProfileVersion, directNativeTradeFeePolicy;
   if (config.schemaVersion === PACK_CONFIG_SCHEMA_V3 && !Object.hasOwn(config, "profileVersion")) {
     const capabilities = await getLaunchCapabilities({
       apiVersion: 3,
@@ -16,11 +16,13 @@ export async function packFreshLaunch(options) {
       timeoutMs: options.timeoutMs,
     });
     directNativeProfileVersion = capabilities.resource.profile.profileVersion;
+    directNativeTradeFeePolicy = capabilities.resource.programmableTradeFeePolicy?.policy;
   }
   return (options.packLaunchImpl ?? packLaunch)({
     configPath: options.configPath,
     outputPath: options.outputPath,
     receiptPath: options.receiptPath,
     ...(directNativeProfileVersion === undefined ? {} : { directNativeProfileVersion }),
+    ...(directNativeTradeFeePolicy === undefined ? {} : { directNativeTradeFeePolicy }),
   });
 }

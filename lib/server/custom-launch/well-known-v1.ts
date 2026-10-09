@@ -30,11 +30,11 @@ const ETHEREUM_PROFILE_SELECTION = Object.freeze({
   unknownProfileDisposition: "fail-closed" as const,
   requiresCliForDirectHttp: false as const,
   cli: Object.freeze({
-    sourceCandidateVersion: "4.1.4" as const,
+    sourceCandidateVersion: "4.1.5" as const,
     publicationVerified: null,
     publicationAuthority: "immutable-github-release" as const,
-    releaseUrl: "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v4.1.4",
-    releaseTag: "programmable-launch-v4.1.4" as const,
+    releaseUrl: "https://github.com/programmablehq/PROGRAMMABLE/releases/tag/programmable-launch-v4.1.5",
+    releaseTag: "programmable-launch-v4.1.5" as const,
     publishedReleaseAndArtifactVerificationRequired: true as const,
     freshUnversionedPackSelection: "server-capabilities" as const,
     offlineBuilderDefaultProfileVersion: "3.3.0" as const,
@@ -53,6 +53,11 @@ const ETHEREUM_PROFILE_SELECTION = Object.freeze({
     programmableTradeFeePolicyHash:
       "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3" as const,
     programmableTradeFeePolicySource: "capabilities.programmableTradeFeePolicy.policy" as const,
+    supportedProgrammableTradeFeePolicyHashes: Object.freeze([
+      "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3",
+      "sha256:e2025776ad3b12e6277575259cccf11444810365975209083fea534d8e70b4b5",
+    ] as const),
+    currentTreasurySource: "capabilities.currentTradeFeePolicy.recipient" as const,
     programmableHundredthsOfBip: "3000" as const,
     launchAdmissionEstablishesFeeCollection: false as const,
     native30WaiverAuthority: "server-runtime-and-per-trade-accrual-proof" as const,

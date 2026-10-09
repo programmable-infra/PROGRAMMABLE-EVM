@@ -1115,7 +1115,87 @@
     "sellFee": "floor(gross native output credit * 30 / 10000)",
     "native30Waiver": "Zero additional routed fee requires exact hook and child-vault runtime validation plus authenticated trade-accrual evidence. Applicant metadata cannot select this mode.",
     "historicalResources": "Keep their stored fee policy. Do not infer a new policy from a token name or timestamp.",
-    "externalTrading": "This policy does not guarantee fee collection by third-party trading routes."
+    "externalTrading": "This policy does not guarantee fee collection by third-party trading routes.",
+    "supportedPolicies": [
+      {
+        "policyHash": "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3",
+        "policy": {
+          "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+          "policyVersion": "programmable.ethereum-routed-native-fee.v1",
+          "scope": "programmable-routed-ethereum-trades",
+          "ratePpm": "3000",
+          "rateDenominator": "1000000",
+          "rateBps": 30,
+          "modeSelection": "server-exact-runtime-and-trade-proof",
+          "defaultCollection": {
+            "mode": "programmable_routed",
+            "routedRateBps": 30,
+            "basis": "gross-native-by-side",
+            "buyBasis": "funded-native-input",
+            "sellBasis": "gross-native-output-credit",
+            "currency": "native-ETH",
+            "rounding": "floor-once-per-swap",
+            "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+            "collection": "atomic-native-transfer-in-swap"
+          },
+          "native30Waiver": {
+            "mode": "pool_enforced_native30",
+            "routedRateBps": 0,
+            "basis": "authenticated-gross-native",
+            "currency": "native-ETH",
+            "rounding": "ceil-per-trade",
+            "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+            "hook": "EthereumNative30HookV2",
+            "vault": "EthereumNativeFeeVaultV2",
+            "proof": "exact-runtime-and-trade-accrual",
+            "applicantAssertionsAccepted": false
+          },
+          "launchAdmissionEstablishesFeeCollection": false,
+          "externalTradeFeeGuaranteed": false,
+          "historicalSignedFeeObligations": "preserved"
+        }
+      },
+      {
+        "policyHash": "sha256:e2025776ad3b12e6277575259cccf11444810365975209083fea534d8e70b4b5",
+        "policy": {
+          "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+          "policyVersion": "programmable.ethereum-routed-native-fee.v2",
+          "scope": "programmable-routed-ethereum-trades",
+          "ratePpm": "3000",
+          "rateDenominator": "1000000",
+          "rateBps": 30,
+          "modeSelection": "server-exact-runtime-and-trade-proof",
+          "defaultCollection": {
+            "mode": "programmable_routed",
+            "routedRateBps": 30,
+            "basis": "gross-native-by-side",
+            "buyBasis": "funded-native-input",
+            "sellBasis": "gross-native-output-credit",
+            "currency": "native-ETH",
+            "rounding": "floor-once-per-swap",
+            "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+            "collection": "atomic-native-transfer-in-swap"
+          },
+          "native30Waiver": {
+            "mode": "pool_enforced_native30",
+            "routedRateBps": 0,
+            "basis": "authenticated-gross-native",
+            "currency": "native-ETH",
+            "rounding": "ceil-per-trade",
+            "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+            "hook": "EthereumNative30HookV3",
+            "vault": "EthereumNativeFeeVaultV3",
+            "proof": "exact-runtime-and-trade-accrual",
+            "applicantAssertionsAccepted": false
+          },
+          "launchAdmissionEstablishesFeeCollection": false,
+          "externalTradeFeeGuaranteed": false,
+          "historicalSignedFeeObligations": "preserved"
+        }
+      }
+    ],
+    "currentPolicySource": "GET /v3/capabilities: programmableTradeFeePolicy",
+    "historicalPolicyPreserved": true
   },
   "components": {
     "headers": {
@@ -1562,7 +1642,10 @@
             "type": "object",
             "properties": {
               "policyHash": {
-                "const": "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3"
+                "enum": [
+                  "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3",
+                  "sha256:e2025776ad3b12e6277575259cccf11444810365975209083fea534d8e70b4b5"
+                ]
               },
               "policy": {
                 "$ref": "#/components/schemas/ProgrammableTradeFeePolicyV36"
@@ -1580,7 +1663,109 @@
               "collectionStatus",
               "launchAdmissionEstablishesFeeCollection"
             ],
-            "additionalProperties": false
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "policy": {
+                      "const": {
+                        "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+                        "policyVersion": "programmable.ethereum-routed-native-fee.v1",
+                        "scope": "programmable-routed-ethereum-trades",
+                        "ratePpm": "3000",
+                        "rateDenominator": "1000000",
+                        "rateBps": 30,
+                        "modeSelection": "server-exact-runtime-and-trade-proof",
+                        "defaultCollection": {
+                          "mode": "programmable_routed",
+                          "routedRateBps": 30,
+                          "basis": "gross-native-by-side",
+                          "buyBasis": "funded-native-input",
+                          "sellBasis": "gross-native-output-credit",
+                          "currency": "native-ETH",
+                          "rounding": "floor-once-per-swap",
+                          "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                          "collection": "atomic-native-transfer-in-swap"
+                        },
+                        "native30Waiver": {
+                          "mode": "pool_enforced_native30",
+                          "routedRateBps": 0,
+                          "basis": "authenticated-gross-native",
+                          "currency": "native-ETH",
+                          "rounding": "ceil-per-trade",
+                          "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                          "hook": "EthereumNative30HookV2",
+                          "vault": "EthereumNativeFeeVaultV2",
+                          "proof": "exact-runtime-and-trade-accrual",
+                          "applicantAssertionsAccepted": false
+                        },
+                        "launchAdmissionEstablishesFeeCollection": false,
+                        "externalTradeFeeGuaranteed": false,
+                        "historicalSignedFeeObligations": "preserved"
+                      }
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "policyHash": {
+                      "const": "sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "policy": {
+                      "const": {
+                        "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+                        "policyVersion": "programmable.ethereum-routed-native-fee.v2",
+                        "scope": "programmable-routed-ethereum-trades",
+                        "ratePpm": "3000",
+                        "rateDenominator": "1000000",
+                        "rateBps": 30,
+                        "modeSelection": "server-exact-runtime-and-trade-proof",
+                        "defaultCollection": {
+                          "mode": "programmable_routed",
+                          "routedRateBps": 30,
+                          "basis": "gross-native-by-side",
+                          "buyBasis": "funded-native-input",
+                          "sellBasis": "gross-native-output-credit",
+                          "currency": "native-ETH",
+                          "rounding": "floor-once-per-swap",
+                          "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+                          "collection": "atomic-native-transfer-in-swap"
+                        },
+                        "native30Waiver": {
+                          "mode": "pool_enforced_native30",
+                          "routedRateBps": 0,
+                          "basis": "authenticated-gross-native",
+                          "currency": "native-ETH",
+                          "rounding": "ceil-per-trade",
+                          "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+                          "hook": "EthereumNative30HookV3",
+                          "vault": "EthereumNativeFeeVaultV3",
+                          "proof": "exact-runtime-and-trade-accrual",
+                          "applicantAssertionsAccepted": false
+                        },
+                        "launchAdmissionEstablishesFeeCollection": false,
+                        "externalTradeFeeGuaranteed": false,
+                        "historicalSignedFeeObligations": "preserved"
+                      }
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "policyHash": {
+                      "const": "sha256:e2025776ad3b12e6277575259cccf11444810365975209083fea534d8e70b4b5"
+                    }
+                  }
+                }
+              }
+            ]
           },
           "graph": {
             "type": "object",
@@ -1769,7 +1954,10 @@
             "const": "floor"
           },
           "claimAuthority": {
-            "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+            "enum": [
+              "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+              "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+            ]
           }
         },
         "description": "Declared launch fee obligation at 3000 ppm. It does not itself prove collection; Programmable-routed collection follows programmableTradeFeePolicy.",
@@ -1988,7 +2176,117 @@
           }
         ],
         "description": "Profile 3.6 preserves the 3.3 static admission baseline and binds the complete Programmable trading fee policy.",
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "programmableTradeFeePolicy": {
+                  "const": {
+                    "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+                    "policyVersion": "programmable.ethereum-routed-native-fee.v1",
+                    "scope": "programmable-routed-ethereum-trades",
+                    "ratePpm": "3000",
+                    "rateDenominator": "1000000",
+                    "rateBps": 30,
+                    "modeSelection": "server-exact-runtime-and-trade-proof",
+                    "defaultCollection": {
+                      "mode": "programmable_routed",
+                      "routedRateBps": 30,
+                      "basis": "gross-native-by-side",
+                      "buyBasis": "funded-native-input",
+                      "sellBasis": "gross-native-output-credit",
+                      "currency": "native-ETH",
+                      "rounding": "floor-once-per-swap",
+                      "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                      "collection": "atomic-native-transfer-in-swap"
+                    },
+                    "native30Waiver": {
+                      "mode": "pool_enforced_native30",
+                      "routedRateBps": 0,
+                      "basis": "authenticated-gross-native",
+                      "currency": "native-ETH",
+                      "rounding": "ceil-per-trade",
+                      "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                      "hook": "EthereumNative30HookV2",
+                      "vault": "EthereumNativeFeeVaultV2",
+                      "proof": "exact-runtime-and-trade-accrual",
+                      "applicantAssertionsAccepted": false
+                    },
+                    "launchAdmissionEstablishesFeeCollection": false,
+                    "externalTradeFeeGuaranteed": false,
+                    "historicalSignedFeeObligations": "preserved"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "platformFeePolicy": {
+                  "properties": {
+                    "claimAuthority": {
+                      "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "programmableTradeFeePolicy": {
+                  "const": {
+                    "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+                    "policyVersion": "programmable.ethereum-routed-native-fee.v2",
+                    "scope": "programmable-routed-ethereum-trades",
+                    "ratePpm": "3000",
+                    "rateDenominator": "1000000",
+                    "rateBps": 30,
+                    "modeSelection": "server-exact-runtime-and-trade-proof",
+                    "defaultCollection": {
+                      "mode": "programmable_routed",
+                      "routedRateBps": 30,
+                      "basis": "gross-native-by-side",
+                      "buyBasis": "funded-native-input",
+                      "sellBasis": "gross-native-output-credit",
+                      "currency": "native-ETH",
+                      "rounding": "floor-once-per-swap",
+                      "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+                      "collection": "atomic-native-transfer-in-swap"
+                    },
+                    "native30Waiver": {
+                      "mode": "pool_enforced_native30",
+                      "routedRateBps": 0,
+                      "basis": "authenticated-gross-native",
+                      "currency": "native-ETH",
+                      "rounding": "ceil-per-trade",
+                      "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+                      "hook": "EthereumNative30HookV3",
+                      "vault": "EthereumNativeFeeVaultV3",
+                      "proof": "exact-runtime-and-trade-accrual",
+                      "applicantAssertionsAccepted": false
+                    },
+                    "launchAdmissionEstablishesFeeCollection": false,
+                    "externalTradeFeeGuaranteed": false,
+                    "historicalSignedFeeObligations": "preserved"
+                  }
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "platformFeePolicy": {
+                  "properties": {
+                    "claimAuthority": {
+                      "const": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
       },
       "DirectNativePoolKeyV1": {
         "$ref": "./custom-launch-v3.json#/components/schemas/DirectNativePoolKeyV1"
@@ -2048,7 +2346,10 @@
             "const": "floor"
           },
           "claimAuthority": {
-            "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+            "enum": [
+              "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+              "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+            ]
           },
           "claimBinding": {
             "oneOf": [
@@ -2064,10 +2365,16 @@
                     "const": "immutable-payout-recipient"
                   },
                   "claimAuthority": {
-                    "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+                    "enum": [
+                      "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                      "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+                    ]
                   },
                   "payoutRecipient": {
-                    "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+                    "enum": [
+                      "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                      "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+                    ]
                   }
                 },
                 "additionalProperties": false
@@ -2084,7 +2391,10 @@
                     "const": "claim-authority-selected-recipient"
                   },
                   "claimAuthority": {
-                    "const": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c"
+                    "enum": [
+                      "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                      "0xD88539d3c4C460136a733A3Fd60cf6BF269079da"
+                    ]
                   },
                   "destinationConstraint": {
                     "const": "nonzero-address"
@@ -3343,43 +3653,82 @@
         "additionalProperties": false
       },
       "ProgrammableTradeFeePolicyV36": {
-        "type": "object",
-        "const": {
-          "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
-          "policyVersion": "programmable.ethereum-routed-native-fee.v1",
-          "scope": "programmable-routed-ethereum-trades",
-          "ratePpm": "3000",
-          "rateDenominator": "1000000",
-          "rateBps": 30,
-          "modeSelection": "server-exact-runtime-and-trade-proof",
-          "defaultCollection": {
-            "mode": "programmable_routed",
-            "routedRateBps": 30,
-            "basis": "gross-native-by-side",
-            "buyBasis": "funded-native-input",
-            "sellBasis": "gross-native-output-credit",
-            "currency": "native-ETH",
-            "rounding": "floor-once-per-swap",
-            "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-            "collection": "atomic-native-transfer-in-swap"
+        "oneOf": [
+          {
+            "const": {
+              "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+              "policyVersion": "programmable.ethereum-routed-native-fee.v1",
+              "scope": "programmable-routed-ethereum-trades",
+              "ratePpm": "3000",
+              "rateDenominator": "1000000",
+              "rateBps": 30,
+              "modeSelection": "server-exact-runtime-and-trade-proof",
+              "defaultCollection": {
+                "mode": "programmable_routed",
+                "routedRateBps": 30,
+                "basis": "gross-native-by-side",
+                "buyBasis": "funded-native-input",
+                "sellBasis": "gross-native-output-credit",
+                "currency": "native-ETH",
+                "rounding": "floor-once-per-swap",
+                "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                "collection": "atomic-native-transfer-in-swap"
+              },
+              "native30Waiver": {
+                "mode": "pool_enforced_native30",
+                "routedRateBps": 0,
+                "basis": "authenticated-gross-native",
+                "currency": "native-ETH",
+                "rounding": "ceil-per-trade",
+                "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+                "hook": "EthereumNative30HookV2",
+                "vault": "EthereumNativeFeeVaultV2",
+                "proof": "exact-runtime-and-trade-accrual",
+                "applicantAssertionsAccepted": false
+              },
+              "launchAdmissionEstablishesFeeCollection": false,
+              "externalTradeFeeGuaranteed": false,
+              "historicalSignedFeeObligations": "preserved"
+            }
           },
-          "native30Waiver": {
-            "mode": "pool_enforced_native30",
-            "routedRateBps": 0,
-            "basis": "authenticated-gross-native",
-            "currency": "native-ETH",
-            "rounding": "ceil-per-trade",
-            "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
-            "hook": "EthereumNative30HookV2",
-            "vault": "EthereumNativeFeeVaultV2",
-            "proof": "exact-runtime-and-trade-accrual",
-            "applicantAssertionsAccepted": false
-          },
-          "launchAdmissionEstablishesFeeCollection": false,
-          "externalTradeFeeGuaranteed": false,
-          "historicalSignedFeeObligations": "preserved"
-        },
-        "description": "The complete immutable policy object is required. launchProfileHash commits to it; no caller-selected fee mode or recipient is accepted."
+          {
+            "const": {
+              "schemaVersion": "programmable.ethereum-programmable-trade-fee-policy.v1",
+              "policyVersion": "programmable.ethereum-routed-native-fee.v2",
+              "scope": "programmable-routed-ethereum-trades",
+              "ratePpm": "3000",
+              "rateDenominator": "1000000",
+              "rateBps": 30,
+              "modeSelection": "server-exact-runtime-and-trade-proof",
+              "defaultCollection": {
+                "mode": "programmable_routed",
+                "routedRateBps": 30,
+                "basis": "gross-native-by-side",
+                "buyBasis": "funded-native-input",
+                "sellBasis": "gross-native-output-credit",
+                "currency": "native-ETH",
+                "rounding": "floor-once-per-swap",
+                "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+                "collection": "atomic-native-transfer-in-swap"
+              },
+              "native30Waiver": {
+                "mode": "pool_enforced_native30",
+                "routedRateBps": 0,
+                "basis": "authenticated-gross-native",
+                "currency": "native-ETH",
+                "rounding": "ceil-per-trade",
+                "recipient": "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+                "hook": "EthereumNative30HookV3",
+                "vault": "EthereumNativeFeeVaultV3",
+                "proof": "exact-runtime-and-trade-accrual",
+                "applicantAssertionsAccepted": false
+              },
+              "launchAdmissionEstablishesFeeCollection": false,
+              "externalTradeFeeGuaranteed": false,
+              "historicalSignedFeeObligations": "preserved"
+            }
+          }
+        ]
       },
       "RoutingFeePolicyBindingV36": {
         "type": "object",
