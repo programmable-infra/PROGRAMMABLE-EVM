@@ -1744,6 +1744,63 @@ test("backend promotion mirrors complete Machines-backed Fly release semantics",
   }
 });
 
+test("fresh backend replay retains and validates every Fly release page", async () => {
+  const fixture = await fixtureRepository();
+  try {
+    const stage = await materialize(fixture, await buildInput(fixture));
+    const backend = testBackendEvidence(stage);
+    const validateRawShape = new Ajv2020({ strict: true }).compile(JSON.parse(
+      readFileSync(new URL("../../../docs/operations/releases/custom-launch-v4/backend-promotion-input.schema.json", import.meta.url)),
+    ));
+    const pagedShape = structuredClone(backend.privateInput);
+    const pageReadback = structuredClone(pagedShape.flyReadbacks[0]);
+    pageReadback.kind = "release-page:1";
+    const confirmationReadback = structuredClone(pagedShape.flyReadbacks[0]);
+    confirmationReadback.kind = "release-confirmation";
+    pagedShape.flyReadbacks.splice(1, 0, pageReadback, confirmationReadback);
+    assert.equal(validateRawShape(pagedShape), true);
+    pagedShape.flyReadbacks.splice(2, 1);
+    assert.equal(validateRawShape(pagedShape), false, "paged raw evidence requires confirmation");
+    const fallback = freshBackendFetch(backend.privateInput);
+    const original = responseBody(backend.privateInput.flyReadbacks[0]);
+    const latest = original.data.app.releasesUnprocessed.nodes[0];
+    const cursors = [];
+    const fresh = await freshVerifyRobinhoodBackendPromotionInput({
+      stageBundle: stage,
+      capturedInput: backend.input,
+      fetch: async (url, init) => {
+        if (!String(url).endsWith("/graphql")) return fallback(url, init);
+        const request = JSON.parse(init.body);
+        cursors.push(request.variables.after ?? null);
+        assert.equal(init.headers.authorization, FLY_V1_TEST_HEADER);
+        const next = request.variables.after !== undefined;
+        if (next) {
+          assert.equal(request.variables.after, "next-page");
+          assert.match(request.query, /after: \$after/u);
+        }
+        const body = structuredClone(original);
+        body.data.app.releasesUnprocessed = {
+          totalCount: 2,
+          nodes: [next ? { ...latest, id: "rel_older000001", version: latest.version - 1 } : latest],
+          pageInfo: { hasNextPage: !next, hasPreviousPage: next,
+            startCursor: next ? "older-page" : "first-page", endCursor: next ? "last-page" : "next-page" },
+        };
+        return new Response(JSON.stringify(body), { status: 200, headers: {
+          "content-type": "application/json", date: "Sat, 29 Aug 2026 12:01:00 GMT",
+          "x-request-id": `page-${cursors.length}`,
+        } });
+      },
+      flyApiToken: FLY_V1_TEST_TOKEN,
+      now: () => new Date("2026-08-29T12:01:00Z"),
+    });
+    assert.deepEqual(cursors, [null, "next-page", null]);
+    assert.equal(fresh.observedAt, "2026-08-29T12:01:00.000Z");
+    assert.match(fresh.freshBackendReadbackDigest, /^sha256:[0-9a-f]{64}$/u);
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true });
+  }
+});
+
 test("fresh backend replay re-reads the full readiness and Fly inventory", async () => {
   const fixture = await fixtureRepository();
   try {

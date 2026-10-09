@@ -25,10 +25,12 @@
     "flyReadbacks": {
       "type": "array",
       "minItems": 5,
-      "maxItems": 19,
+      "maxItems": 51,
       "items": {
         "oneOf": [
           { "$ref": "#/$defs/releasesReadback" },
+          { "$ref": "#/$defs/releasePageReadback" },
+          { "$ref": "#/$defs/releaseConfirmationReadback" },
           { "$ref": "#/$defs/appReadback" },
           { "$ref": "#/$defs/machineListReadback" },
           { "$ref": "#/$defs/machineReadback" },
@@ -62,16 +64,26 @@
           "maxContains": 8
         }
       ],
-      "oneOf": [
-        { "minItems": 5, "maxItems": 5 },
-        { "minItems": 7, "maxItems": 7 },
-        { "minItems": 9, "maxItems": 9 },
-        { "minItems": 11, "maxItems": 11 },
-        { "minItems": 13, "maxItems": 13 },
-        { "minItems": 15, "maxItems": 15 },
-        { "minItems": 17, "maxItems": 17 },
-        { "minItems": 19, "maxItems": 19 }
-      ]
+      "if": { "contains": { "$ref": "#/$defs/releasePageReadback" } },
+      "then": {
+        "allOf": [
+          { "contains": { "$ref": "#/$defs/releasePageReadback" }, "minContains": 1, "maxContains": 31 },
+          { "contains": { "$ref": "#/$defs/releaseConfirmationReadback" }, "minContains": 1, "maxContains": 1 }
+        ]
+      },
+      "else": {
+        "not": { "contains": { "$ref": "#/$defs/releaseConfirmationReadback" } },
+        "oneOf": [
+          { "minItems": 5, "maxItems": 5 },
+          { "minItems": 7, "maxItems": 7 },
+          { "minItems": 9, "maxItems": 9 },
+          { "minItems": 11, "maxItems": 11 },
+          { "minItems": 13, "maxItems": 13 },
+          { "minItems": 15, "maxItems": 15 },
+          { "minItems": 17, "maxItems": 17 },
+          { "minItems": 19, "maxItems": 19 }
+        ]
+      }
     },
     "backendPromotionInputDigest": { "$ref": "#/$defs/sha256" }
   },
@@ -210,7 +222,7 @@
       "properties": {
         "kind": {
           "type": "string",
-          "pattern": "^(?:readiness|releases|app|machine-list|machine:[a-z0-9]{6,64}|metadata:[a-z0-9]{6,64})$"
+          "pattern": "^(?:readiness|releases|release-page:(?:[1-9]|[12][0-9]|3[01])|release-confirmation|app|machine-list|machine:[a-z0-9]{6,64}|metadata:[a-z0-9]{6,64})$"
         },
         "request": { "$ref": "#/$defs/request" },
         "response": { "$ref": "#/$defs/response" }
@@ -249,7 +261,7 @@
           "properties": {
             "kind": {
               "type": "string",
-              "pattern": "^(?:releases|app|machine-list|machine:[a-z0-9]{6,64}|metadata:[a-z0-9]{6,64})$"
+              "pattern": "^(?:releases|release-page:(?:[1-9]|[12][0-9]|3[01])|release-confirmation|app|machine-list|machine:[a-z0-9]{6,64}|metadata:[a-z0-9]{6,64})$"
             },
             "request": {
               "type": "object",
@@ -269,6 +281,56 @@
           "type": "object",
           "properties": {
             "kind": { "const": "releases" },
+            "request": {
+              "type": "object",
+              "properties": {
+                "method": { "const": "POST" },
+                "hostname": { "const": "api.fly.io" },
+                "path": { "const": "/graphql" },
+                "contentType": { "const": "application/json" },
+                "bodyBytesBase64": { "$ref": "#/$defs/nonEmptyCanonicalBase64" },
+                "bodyByteLength": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "releasePageReadback": {
+      "allOf": [
+        { "$ref": "#/$defs/flyReadback" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "type": "string", "pattern": "^release-page:(?:[1-9]|[12][0-9]|3[01])$" },
+            "request": {
+              "type": "object",
+              "properties": {
+                "method": { "const": "POST" },
+                "hostname": { "const": "api.fly.io" },
+                "path": { "const": "/graphql" },
+                "contentType": { "const": "application/json" },
+                "bodyBytesBase64": { "$ref": "#/$defs/nonEmptyCanonicalBase64" },
+                "bodyByteLength": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*$"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "releaseConfirmationReadback": {
+      "allOf": [
+        { "$ref": "#/$defs/flyReadback" },
+        {
+          "type": "object",
+          "properties": {
+            "kind": { "const": "release-confirmation" },
             "request": {
               "type": "object",
               "properties": {
