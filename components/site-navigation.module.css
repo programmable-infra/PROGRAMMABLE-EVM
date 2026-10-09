@@ -373,7 +373,7 @@
 
   .headerInner.headerInner {
     --navigation-inline-padding: 16px;
-    grid-template-columns: minmax(44px, 1fr) auto minmax(44px, 1fr);
+    grid-template-columns: 44px minmax(0, 1fr) auto;
   }
 
   .headerActions.headerActions {

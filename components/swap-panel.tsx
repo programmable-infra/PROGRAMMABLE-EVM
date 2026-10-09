@@ -31,8 +31,8 @@ function message(error: unknown) {
 const explorer = (chainId: SwapChainId) => chainId === 4663 ? "https://robinhoodchain.blockscout.com" : "https://etherscan.io";
 const networkName = (chainId: SwapChainId) => chainId === 4663 ? "Robinhood" : "Ethereum";
 
-export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded = false, tokenSymbol }: {
-  initialAddress?: string; initialChainId?: SwapChainId; embedded?: boolean; tokenSymbol?: string;
+export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded = false, tokenSymbol, active = true, initialSlippageBps = 300 }: {
+  initialAddress?: string; initialChainId?: SwapChainId; embedded?: boolean; tokenSymbol?: string; active?: boolean; initialSlippageBps?: 50 | 100 | 300;
 }) {
   const id = useId();
   const mounted = useRef(true);
@@ -44,7 +44,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
   const [chainId, setChainId] = useState<SwapChainId>(initialChainId);
   const [side, setSide] = useState<SwapSide>("buy");
   const [amount, setAmount] = useState("");
-  const [slippageBps, setSlippageBps] = useState(300);
+  const [slippageBps, setSlippageBps] = useState<number>(initialSlippageBps);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [asset, setAsset] = useState<{ key: string; descriptor?: SwapTokenDescriptor; error?: string } | null>(null);
   const [balances, setBalances] = useState<{ key: string; value?: WalletTradeBalances; error?: string } | null>(null);
@@ -84,7 +84,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
   const quoteKey = `${assetKey}:${ownerKey}:${side}:${amount}:${slippageBps}:${revision}`;
   const review = quotation?.key === quoteKey ? quotation.review : undefined;
   const quoteError = quotation?.key === quoteKey ? quotation.error : undefined;
-  const canQuote = descriptor?.status === "ready" && descriptor.route.kind !== "module-foundation" && connected && correctNetwork && parsed !== null && !insufficient && !pending && !pendingError && pendingLoaded;
+  const canQuote = active && descriptor?.status === "ready" && descriptor.route.kind !== "module-foundation" && connected && correctNetwork && parsed !== null && !insufficient && !pending && !pendingError && pendingLoaded;
   const quoting = canQuote && !review && !quoteError && !busy;
   const ticker = descriptor?.token.symbol || tokenSymbol || "Coin";
   const inputSymbol = side === "buy" ? "ETH" : ticker;
@@ -94,7 +94,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
   const displayError = error || currentAsset?.error || (descriptor?.status === "unavailable" ? descriptor.reason : "") || quoteError || pendingError;
 
   useEffect(() => {
-    if (!validAddress) return;
+    if (!validAddress || !active) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
       void import("@/lib/swap/client").then(({ fetchSwapToken }) => fetchSwapToken({ address: normalizedAddress, chainId, signal: controller.signal }))
@@ -102,7 +102,7 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
         .catch(caught => { if (!controller.signal.aborted) setAsset({ key: assetKey, error: message(caught) }); });
     }, embedded ? 0 : 200);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [assetKey, chainId, normalizedAddress, validAddress, lookupRevision, embedded]);
+  }, [assetKey, chainId, normalizedAddress, validAddress, lookupRevision, embedded, active]);
 
   useEffect(() => {
     if (!owner) return;
@@ -121,16 +121,24 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
   }, [owner, ownerKey, chainId]);
 
   useEffect(() => {
-    if (!connected || !correctNetwork) return;
-    let active = true;
+    if (!connected || !correctNetwork || !active) return;
+    let currentRead = true;
     const current = walletRef.current;
     const task = validAddress
       ? current.readTradeBalances(normalizedAddress as Hex, chainId)
       : current.readNativeBalance(chainId).then(value => ({ ...value, tokenBalanceRaw: 0n }));
-    void task.then(value => { if (active) setBalances({ key: balanceKey, value }); })
-      .catch(caught => { if (active) setBalances({ key: balanceKey, error: message(caught) }); });
-    return () => { active = false; };
-  }, [balanceKey, connected, correctNetwork, chainId, normalizedAddress, validAddress]);
+    void task.then(value => { if (currentRead) setBalances({ key: balanceKey, value }); })
+      .catch(caught => { if (currentRead) setBalances({ key: balanceKey, error: message(caught) }); });
+    return () => { currentRead = false; };
+  }, [balanceKey, connected, correctNetwork, chainId, normalizedAddress, validAddress, active]);
+
+  useEffect(() => {
+    if (!active || !connected || !correctNetwork || busy) return;
+    const refresh = () => { if (document.visibilityState === "visible") setRevision(value => value + 1); };
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener("focus", refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", refresh); };
+  }, [active, connected, correctNetwork, busy]);
 
   useEffect(() => {
     if (!canQuote || !descriptor || !owner || parsed === null || busy) return;
@@ -144,10 +152,10 @@ export function SwapPanel({ initialAddress = "", initialChainId = 4663, embedded
   }, [canQuote, descriptor, owner, parsed, side, slippageBps, quoteKey, busy]);
 
   useEffect(() => {
-    if (!review || busy || pending) return;
+    if (!active || !review || busy || pending) return;
     const until = Math.min(Number(review.expiresAt) * 1_000 - 5_000, (quotation?.receivedAt ?? 0) + 30_000);
     return scheduleVisibleQuoteRefresh(until, () => setRevision(value => value + 1));
-  }, [review, quotation?.receivedAt, busy, pending]);
+  }, [active, review, quotation?.receivedAt, busy, pending]);
 
   function edit(change: () => void) {
     if (mutex.current || locked) return;

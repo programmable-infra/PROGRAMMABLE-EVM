@@ -5,6 +5,9 @@ import { X } from "lucide-react";
 import styles from "./responsive-trade-panel.module.css";
 
 const WalletHandoff = createContext<(() => void) | null>(null);
+export function TradeWalletHandoff({ children, onHandoff }: { children: ReactNode; onHandoff: () => void }) {
+  return <WalletHandoff.Provider value={onHandoff}>{children}</WalletHandoff.Provider>;
+}
 const TradePanelState = createContext<{ open: boolean; setOpen: (open: boolean) => void } | null>(null);
 
 /** Keep only the sheet visibility when loading replaces a market's trade adapter. */

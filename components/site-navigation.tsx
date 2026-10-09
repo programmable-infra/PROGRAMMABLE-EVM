@@ -22,6 +22,7 @@ import {
 } from "@/components/navigation-icons";
 import { useWallet } from "@/components/wallet-provider";
 import { AdminDashboardLink } from "@/components/admin-dashboard-link";
+import { QuickSwap } from "@/components/quick-swap";
 import styles from "@/components/site-navigation.module.css";
 
 const desktopNavItems = [
@@ -347,6 +348,7 @@ export function SiteHeader() {
         </Link>}
 
         <div className={`header-actions ${styles.headerActions}`}>
+          <QuickSwap />
           <button
             ref={menuButtonRef}
             className={styles.menuButton}
