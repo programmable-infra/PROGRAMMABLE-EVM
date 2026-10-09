@@ -1105,9 +1105,9 @@ function statusDescription(status: LaunchStatus) {
     case "awaiting_funding_authorization": return "Review and sign the exact USDC funding authorization. This does not send a transaction.";
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
     case "simulating": return "The exact wallet transaction is being simulated.";
-    case "authorized": return "Review the exact Ethereum Mainnet transaction, then ask your wallet to send it.";
-    case "awaiting_wallet_signature": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
-    case "wallet_action_required": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
+    case "authorized":
+    case "awaiting_wallet_signature":
+    case "wallet_action_required": return "Ready to launch. Confirm the transaction in your wallet.";
     case "submitted": return "The wallet transaction is being tracked onchain.";
     case "sequencer_soft_confirmed": return "Robinhood Chain reported a soft confirmation. Ethereum posting and finality are still pending.";
     case "ethereum_posted": return "The transaction was posted to Ethereum. Finality is still pending.";
@@ -2903,13 +2903,7 @@ export function DeveloperLaunchHistory({
     setHydratingId(key);
     clearLaunchError(key);
     setError("");
-    setStatusMessage(
-      v4Review
-        ? "Loading the exact Robinhood Chain Router transaction for review."
-        : launch.status === "awaiting_funding_authorization"
-        ? "Loading the exact funding authorization for review."
-        : "Loading the exact Router transaction for review.",
-    );
+    setStatusMessage("Preparing your wallet confirmation…");
     try {
       const current = await readLaunchResource(launch);
       if (

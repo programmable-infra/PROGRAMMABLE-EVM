@@ -729,7 +729,7 @@ describe("custom launch V3 wallet handoff", () => {
     }
   });
 
-  it("accepts the current server evidence envelope without weakening Router bindings", () => {
+  it.each(["1.1.0", "1.2.0"])("accepts server evidence %s without weakening Router bindings", (vectorSetVersion) => {
     const fixture = routerFixture({ quote: ZERO_ADDRESS });
     const vectorIds = Array.from({ length: 16 }, (_, index) => `swap.vector-${index}`);
     const behaviorEvidence = Object.freeze({
@@ -737,7 +737,7 @@ describe("custom launch V3 wallet handoff", () => {
       subjectSha256: `sha256:${"12".repeat(32)}`,
       requirements: Object.freeze({
         schemaVersion: "programmable.custom-launch-behavior-requirements.v1",
-        vectorSetVersion: "1.1.0",
+        vectorSetVersion,
         riskClass: "standard-swaps",
         hookPermissionMask: 0,
         liquidityModel: "external-concentrated-liquidity",
@@ -762,7 +762,7 @@ describe("custom launch V3 wallet handoff", () => {
       }),
       platformFeeConformance: Object.freeze({
         status: "not_verified",
-        basis: "exact-ten-bps-evidence-required",
+        basis: vectorSetVersion === "1.2.0" ? "exact-thirty-bps-evidence-required" : "exact-ten-bps-evidence-required",
       }),
       liquidityConformance: Object.freeze({
         status: "not_verified",
@@ -816,6 +816,18 @@ describe("custom launch V3 wallet handoff", () => {
       output,
       account.address,
     ).graphCommitment).toBe(fixture.graphCommitment);
+
+    for (const version of ["1.0.0", "1.3.0", "2.0.0"]) {
+      const unsupported = { ...behaviorEvidence, requirements: { ...behaviorEvidence.requirements, vectorSetVersion: version } };
+      expect(() => prepareCustomLaunchRouterReviewV3({ ...output,
+        behaviorEvidence: unsupported,
+        simulation: { ...output.simulation, behaviorEvidence: unsupported },
+        platformAdmission: { ...currentAdmission, behaviorEvidence: unsupported },
+      }, account.address)).toThrow();
+    }
+    expect(() => prepareCustomLaunchRouterReviewV3({ ...output,
+      behaviorEvidence: { ...behaviorEvidence, status: "failed" },
+    }, account.address)).toThrow();
   });
 
   it("accepts only canonical submitted and finalized onchain evidence", () => {
