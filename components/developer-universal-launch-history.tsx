@@ -135,7 +135,12 @@ export function DeveloperUniversalLaunchHistory(props: Props) {
     {props.initialLaunchId && !loading && !entries.some(entry => String(entry.resource.planId ?? entry.resource.launchId) === props.initialLaunchId) ? <LaunchHistoryMissingState launchId={props.initialLaunchId} unavailable={sourceUnavailable} /> : null}
     <ul className={styles.launchList}>{entries.map((entry, index) => <DeveloperUniversalLaunchFlow key={identity(entry)} entry={entry} highlighted={String(entry.resource.planId ?? entry.resource.launchId) === props.initialLaunchId}
       autoPrepare={String(entry.resource.planId ?? entry.resource.launchId) === props.initialLaunchId || !props.initialLaunchId && index === 0} sendWallet={props.sendWallet}
-      load={async () => parseEntries(await request(entry.sourceVersion, String(entry.resource.planId ?? entry.resource.launchId)), account).entries[0].resource}
+      load={async () => {
+        const current = parseEntries(await request(entry.sourceVersion, String(entry.resource.planId ?? entry.resource.launchId)), account).entries[0];
+        setEntries(previous => previous.map(item => identity(item) === identity(current)
+          && JSON.stringify(item.resource) !== JSON.stringify(current.resource) ? current : item));
+        return current.resource;
+      }}
       onSubmitted={async (stepId, hash) => {
         if (entry.sourceVersion === "custom_launch_plan_v1") await request(entry.sourceVersion, String(entry.resource.planId), {
           method: "POST", body: JSON.stringify({ schemaVersion: "programmable.custom-launch-plan-step-proof.v1", transactionHash: hash.toLowerCase() }),

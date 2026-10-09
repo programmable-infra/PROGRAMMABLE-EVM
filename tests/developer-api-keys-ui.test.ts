@@ -882,7 +882,7 @@ describe("developer launch history interface", () => {
       "Your wallet approves every launch transaction.",
     );
     expect(historySource).toContain("Check onchain status");
-    expect(historySource).toContain("Review and send launch transaction");
+    expect(historySource).toContain("Sign and launch");
     expect(historySource).toContain("sendCustomLaunchWalletAction(action)");
     expect(historySource).toContain("startStatusPolling(current)");
     expect(historySource).toContain('launch.routeId === "custom-launch:create:v2"');
@@ -1097,13 +1097,13 @@ describe("developer launch history interface", () => {
     expect(historySource).toContain(
       "const reviewLaunch = reviewResourceForLaunch(",
     );
-    expect(historySource).toContain("Load funding review");
-    expect(historySource).toContain("Load Router review");
-    expect(historySource).toContain("Review and sign USDC authorization");
-    expect(historySource).toContain("Review and send launch transaction");
+    expect(historySource).toContain("Authorize USDC");
+    expect(historySource).toContain("await loadWalletReview(launch)");
+    expect(historySource).toContain("submitFundingAuthorization(launch, true)");
+    expect(historySource).toContain("Sign and launch");
     expect(historySource).not.toContain("Send reviewed Router transaction");
     expect(historySource).toContain(
-      "onClick={() => void loadWalletReview(launch)}",
+      'submitWalletTransaction(launch, "launch")',
     );
     expect(historySource).toContain("reviewLaunch.output !== null");
 
