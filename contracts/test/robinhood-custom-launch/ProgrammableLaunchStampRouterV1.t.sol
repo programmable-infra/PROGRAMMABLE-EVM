@@ -497,13 +497,26 @@ contract StampMockClassicLauncher is IMemeLaunchV3 {
             router.launchAndStampV1(permit, stampRequest, routePayload, hex"c0ffee");
         }
 
-        function test_permitLifetimeOverOneHourRejects() public {
+        function test_permitCanExecuteAfterTwentyThreeHours() public {
             (
                 IProgrammableLaunchStampRouterV1.LaunchPermitV1 memory permit,
                 IProgrammableLaunchStampRouterV1.StampRequestV1 memory stampRequest,
                 bytes memory routePayload
             ) = _request(LAUNCH_ID, NONCE);
-            permit.deadline = permit.validAfter + 1 hours + 1;
+            permit.deadline = permit.validAfter + 24 hours;
+            authority.setValid(router.permitDigest(permit), true);
+            vm.warp(permit.deadline - 1);
+            vm.prank(launchWallet);
+            router.launchAndStampV1(permit, stampRequest, routePayload, hex"c0ffee");
+        }
+
+        function test_permitLifetimeOverTwentyFourHoursRejects() public {
+            (
+                IProgrammableLaunchStampRouterV1.LaunchPermitV1 memory permit,
+                IProgrammableLaunchStampRouterV1.StampRequestV1 memory stampRequest,
+                bytes memory routePayload
+            ) = _request(LAUNCH_ID, NONCE);
+            permit.deadline = permit.validAfter + 24 hours + 1;
             permit.stampRequestHash = router.computeStampRequestHash(stampRequest);
 
             vm.prank(launchWallet);

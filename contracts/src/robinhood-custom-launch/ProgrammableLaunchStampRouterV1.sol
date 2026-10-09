@@ -22,7 +22,7 @@ contract ProgrammableLaunchStampRouterV1 is IProgrammableLaunchStampRouterV1, EI
     using StateLibrary for IPoolManager;
 
     uint256 private constant MAX_CUSTOM_GRAPH_TARGETS = 16;
-    uint64 private constant MAX_PERMIT_LIFETIME = 1 hours;
+    uint64 private constant MAX_PERMIT_LIFETIME = 24 hours;
     uint8 private constant CLASSIC_TOKEN_RESULT_INDEX = 0;
     uint8 private constant CLASSIC_REWARD_VAULT_RESULT_INDEX = 1;
     uint8 private constant CLASSIC_POSITION_RECIPIENT_RESULT_INDEX = 2;
