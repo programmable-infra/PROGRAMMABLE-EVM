@@ -18,6 +18,8 @@ const EMPTY_SCOPE = Object.freeze({
   robinhood_v41_phase_b_evidence_exact: false,
   robinhood_v413_runtime_evidence: false,
   robinhood_v413_runtime_evidence_exact: false,
+  robinhood_v414_runtime_evidence: false,
+  robinhood_v414_runtime_evidence_exact: false,
 });
 
 const FULL_SCOPE_KEYS = Object.freeze([
@@ -55,6 +57,15 @@ export const ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS = Object.freeze([
 
 const ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATH_SET = new Set(
   ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS,
+);
+
+export const ROBINHOOD_V414_RUNTIME_BACKEND_EVIDENCE_PATHS = Object.freeze([
+  "release/robinhood-chain-4663/v4.1.4/backend-promotion-input.attestation.json",
+  "release/robinhood-chain-4663/v4.1.4/backend-promotion-input.public.json",
+]);
+
+const ROBINHOOD_V414_RUNTIME_BACKEND_EVIDENCE_PATH_SET = new Set(
+  ROBINHOOD_V414_RUNTIME_BACKEND_EVIDENCE_PATHS,
 );
 
 export const ROBINHOOD_V41_CLI_COORDINATE_PATH =
@@ -313,6 +324,12 @@ export function classifyVerifyPaths(
   scope.robinhood_v413_runtime_evidence_exact =
     uniquePaths.size === ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS.length
     && robinhoodV413RuntimePaths.length === ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATHS.length;
+  const robinhoodV414RuntimePaths = [...uniquePaths].filter((candidate) =>
+    ROBINHOOD_V414_RUNTIME_BACKEND_EVIDENCE_PATH_SET.has(candidate));
+  scope.robinhood_v414_runtime_evidence = robinhoodV414RuntimePaths.length > 0;
+  scope.robinhood_v414_runtime_evidence_exact =
+    uniquePaths.size === ROBINHOOD_V414_RUNTIME_BACKEND_EVIDENCE_PATHS.length
+    && robinhoodV414RuntimePaths.length === ROBINHOOD_V414_RUNTIME_BACKEND_EVIDENCE_PATHS.length;
 
   for (const path of paths) {
     if (!path) continue;
@@ -323,7 +340,8 @@ export function classifyVerifyPaths(
     // stage binding, and unchanged ten-minute authorization window before merge.
     if (ROBINHOOD_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)
       || ROBINHOOD_V41_PHASE_B_BACKEND_EVIDENCE_PATH_SET.has(path)
-      || ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATH_SET.has(path)) continue;
+      || ROBINHOOD_V413_RUNTIME_BACKEND_EVIDENCE_PATH_SET.has(path)
+      || ROBINHOOD_V414_RUNTIME_BACKEND_EVIDENCE_PATH_SET.has(path)) continue;
 
     // This exact JSON document selects an immutable CLI release; it does not
     // change Solidity, database, indexer, or dependency inputs. The Interface

@@ -43,6 +43,8 @@ jobs:
       robinhood_v41_phase_b_evidence_exact: ${{ steps.scope.outputs.robinhood_v41_phase_b_evidence_exact }}
       robinhood_v413_runtime_evidence: ${{ steps.scope.outputs.robinhood_v413_runtime_evidence }}
       robinhood_v413_runtime_evidence_exact: ${{ steps.scope.outputs.robinhood_v413_runtime_evidence_exact }}
+      robinhood_v414_runtime_evidence: ${{ steps.scope.outputs.robinhood_v414_runtime_evidence }}
+      robinhood_v414_runtime_evidence_exact: ${{ steps.scope.outputs.robinhood_v414_runtime_evidence_exact }}
 
     steps:
       - name: Check out complete change history
@@ -124,6 +126,10 @@ jobs:
           if ! grep -Eq '^robinhood_v413_runtime_evidence=(true|false)$' "$RUNNER_TEMP/verify-scope.txt"; then
             echo 'robinhood_v413_runtime_evidence=false' >> "$RUNNER_TEMP/verify-scope.txt"
             echo 'robinhood_v413_runtime_evidence_exact=false' >> "$RUNNER_TEMP/verify-scope.txt"
+          fi
+          if ! grep -Eq '^robinhood_v414_runtime_evidence=(true|false)$' "$RUNNER_TEMP/verify-scope.txt"; then
+            echo 'robinhood_v414_runtime_evidence=false' >> "$RUNNER_TEMP/verify-scope.txt"
+            echo 'robinhood_v414_runtime_evidence_exact=false' >> "$RUNNER_TEMP/verify-scope.txt"
           fi
           cat "$RUNNER_TEMP/verify-scope.txt" >> "$GITHUB_OUTPUT"
 
@@ -688,14 +694,16 @@ jobs:
         if: >-
           needs.scope.outputs.robinhood_phase_b_evidence == 'true' ||
           needs.scope.outputs.robinhood_v41_phase_b_evidence == 'true' ||
-          needs.scope.outputs.robinhood_v413_runtime_evidence == 'true'
+          needs.scope.outputs.robinhood_v413_runtime_evidence == 'true' ||
+          needs.scope.outputs.robinhood_v414_runtime_evidence == 'true'
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: Set up Node.js
         if: >-
           needs.scope.outputs.robinhood_phase_b_evidence == 'true' ||
           needs.scope.outputs.robinhood_v41_phase_b_evidence == 'true' ||
-          needs.scope.outputs.robinhood_v413_runtime_evidence == 'true'
+          needs.scope.outputs.robinhood_v413_runtime_evidence == 'true' ||
+          needs.scope.outputs.robinhood_v414_runtime_evidence == 'true'
         uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: 24.14.0
@@ -719,18 +727,26 @@ jobs:
           needs.scope.outputs.robinhood_v413_runtime_evidence_exact != 'true'
         run: exit 1
 
+      - name: Reject partial or mixed CLI 4.1.4 runtime evidence imports
+        if: >-
+          needs.scope.outputs.robinhood_v414_runtime_evidence == 'true' &&
+          needs.scope.outputs.robinhood_v414_runtime_evidence_exact != 'true'
+        run: exit 1
+
       - name: Install locked dependencies for exact Robinhood Phase B backend evidence
         if: >-
           needs.scope.outputs.robinhood_phase_b_evidence_exact == 'true' ||
           needs.scope.outputs.robinhood_v41_phase_b_evidence_exact == 'true' ||
-          needs.scope.outputs.robinhood_v413_runtime_evidence_exact == 'true'
+          needs.scope.outputs.robinhood_v413_runtime_evidence_exact == 'true' ||
+          needs.scope.outputs.robinhood_v414_runtime_evidence_exact == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install exact Cosign verifier for Robinhood Phase B backend evidence
         if: >-
           needs.scope.outputs.robinhood_phase_b_evidence_exact == 'true' ||
           needs.scope.outputs.robinhood_v41_phase_b_evidence_exact == 'true' ||
-          needs.scope.outputs.robinhood_v413_runtime_evidence_exact == 'true'
+          needs.scope.outputs.robinhood_v413_runtime_evidence_exact == 'true' ||
+          needs.scope.outputs.robinhood_v414_runtime_evidence_exact == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -811,13 +827,35 @@ jobs:
               release/robinhood-chain-4663/v4.1.3/backend-promotion-input.attestation.json \
             --repository-root "$GITHUB_WORKSPACE"
 
+      - name: Verify exact fresh CLI 4.1.4 runtime backend evidence
+        if: needs.scope.outputs.robinhood_v414_runtime_evidence_exact == 'true'
+        run: |
+          set -euo pipefail
+          for evidence_path in \
+            release/robinhood-chain-4663/v4.1.4/backend-promotion-input.attestation.json \
+            release/robinhood-chain-4663/v4.1.4/backend-promotion-input.public.json
+          do
+            test "$(git ls-files --stage -- "$evidence_path" | awk '{print $1}')" = "100644"
+            test -f "$evidence_path"
+            test ! -L "$evidence_path"
+            test "$(stat -c '%a' "$evidence_path")" = "644"
+          done
+          node contracts/scripts/finalize-robinhood-custom-launch-v41-deployment.mjs \
+            verify-backend-import \
+            --stage release/robinhood-chain-4663/programmable-stage-bundle.json \
+            --backend-input release/robinhood-chain-4663/v4.1.4/backend-promotion-input.public.json \
+            --backend-attestation-bundle \
+              release/robinhood-chain-4663/v4.1.4/backend-promotion-input.attestation.json \
+            --repository-root "$GITHUB_WORKSPACE"
+
       - name: Skip unaffected contracts
         if: >-
           needs.scope.result == 'success' &&
           needs.scope.outputs.contracts != 'true' &&
           needs.scope.outputs.robinhood_phase_b_evidence != 'true' &&
           needs.scope.outputs.robinhood_v41_phase_b_evidence != 'true' &&
-          needs.scope.outputs.robinhood_v413_runtime_evidence != 'true'
+          needs.scope.outputs.robinhood_v413_runtime_evidence != 'true' &&
+          needs.scope.outputs.robinhood_v414_runtime_evidence != 'true'
         run: echo "No contract paths changed."
 
   custom-v2:
