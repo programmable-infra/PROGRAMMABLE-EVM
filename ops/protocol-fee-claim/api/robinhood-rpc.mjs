@@ -9,7 +9,7 @@ const cache = new Map();
 const pending = new Map();
 
 function endpoint(provider, env) {
-  const keys = { primary: ["FEE_CLAIM_ROBINHOOD_PRIMARY_URL", /^https:\/\/lb\.drpc\.live\/robinhood\/[A-Za-z0-9_-]{16,256}$/],
+  const keys = { primary: ["FEE_CLAIM_ROBINHOOD_PRIMARY_URL", /^https:\/\/(?:lb\.drpc\.live\/robinhood\/[A-Za-z0-9_-]{16,256}|rpc-robinhood\.blockmachine\.io\/?)$/],
     secondary: ["FEE_CLAIM_ROBINHOOD_SECONDARY_URL", /^https:\/\/robinhood-mainnet\.g\.alchemy\.com\/v2\/[A-Za-z0-9_-]{16,256}$/] };
   const pair = keys[provider];
   if (!pair || !pair[1].test(env[pair[0]] ?? "")) throw new Error("RPC_CONFIGURATION_INVALID");

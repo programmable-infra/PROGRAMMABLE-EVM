@@ -39,9 +39,21 @@ const HOOK_ABI = parseAbi(["function ledger() view returns (address)", "function
 const BACKING_ABI = parseAbi(["function balanceOf(address owner,uint256 id) view returns (uint256)"]);
 export const CLAIM_DATA = encodeFunctionData({ abi: LEDGER_ABI, functionName: "claimPlatform" });
 
+export function pacedFetch(fetcher = fetch, intervalMs = 300) {
+  let next = 0;
+  return async (url, options) => {
+    const now = Date.now(), start = Math.max(now, next);
+    next = start + intervalMs;
+    if (start > now) await new Promise(resolve => setTimeout(resolve, start - now));
+    options?.signal?.throwIfAborted();
+    return fetcher(url, options);
+  };
+}
+
 export function createClients(origin = globalThis.location?.origin) {
   if (!origin) throw new Error("Die Claim-Seite muss über ihren Webserver geöffnet werden.");
-  return RPC_URLS.map(url => createPublicClient({ transport: http(new URL(url, origin).href, { timeout: 20000, retryCount: 1 }), batch: { multicall: false } }));
+  return RPC_URLS.map((url, index) => createPublicClient({ transport: http(new URL(url, origin).href,
+    { timeout: 20000, retryCount: 1, fetchFn: pacedFetch(fetch, index === 0 ? 300 : 50) }), batch: { multicall: false } }));
 }
 
 export function parseReleases(history, active) {
@@ -167,7 +179,7 @@ export async function scanFees({ clients, releases, progress = () => {}, minimum
   ]);
   const groups = await mapLimit(releases, 4, async release => {
     progress("Launches werden geladen…");
-    const logs = await logsInRange(clients[0], release, release.startBlock, block.number);
+    const logs = await logsInRange(clients[1], release, release.startBlock, block.number);
     return logs.map(log => {
       need(!log.removed && log.blockHash && log.transactionHash && log.blockNumber >= release.startBlock &&
         log.blockNumber <= block.number && same(log.address, release.factory.address), "Ungültiger Launch-Eintrag.");
@@ -185,7 +197,7 @@ export async function scanFees({ clients, releases, progress = () => {}, minimum
   const checked = await mapLimit(launches, 4, async (launch, index) => {
     progress("Gebühren werden geprüft… " + (index + 1) + "/" + launches.length);
     // Verify each discovered event independently; the explorer and website lists are not claim authority.
-    const receipt = await clients[1].getTransactionReceipt({ hash: launch.log.transactionHash });
+    const receipt = await clients[0].getTransactionReceipt({ hash: launch.log.transactionHash });
     need(receipt.status === "success" && same(receipt.blockHash, launch.log.blockHash) &&
       receipt.logs.some(log => log.logIndex === launch.log.logIndex && same(log.address, launch.log.address) &&
         same(log.data, launch.log.data) && serialize(log.topics) === serialize(launch.log.topics)),
