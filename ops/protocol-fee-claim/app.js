@@ -208,7 +208,8 @@ function loadConfirmedBatchLock() {
   try {
     const parsed = JSON.parse(stored);
     const batchId = normalizeBatchId(parsed.batchId);
-    const batch = normalizeStoredBatch(parsed.batch, batchId);
+    const requestId = normalizeBatchId(parsed.requestId ?? batchId);
+    const batch = normalizeStoredBatch(parsed.batch, requestId);
     const receipts =
       parsed.receipts === null
         ? null
@@ -233,6 +234,7 @@ function loadConfirmedBatchLock() {
       account: parsed.account.toLowerCase(),
       chainId: MAINNET_CHAIN_ID,
       batchId,
+      requestId,
       batch,
       phase: parsed.phase,
       receipts,
@@ -703,7 +705,8 @@ function statusLabel(claim) {
   if (claim.status === "claimed") return "Geclaimt";
   if (claim.status === "failed") return "Nicht verfügbar";
   if (state.confirmedBatch && claimHasOpenAmount(claim))
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (!hookVerified(claim)) return "Contract nicht verifiziert";
   if (!claim.recipientMatches) return "Falscher Empfänger";
   if (!claimHasOpenAmount(claim)) return "Nichts offen";
@@ -741,7 +744,8 @@ function customStatusLabel(launch) {
   if (launch.status === "claimed") return "Geclaimt";
   if (launch.status === "failed") return "Nicht verfügbar";
   if (state.confirmedBatch && classification === "ready")
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "no-market") return "Kein Fee-Markt";
@@ -792,7 +796,8 @@ function customV2StatusLabel(source) {
   if (source.status === "failed") return "Nicht verfügbar";
   const classification = customV2SourceClassification(source);
   if (state.confirmedBatch && classification === "ready")
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "quarantined") return "Nicht ausführbar";
@@ -838,7 +843,8 @@ function routerCustomStatusLabel(source) {
     ...current,
   });
   if (state.confirmedBatch && classification === "ready")
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "no-manual-claim")
@@ -1420,14 +1426,14 @@ function renderSummary() {
     elements.actionLabel.textContent = state.confirmedBatch.invalid
       ? "Claim-Status prüfen"
       : resumable
-        ? "Claim-Batch sicher fortsetzen"
+        ? "Claim-Status aktualisieren"
         : "Claim bereits bestätigt";
     elements.actionDetail.textContent = state.confirmedBatch.invalid
       ? "Lokale Sperre unvollständig · nichts erneut senden"
       : (state.confirmedBatch.failureStatus ?? 0) >= 600
         ? "Mögliche Teil-Ausführung muss onchain geprüft werden"
         : resumable
-          ? "Exakt dieselbe Batch-ID · kein zweiter Claim"
+          ? "Nur Statusabfrage · kein erneutes Senden"
           : `Neuer Scan erst nach finalisiertem Block ${highestConfirmedReceiptBlock()?.toString()}`;
     elements.action.disabled = state.busy || !resumable;
   } else if (scanNeedsRetry(verifiedHooks)) {
@@ -3261,11 +3267,13 @@ async function submitStoredBatchAndWait(initialLock) {
   const id = lock.batchId;
   try {
     const result = await request("wallet_sendCalls", [lock.batch]);
-    const returnedId = normalizeBatchId(result);
-    if (returnedId.toLowerCase() !== id.toLowerCase())
-      throw new Error(
-        "MetaMask hat eine abweichende Batch-ID geliefert. Claims bleiben gesperrt.",
-      );
+    // Some wallets replace the caller's ID. Track their returned ID while
+    // retaining the original request and never resubmit an uncertain outcome.
+    lock = {
+      ...lock,
+      requestId: lock.requestId ?? normalizeBatchId(lock.batch.id),
+      batchId: normalizeBatchId(result),
+    };
   } catch (error) {
     if (walletSendDefinitelyNotSubmitted(error)) {
       clearConfirmedBatchLock(id);
@@ -3303,10 +3311,6 @@ async function preflightClaimBatch(claims) {
   return batch;
 }
 
-function walletCallKey({ to, data, value }) {
-  return `${to.toLowerCase()}:${data.toLowerCase()}:${value.toLowerCase()}`;
-}
-
 async function walletRecognizesStoredBatch(lock) {
   try {
     const result = await request("wallet_getCallsStatus", [lock.batchId]);
@@ -3315,27 +3319,6 @@ async function walletRecognizesStoredBatch(lock) {
   } catch {
     return false;
   }
-}
-
-async function validateStoredBatchForResubmission(lock) {
-  await refreshClaims();
-  await requireActiveRewardWallet(lock.account);
-  const safetyError = claimSafetyError({ ignoreConfirmedBatch: true });
-  if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
-
-  const currentClaims = claimableClaims({ ignoreConfirmedBatch: true });
-  const currentCalls =
-    currentClaims.length === 0
-      ? []
-      : buildWalletSendCalls(lock.account, currentClaims).calls;
-  const currentCallKeys = new Set(currentCalls.map(walletCallKey));
-  if (lock.batch.calls.some((call) => !currentCallKeys.has(walletCallKey(call))))
-    throw new Error(
-      "Der gespeicherte Claim ist nicht mehr Teil des aktuell verifizierten Fee-Inventars. Es wurde nichts gesendet.",
-    );
-
-  await preflightWalletBatch(lock.batch);
-  await requireActiveRewardWallet(lock.account);
 }
 
 async function claimAll() {
@@ -3412,9 +3395,9 @@ async function resumeStoredBatch() {
       await requireActiveRewardWallet(lock.account);
       if (lock.phase === "pending" || (await walletRecognizesStoredBatch(lock)))
         return waitForBatch(lock);
-      await validateStoredBatchForResubmission(lock);
-      setStatus("Der gespeicherte Claim-Batch wird mit derselben ID fortgesetzt");
-      return submitStoredBatchAndWait(lock);
+      throw new Error(
+        "MetaMask findet diesen Claim noch nicht. Bitte die Wallet-Aktivität prüfen. Es wird kein zweiter Claim gesendet.",
+      );
     });
     setStatus("Die ausgewählten geprüften Fees wurden geclaimt");
     await refreshClaims();
