@@ -7,7 +7,7 @@ import { readBoundedUtf8BodyV1 } from "./custom-launch/bounded-utf8-body-v1";
 const endpoint = "https://graph.codex.io/graphql";
 const marketQuery = `query Markets($tokens:[String],$pairs:[String]) {
  filterTokens(tokens:$tokens,limit:100,useAggregatedStats:true) { results { token { address networkId } priceUSD marketCap circulatingMarketCap volume24 change24 } }
- filterPairs(pairs:$pairs,limit:100) { results { liquidity pair { address networkId token0 token1 } } }
+ filterPairs(pairs:$pairs,limit:100) { results { liquidity pair { address networkId token0 token1 token0Data { address networkId symbol } token1Data { address networkId symbol } } } }
 }`;
 // Fixed windows are already below the provider's point limit. countback overrides from.
 const barsQuery = `query Chart($symbol:String!,$from:Int!,$to:Int!,$resolution:String!) { getTokenBars(symbol:$symbol,from:$from,to:$to,resolution:$resolution,currencyCode:USD,removeEmptyBars:false,removeLeadingNullValues:true) { t c s token {address networkId} } }`;
@@ -42,13 +42,12 @@ async function sharedRead<T>(key: string, read: () => Promise<T>): Promise<T> {
   } finally { pending.delete(key); }
 }
 
-const cachedMarkets = unstable_cache(async (identities: readonly Identity[], chainId: number, bucket: number) => {
-  if (!Number.isSafeInteger(bucket) || bucket < 0) throw new Error("Invalid market request");
+const cachedMarkets = unstable_cache(async (identities: readonly Identity[], chainId: number) => {
   const addresses = identities.map(token => token.tokenAddress);
   const pools = [...new Set(identities.map(token => token.poolId))];
   const data = await codexQuery(marketQuery, { tokens: addresses.map(address => `${address}:${chainId}`), pairs: pools.map(pool => `${pool}:${chainId}`) });
   if (!marketObject(data.filterTokens) || !Array.isArray(data.filterTokens.results) || data.filterTokens.results.length > 100) throw new Error("Market data unavailable");
-  const liquidity = new Map<string, { tokens: string[]; usd: number | null }>();
+  const liquidity = new Map<string, { tokens: string[]; symbols: (string | null)[]; usd: number | null }>();
   if (marketObject(data.filterPairs) && Array.isArray(data.filterPairs.results) && data.filterPairs.results.length <= 100) {
     for (const row of data.filterPairs.results) {
       if (!marketObject(row) || !marketObject(row.pair)) continue;
@@ -57,7 +56,14 @@ const cachedMarkets = unstable_cache(async (identities: readonly Identity[], cha
         || typeof pair.token0 !== "string" || !marketAddress.test(pair.token0) || typeof pair.token1 !== "string" || !marketAddress.test(pair.token1)) continue;
       const pool = pair.address.toLowerCase();
       if (!pools.includes(pool) || liquidity.has(pool)) throw new Error("Invalid pool identity");
-      liquidity.set(pool, { tokens: [pair.token0.toLowerCase(), pair.token1.toLowerCase()], usd: marketNumber(row.liquidity) });
+      const tokens = [pair.token0.toLowerCase(), pair.token1.toLowerCase()];
+      const symbols = [pair.token0Data, pair.token1Data].map((token, index) => {
+        if (!marketObject(token) || typeof token.address !== "string" || token.address.toLowerCase() !== tokens[index]
+          || token.networkId !== chainId || typeof token.symbol !== "string") return null;
+        const symbol = token.symbol.trim();
+        return symbol.length > 0 && symbol.length <= 32 && !/[\p{Cc}\p{Cf}]/u.test(symbol) ? symbol : null;
+      });
+      liquidity.set(pool, { tokens, symbols, usd: marketNumber(row.liquidity) });
     }
   }
   const observedAt = new Date().toISOString();
@@ -78,13 +84,13 @@ const cachedMarkets = unstable_cache(async (identities: readonly Identity[], cha
     const pool = liquidity.get(identities.find(token => token.tokenAddress === address)!.poolId);
     const quoteAddress = pool?.tokens.includes(address) ? pool.tokens.find(token => token !== address) : undefined;
     entries.push([address, { source: "codex", priceUsd, marketCapUsd, fdvUsd,
-      ...(quoteAddress ? { quoteAsset: { address: quoteAddress, symbol: null } } : {}),
+      ...(quoteAddress ? { quoteAsset: { address: quoteAddress, symbol: pool!.symbols[pool!.tokens.indexOf(quoteAddress)] } } : {}),
       valuationKind: marketCapUsd !== null ? "market-cap" : "fdv", liquidityUsd: pool?.tokens.includes(address) ? pool.usd : null,
       volume24hUsd: marketNumber(row.volume24), change24hPercent: change === null ? null : change * 100,
       observedAt, sourceUrl: "https://www.codex.io/" }]);
   }
   return entries;
-}, ["codex-token-markets-v4"], { revalidate: 30 });
+}, ["codex-token-markets-v5"], { revalidate: 30 });
 
 /** Only enrich identities supplied by the verified launch catalog. No provider token becomes a launch. */
 export async function readCodexMarkets(tokens: readonly Identity[], chainId = 4663): Promise<Map<string, RobinhoodCoinMarket>> {
@@ -99,11 +105,13 @@ export async function readCodexMarkets(tokens: readonly Identity[], chainId = 46
   const identities = [...new Map(tokens.map(token => [token.tokenAddress.toLowerCase(), { tokenAddress: token.tokenAddress.toLowerCase(), poolId: token.poolId.toLowerCase() }])).values()].sort((a,b) => a.tokenAddress.localeCompare(b.tokenAddress));
   const result = new Map<string, RobinhoodCoinMarket>();
   // One HTTP request for token stats and exact-pool liquidity per 100 verified identities.
-  const deadline = Date.now() + 8_000, bucket = Math.floor(Date.now() / 30_000);
+  const deadline = Date.now() + 8_000;
   for (let offset = 0; offset < identities.length && Date.now() < deadline; offset += 400) {
     const settled = await Promise.allSettled(Array.from({ length: Math.ceil(Math.min(400, identities.length - offset) / 100) }, (_, index) => {
       const batch = identities.slice(offset + index * 100, offset + (index + 1) * 100);
-      return sharedRead(`markets:${chainId}:${bucket}:${JSON.stringify(batch)}`, () => cachedMarkets(batch, chainId, bucket));
+      // A stable cache key lets Next serve the last observation while refreshing.
+      // A time bucket here creates a cold blocking request every 30 seconds.
+      return sharedRead(`markets:${chainId}:${JSON.stringify(batch)}`, () => cachedMarkets(batch, chainId));
     }));
     for (const batch of settled) if (batch.status === "fulfilled") for (const [address, market] of batch.value) {
       const token = identities.find(token => token.tokenAddress === address)!;

@@ -36,6 +36,28 @@ beforeEach(() => {
 });
 
 describe("Unified verified source adapter", () => {
+  it("preserves the exact pair ticker independently of optional price data", async () => {
+    sources.rh.mockResolvedValue({ status: "ready", updatedAt: null, items: [{ ...rh, quoteAsset: other }], sourceEvidence: {} });
+    sources.rhMarkets.mockResolvedValue(new Map([[address, { ...market(20), quoteAsset: { address: other, symbol: "QUOTE" } }]]));
+    expect((await readUnifiedLaunches()).items.find(row => row.chainId === 4663))
+      .toMatchObject({ quoteAsset: other, quoteSymbol: "QUOTE" });
+  });
+  it("resolves indexed paired tickers without a market provider and never from another chain", async () => {
+    sources.rh.mockResolvedValue({ status: "ready", updatedAt: null, items: [{ ...rh, quoteAsset: other }], sourceEvidence: {} });
+    sources.rhMarkets.mockResolvedValue(new Map());
+    sources.ethMarkets.mockResolvedValue(new Map());
+    sources.eth.mockResolvedValue({ status: "ready", updatedAt: null, entries: [{ ...eth, tokenAddress: other, symbol: "WRONG_CHAIN" }], sourceEvidence: {} });
+    expect((await readUnifiedLaunches()).items.find(row => row.chainId === 4663)).not.toHaveProperty("quoteSymbol");
+    sources.rh.mockResolvedValue({ status: "ready", updatedAt: null, items: [{ ...rh, quoteAsset: other }, { ...rh, tokenAddress: other, symbol: "PAIR" }], sourceEvidence: {} });
+    expect((await readUnifiedLaunches()).items.find(row => row.chainId === 4663 && row.tokenAddress === address))
+      .toMatchObject({ quoteAsset: other, quoteSymbol: "PAIR" });
+  });
+  it("keeps the other chain usable when one catalog throws", async () => {
+    sources.eth.mockRejectedValue(new Error("unavailable"));
+    expect(await readUnifiedLaunches()).toMatchObject({ status: "partial", sources: { ethereum: "unavailable", robinhood: "ready" }, page: { totalItems: 1 } });
+    sources.rh.mockRejectedValue(new Error("unavailable"));
+    expect(await readUnifiedLaunches()).toMatchObject({ status: "unavailable", items: [] });
+  });
   it("keeps the Ethereum pool proof's quote when optional quote metadata and markets are absent", async () => {
     sources.eth.mockResolvedValue({ status: "ready", updatedAt: null, entries: [customGraphExploreEntry], sourceEvidence: {} });
     sources.ethMarkets.mockResolvedValue(new Map());

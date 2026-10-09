@@ -25,8 +25,9 @@ describe("canonical launch pair and module presentation", () => {
     const source = { ...launch, sourceKind: "module-foundation-v1" as const, quoteAsset: address("3"), quoteSymbol: "CLAUS" };
     const pair = launchPresentationDetails(source, chainId).pair;
     expect(pair).toEqual({ address: address("3"), label: "CLAUS" });
-    expect(coinPairTicker("HELIX", pair?.label)).toBe("$HELIX / CLAUS");
-    expect(coinPairTicker("$HELIX", pair?.label)).toBe("$HELIX / CLAUS");
+    expect(coinPairTicker("HELIX", pair?.label)).toBe("HELIX / CLAUS");
+    expect(coinPairTicker("$HELIX", "$CLAUS")).toBe("HELIX / CLAUS");
+    expect(coinPairTicker("HELIX", "0x3333…3333")).toBe("HELIX / …");
     expect(coinPairTicker(null, pair?.label)).toBe("… / CLAUS");
     expect(launchPresentationDetails({ ...source, quoteSymbol: "spoof\u202e" }, chainId).pair?.label).toBe("0x3333…3333");
   });
