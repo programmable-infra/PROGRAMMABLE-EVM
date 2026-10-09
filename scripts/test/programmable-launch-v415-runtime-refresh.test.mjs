@@ -5,11 +5,12 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { sha256Digest } from "../../packages/launch/src/io.mjs";
+import { robinhoodV41BackendPromotionTools as backendTools } from "../../contracts/scripts/robinhood-backend-promotion-v41.mjs";
 import { RUNTIME_CAPTURE_PATH, RUNTIME_ATTESTATION_PATH, verifyRuntimePromotionReadiness } from "../programmable-launch-v415-runtime-refresh.mjs";
 
 const DIGEST = `sha256:${"ab".repeat(32)}`;
 const WHEN = "2026-10-08T01:00:00.000Z";
-function fixture(t, observedAt = WHEN) {
+function fixture(t, observedAt = WHEN, logTimes = [String(Date.parse(observedAt) / 1000 + 13)]) {
   const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "programmable-runtime-refresh-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const input = { backendSource: { repository: "programmablehq/programmable-open-hook-v2-internal",
@@ -19,7 +20,10 @@ function fixture(t, observedAt = WHEN) {
     writeFileSync(file, JSON.stringify(value)); return file;
   };
   write("packages/launch/package.json", { name: "@programmable/launch", version: "4.1.5" });
-  write(RUNTIME_CAPTURE_PATH, input); write(RUNTIME_ATTESTATION_PATH, { fixtureOnly: "attestation" });
+  write(RUNTIME_CAPTURE_PATH, input); write(RUNTIME_ATTESTATION_PATH, {
+    fixtureOnly: "attestation",
+    verificationMaterial: { tlogEntries: logTimes.map(integratedTime => ({ integratedTime })) },
+  });
   const git = args => execFileSync("git", ["-C", root, ...args], { stdio: "pipe" });
   git(["init", "--quiet"]); git(["add", "."]);
   git(["-c", "user.name=Runtime Test", "-c", "user.email=runtime-test@example.invalid",
@@ -44,9 +48,10 @@ function successful(f, events = []) {
     async runFinalizer(argv, dependencies) {
       events.push(argv[0]);
       if (argv[0] === "verify-backend-import") {
-        assert.deepEqual(Object.keys(dependencies), ["backendDependencies"]);
+        assert.deepEqual(Object.keys(dependencies), ["backendDependencies", "backendVerificationNow"]);
         assert.deepEqual(Object.keys(dependencies.backendDependencies), ["now"]);
         assert.equal(dependencies.backendDependencies.now().toISOString(), f.input.observedAt);
+        assert.equal(dependencies.backendVerificationNow().getTime(), Date.parse(f.input.observedAt) + 13000);
         assert.deepEqual(argv, ["verify-backend-import", "--repository-root", f.root,
           "--stage", f.argv[4], "--backend-input", path.join(f.root, RUNTIME_CAPTURE_PATH),
           "--backend-attestation-bundle", path.join(f.root, RUNTIME_ATTESTATION_PATH)]);
@@ -74,6 +79,7 @@ test("authenticated historical capture still requires current observations insid
   assert.deepEqual(events, ["verify-backend-import", "apply", "fresh-backend"]);
   assert.equal(result.command, "apply"); assert.equal(result.publicWrites, true);
   assert.equal(result.runtimeRevalidation.activatesWriteProfile, false);
+  assert.equal(result.runtimeRevalidation.historicalAttestedAt, "2026-10-08T01:00:13.000Z");
   assert.deepEqual(result.runtimeRevalidation.backendSource, f.input.backendSource);
   assert.equal(result.runtimeRevalidation.inputSha256, f.imported().backendPromotionPublicInputSha256);
   assert.equal(result.runtimeRevalidation.attestationSha256,
@@ -86,6 +92,44 @@ test("a future-dated historical capture cannot enter authentication or live veri
     runFinalizer: async () => assert.fail("future evidence must not enter the importer"),
     freshVerifyBackend: async () => assert.fail("future evidence must not enter live verification"),
   }), /non-future observation time/u);
+});
+
+test("missing, ambiguous, future and out-of-window log times cannot reconstruct historical authorization", async t => {
+  const observedSeconds = Date.parse(WHEN) / 1000;
+  for (const logTimes of [[], ["invalid"], [String(observedSeconds + 13), String(observedSeconds + 14)],
+    [String(observedSeconds - 1)], [String(observedSeconds + 601)], [String(Math.floor(Date.now() / 1000) + 60)]]) {
+    const f = fixture(t, WHEN, logTimes);
+    await assert.rejects(verifyRuntimePromotionReadiness(f.argv, {
+      runFinalizer: async () => assert.fail("invalid historical time must not reach authentication"),
+      freshVerifyBackend: async () => assert.fail("invalid historical time must not reach live verification"),
+    }), /authenticated log inclusion|original authorization window/u);
+  }
+});
+
+test("recorded inclusion time satisfies the real capture validator without extending its ten-minute window", () => {
+  // Structural regression only. Production still authenticates these exact
+  // bytes with pinned Cosign before accepting an imported receipt.
+  const inputBytes = readFileSync(new URL(`../../${RUNTIME_CAPTURE_PATH}`, import.meta.url));
+  const attestationBundleBytes = readFileSync(new URL(`../../${RUNTIME_ATTESTATION_PATH}`, import.meta.url));
+  const input = JSON.parse(inputBytes), bundle = JSON.parse(attestationBundleBytes);
+  const original = JSON.parse(readFileSync(new URL(
+    "../../release/robinhood-chain-4663/v4.1/programmable-promotion-bundle.json", import.meta.url)));
+  const verifiedAt = new Date(Number(bundle.verificationMaterial.tlogEntries[0].integratedTime) * 1000).toISOString().replace(".000Z", "Z");
+  const fields = {
+    ...original.backendCaptureAuthorization,
+    subjectSha256: sha256Digest(inputBytes), attestationBundleSha256: sha256Digest(attestationBundleBytes),
+    certificateGithubWorkflowSha: input.backendSource.sourceCommit,
+    sourceRevision: input.backendSource.sourceCommit, sourceTree: input.backendSource.sourceTree,
+    verifiedAt,
+  };
+  const check = value => backendTools.validateRobinhoodBackendCaptureAuthorization({
+    authorization: backendTools.buildRobinhoodBackendCaptureAuthorization(value),
+    input, inputBytes, attestationBundleBytes,
+  });
+  assert.doesNotThrow(() => check(fields));
+  assert.throws(() => check({ ...fields,
+    verifiedAt: new Date(Date.parse(input.observedAt) + 601000).toISOString().replace(".000Z", "Z"),
+  }), /outside the capture window/u);
 });
 
 test("failed capture authentication stops before historical apply or live backend reads", async t => {
