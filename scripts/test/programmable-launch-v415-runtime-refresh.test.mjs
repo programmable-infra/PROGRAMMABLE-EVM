@@ -9,11 +9,11 @@ import { RUNTIME_CAPTURE_PATH, RUNTIME_ATTESTATION_PATH, verifyRuntimePromotionR
 
 const DIGEST = `sha256:${"ab".repeat(32)}`;
 const WHEN = "2026-10-08T01:00:00.000Z";
-function fixture(t) {
+function fixture(t, observedAt = WHEN) {
   const root = realpathSync(mkdtempSync(path.join(os.tmpdir(), "programmable-runtime-refresh-")));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const input = { backendSource: { repository: "programmablehq/programmable-open-hook-v2-internal",
-    sourceCommit: "61".repeat(20), sourceTree: "1c".repeat(20) }, fixtureOnly: true };
+    sourceCommit: "61".repeat(20), sourceTree: "1c".repeat(20) }, observedAt, fixtureOnly: true };
   const write = (relative, value) => {
     const file = path.join(root, relative); mkdirSync(path.dirname(file), { recursive: true });
     writeFileSync(file, JSON.stringify(value)); return file;
@@ -44,7 +44,9 @@ function successful(f, events = []) {
     async runFinalizer(argv, dependencies) {
       events.push(argv[0]);
       if (argv[0] === "verify-backend-import") {
-        assert.equal(dependencies, undefined);
+        assert.deepEqual(Object.keys(dependencies), ["backendDependencies"]);
+        assert.deepEqual(Object.keys(dependencies.backendDependencies), ["now"]);
+        assert.equal(dependencies.backendDependencies.now().toISOString(), f.input.observedAt);
         assert.deepEqual(argv, ["verify-backend-import", "--repository-root", f.root,
           "--stage", f.argv[4], "--backend-input", path.join(f.root, RUNTIME_CAPTURE_PATH),
           "--backend-attestation-bundle", path.join(f.root, RUNTIME_ATTESTATION_PATH)]);
@@ -66,7 +68,7 @@ function successful(f, events = []) {
   };
 }
 
-test("authenticated fresh capture replaces only the runtime observation inside unchanged historical apply", async t => {
+test("authenticated historical capture still requires current observations inside unchanged apply", async t => {
   const f = fixture(t), events = [];
   const result = await verifyRuntimePromotionReadiness(f.argv, successful(f, events));
   assert.deepEqual(events, ["verify-backend-import", "apply", "fresh-backend"]);
@@ -76,6 +78,14 @@ test("authenticated fresh capture replaces only the runtime observation inside u
   assert.equal(result.runtimeRevalidation.inputSha256, f.imported().backendPromotionPublicInputSha256);
   assert.equal(result.runtimeRevalidation.attestationSha256,
     sha256Digest(readFileSync(path.join(f.root, RUNTIME_ATTESTATION_PATH))));
+});
+
+test("a future-dated historical capture cannot enter authentication or live verification", async t => {
+  const f = fixture(t, new Date(Date.now() + 86_400_000).toISOString());
+  await assert.rejects(verifyRuntimePromotionReadiness(f.argv, {
+    runFinalizer: async () => assert.fail("future evidence must not enter the importer"),
+    freshVerifyBackend: async () => assert.fail("future evidence must not enter live verification"),
+  }), /non-future observation time/u);
 });
 
 test("failed capture authentication stops before historical apply or live backend reads", async t => {

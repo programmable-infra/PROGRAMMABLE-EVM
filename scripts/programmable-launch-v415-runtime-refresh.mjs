@@ -65,13 +65,19 @@ export async function verifyRuntimePromotionReadiness(argv, {
       && attestationBytes.equals(boundBytes(root, RUNTIME_ATTESTATION_PATH)),
     "runtime capture changed during verification");
   };
-  // The existing importer verifies the closed V4.1 tuple, freshness and the
-  // backend's exact protected-main capture workflow through pinned Cosign.
+  const captureTime = Date.parse(input.observedAt);
+  assert.ok(Number.isFinite(captureTime) && captureTime <= Date.now(),
+    "historical runtime capture must have a valid, non-future observation time");
+  // This committed capture is historical evidence, as in the existing apply
+  // verifier. Authenticate its exact bytes through pinned Cosign at the real
+  // verification time; validate its recorded observations at their own instant.
+  // The mandatory live backend/provider/source checks below still use apply's
+  // current clock and cannot be replaced by this historical observation.
   const imported = await runFinalizer([
     "verify-backend-import", "--repository-root", root, "--stage", flags.get("--stage"),
     "--backend-input", path.join(root, RUNTIME_CAPTURE_PATH),
     "--backend-attestation-bundle", path.join(root, RUNTIME_ATTESTATION_PATH),
-  ]);
+  ], { backendDependencies: { now: () => new Date(captureTime) } });
   assert.ok(imported.command === "verify-backend-import" && imported.releaseReady === false
     && imported.publicAuthorization === false && imported.publicWrites === false
     && imported.wroteLiveArtifacts === false, "runtime import must remain verification-only");
