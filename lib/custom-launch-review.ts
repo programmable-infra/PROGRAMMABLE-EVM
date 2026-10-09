@@ -10,6 +10,10 @@ export type CustomLaunchReview = Readonly<{
   approvedAt: string | null;
   expiresAt: string | null;
   reason: string | null;
+  reviewDueAt?: string;
+  reviewOverdue?: boolean;
+  launchRequestedAt?: string | null;
+  launchDeadline?: string | null;
 }>;
 
 export function parseCustomLaunchReview(value: unknown): CustomLaunchReview {
@@ -21,13 +25,33 @@ export function parseCustomLaunchReview(value: unknown): CustomLaunchReview {
     || !Number.isSafeInteger(v.revision) || v.revision < 1 || !Number.isFinite(Date.parse(v.submittedAt))
     || (v.approvedAt !== null && !Number.isFinite(Date.parse(v.approvedAt)))
     || (v.expiresAt !== null && !Number.isFinite(Date.parse(v.expiresAt)))
-    || (v.reason !== null && typeof v.reason !== "string")) throw new Error("Invalid launch review");
+    || (v.reason !== null && typeof v.reason !== "string")
+    || (v.reviewDueAt !== undefined && !Number.isFinite(Date.parse(v.reviewDueAt)))
+    || (v.reviewOverdue !== undefined && typeof v.reviewOverdue !== "boolean")
+    || (v.launchRequestedAt !== undefined && v.launchRequestedAt !== null && !Number.isFinite(Date.parse(v.launchRequestedAt)))
+    || (v.launchDeadline !== undefined && v.launchDeadline !== null && !Number.isFinite(Date.parse(v.launchDeadline)))) throw new Error("Invalid launch review");
   return v;
 }
 
 export function customLaunchReviewAllowsSigning(review: CustomLaunchReview, now = Date.now()) {
   const approved = Date.parse(review.approvedAt ?? ""), expires = Date.parse(review.expiresAt ?? "");
-  return review.state === "approved" && approved <= now && expires > now && expires - approved === 3_600_000;
+  if (review.state !== "approved" || approved > now || expires <= now || ![3_600_000, 86_400_000].includes(expires - approved)
+    || review.launchRequestedAt === null || review.launchDeadline === null) return false;
+  if (expires - approved === 86_400_000 && (!review.launchRequestedAt || !review.launchDeadline)) return false;
+  if (review.launchRequestedAt !== undefined) {
+    const started = Date.parse(review.launchRequestedAt), deadline = Date.parse(review.launchDeadline ?? "");
+    if (!Number.isFinite(started) || !Number.isFinite(deadline) || started < approved || started > now || deadline <= now
+      || deadline > expires || deadline <= started || deadline - started > 3_600_000) return false;
+  }
+  return true;
+}
+
+export function customLaunchReviewNeedsStart(review: CustomLaunchReview, now = Date.now()) {
+  return customLaunchReviewLabel(review, now) === "Approved" && Date.parse(review.approvedAt!) <= now && review.launchRequestedAt === null;
+}
+
+export function customLaunchReviewOverdue(review: CustomLaunchReview, now = Date.now()) {
+  return review.state === "pending" && now >= Date.parse(review.reviewDueAt ?? new Date(Date.parse(review.submittedAt) + 86_400_000).toISOString());
 }
 
 export function customLaunchReviewLabel(review: CustomLaunchReview, now = Date.now()) {
@@ -35,14 +59,16 @@ export function customLaunchReviewLabel(review: CustomLaunchReview, now = Date.n
     const approved = Date.parse(review.approvedAt ?? ""), expires = Date.parse(review.expiresAt ?? "");
     // A fresh server approval can be slightly ahead of the browser clock.
     // Its status is approved even while signing waits for the start time.
-    return expires > now && expires - approved === 3_600_000 ? "Approved" : "Approval expired";
+    return expires > now && [3_600_000, 86_400_000].includes(expires - approved) ? "Approved" : "Approval expired";
   }
   return review.state === "pending" ? "Review pending" : review.state === "rejected" ? "Changes requested" : "Approval expired";
 }
 
 export function customLaunchReviewDescription(review: CustomLaunchReview) {
   if (customLaunchReviewLabel(review) === "Approved") return `Approved. Launch by ${new Date(review.expiresAt!).toLocaleString()}.`;
-  if (review.state === "pending") return "Your launch is waiting for Programmable approval. No extra application is needed. This page updates automatically.";
+  if (review.state === "pending") return customLaunchReviewOverdue(review)
+    ? "Review is overdue. Your application remains open. Your 24-hour launch window starts only after approval."
+    : "Your launch is waiting for Programmable approval. Review target: 24 hours from submission. Your separate 24-hour launch window starts after approval.";
   if (review.state === "rejected") return review.reason || "Programmable requested changes to this launch.";
-  return "The one-hour approval window has ended. A new approval is required before signing.";
+  return "The approval window has ended. A new approval is required before signing.";
 }

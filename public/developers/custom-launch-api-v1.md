@@ -1,5 +1,16 @@
 # Programmable Custom Launch API
 
+
+### Manual review and launch windows
+
+Submitting a custom launch also creates its review on Ethereum and Robinhood. The review target is 24 hours from `manualReview.submittedAt`. After that, `reviewOverdue` is true and the application stays open. There is no automatic approval or rejection.
+
+Approval opens a separate 24-hour window ending at `manualReview.expiresAt`. When the controller is ready, use **Start launch** in the wallet handoff, or call `POST /v1/custom-launch-reviews/start` with the same wallet API key and JSON `{ "chainId": "1", "launchId": "<request ID>" }`. For Robinhood, use `"4663"` and the plan ID. Poll the existing resource after starting.
+
+The start response includes `launchRequestedAt` and `launchDeadline`. Existing contracts limit the prepared transaction to one hour, capped by the approval expiry. Starting again is idempotent; it does not extend either deadline or replace an issued transaction. Complete signing within `launchDeadline`. If an issued transaction expires, preserve the launch ID and receipts and follow the recovery guidance; Ethereum permit reissue is not supported.
+
+Keep deadlines embedded in your own contract calls long enough for both review and launch windows. Programmable refreshes only the outer transaction window; it never changes reviewed source or custom calldata.
+
 For pending reviews, provider errors and delayed indexing, follow the [launch status and recovery guide](/developers/custom-launch-recovery-v1.md). It explains the API next-action headers and when to poll, repair or use the wallet handoff.
 
 Start with [Launch through the API](https://programmable.market/docs/developers/custom-launch-quickstart) for network selection, API keys, fees, funding, submission and recovery. This document is the detailed reference for the supported request versions. Use the selected API's schema and client together.
