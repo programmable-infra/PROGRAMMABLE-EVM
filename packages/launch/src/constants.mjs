@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "4.1.3";
+export const PACKAGE_VERSION = "4.1.4";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
@@ -222,8 +222,8 @@ export const RELEASE_TAG_V3 = "programmable-launch-v3.3.9";
 export const RELEASE_TARBALL_V3 = "programmable-launch-3.3.9.tgz";
 export const RELEASE_URL_V3 =
   `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG_V3}/${RELEASE_TARBALL_V3}`;
-export const RELEASE_TAG = "programmable-launch-v4.1.3";
-export const RELEASE_TARBALL = "programmable-launch-4.1.3.tgz";
+export const RELEASE_TAG = "programmable-launch-v4.1.4";
+export const RELEASE_TARBALL = "programmable-launch-4.1.4.tgz";
 export const RELEASE_URL =
   `https://github.com/programmablehq/PROGRAMMABLE/releases/download/${RELEASE_TAG}/${RELEASE_TARBALL}`;
 export const PACK_CONFIG_V3_CONTRACT_URL =
@@ -320,3 +320,6 @@ export const HOOK_PERMISSION_BITS = Object.freeze({
   afterAddLiquidityReturnDelta: 1,
   afterRemoveLiquidityReturnDelta: 0,
 });
+
+export const ROUTER_24H = "0xBE4bF6Ac8c6F012E1C8f25747A9fBccB2FDAC4C3";
+export const ROUTER_24H_RUNTIME_CODE_HASH = "0xf2d611fb92718c63cf5767300e79d7c9b49480b2e9001448b96c1385f4edb6f3";

@@ -136,7 +136,7 @@ export async function validateLaunchFile({ launchPath, configPath }) {
     const rebuilt = await buildLaunch({
       configPath,
       ...(isV3
-        ? { directNativeProfileVersion: request?.launchProfile?.profileVersion }
+        ? { directNativeProfileVersion: request?.launchProfile?.profileVersion, directNativeRouter: request?.launchProfile?.router }
         : {}),
     });
     diagnostics = rebuilt.diagnostics ?? [];
@@ -380,6 +380,7 @@ function validateV3LaunchRequest(request) {
     throw new TypeError("projectMetadataHash does not match canonical projectMetadata");
   }
   const common = validateCommonRequest(request, {
+    chainContext: request.launchProfile,
     ...(projectMetadataHash === null ? {} : { projectMetadataHash }),
   });
   const behaviorScenarioInputs = behaviorScenarioRequired
@@ -441,6 +442,7 @@ function validateV3LaunchRequest(request) {
       routeNamespace: deriveRouteNamespace(
         common.sourceDescriptor.bundleContentSha256,
         common.launchWallet,
+        launchProfile,
       ),
       routeNonce: request.nonce,
       quoteCurrency,
@@ -503,6 +505,7 @@ function validateV3LaunchRequest(request) {
         request.fundingIntentHash,
         {
           launchWallet: common.launchWallet,
+          router: launchProfile.router,
           predictedInitializer: launchProfileSelection.predictedInitializer,
           routeNamespace: launchProfileSelection.routeNamespace,
           routeNonce: launchProfileSelection.routeNonce,

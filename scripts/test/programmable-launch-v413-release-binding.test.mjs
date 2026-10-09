@@ -1,19 +1,69 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync } from "node:fs";
+import { lstatSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+import { createHash } from "node:crypto";
+import { gunzipSync } from "node:zlib";
+import { decodeExactUtf8 } from "../../packages/launch/src/io.mjs";
 import Ajv2020 from "ajv/dist/2020.js";
-import { canonicalizeJson } from "../../packages/launch/src/canonical-json.mjs";
+import { canonicalizeJson, parseStrictJson } from "../../packages/launch/src/canonical-json.mjs";
 import * as client from "../programmable-launch-v413-release-binding.mjs";
 import * as previousClient from "../programmable-launch-v412-release-binding.mjs";
 import * as api from "../programmable-launch-v41-release-binding.mjs";
 import * as legacy from "../programmable-launch-v4-release-binding.mjs";
 import { releaseBindingTools, buildReleaseManifest, releaseNames, RELEASE_ASSET_SCHEMA_V2 } from "../programmable-launch-release-assets.mjs";
 
-const repositoryRoot = fileURLToPath(new URL("../../", import.meta.url));
-const sourceBinding = client.createV413ClientReleaseBinding({ repositoryRoot });
+const checkoutRoot = fileURLToPath(new URL("../../", import.meta.url));
+const FROZEN_V413_REVISION = "1d701081656995a28d4449f9c77190e037fdf2df";
+const SNAPSHOT_SHA256 = "810d944aea59eb338a96678db3dd0da2076e3ef778c457bf339a7c3bbbd8e666";
+const MAXIMUM_SNAPSHOT_BYTES = 1024 * 1024;
+const snapshotPath = new URL("./fixtures/programmable-launch-v413-source.json.gz", import.meta.url);
+const snapshotStat = lstatSync(snapshotPath);
+assert.ok(snapshotStat.isFile() && snapshotStat.size <= MAXIMUM_SNAPSHOT_BYTES, "bounded snapshot file");
+const snapshotBytes = readFileSync(snapshotPath);
+function digest(value) { return createHash("sha256").update(value).digest("hex"); }
+function readFrozenSnapshot(compressed) {
+  assert.ok(compressed.length > 0 && compressed.length <= MAXIMUM_SNAPSHOT_BYTES, "bounded snapshot bytes");
+  assert.equal(digest(compressed), SNAPSHOT_SHA256, "exact frozen source snapshot digest");
+  const decoded = gunzipSync(compressed, { maxOutputLength: 8 * 1024 * 1024 });
+  const snapshot = parseStrictJson(decodeExactUtf8(decoded, "historical client snapshot"), {
+    maximumBytes: 8 * 1024 * 1024, maximumDepth: 8,
+  });
+  assert.equal(snapshot.schemaVersion, "programmable.launch-cli-v413-test-source.v1");
+  assert.equal(snapshot.sourceCommit, FROZEN_V413_REVISION);
+  assert.equal(snapshot.files.length, 32);
+  const files = new Map();
+  for (const entry of snapshot.files) {
+    assert.equal(files.has(entry.path), false, "unique snapshot paths");
+    const value = Buffer.from(entry.bytesBase64, "base64");
+    assert.equal(value.toString("base64"), entry.bytesBase64, "exact snapshot byte encoding");
+    assert.equal(`sha256:${digest(value)}`, entry.sha256, "snapshot file digest");
+    files.set(entry.path, value);
+  }
+  return files;
+}
+// These are exact Git blob bytes captured from 54ce42d, read only as test data.
+// The pinned local snapshot makes shallow/squashed checkouts independent of history.
+const frozenFiles = readFrozenSnapshot(snapshotBytes);
+function frozenBytes(relative) {
+  assert.ok(frozenFiles.has(relative), `missing frozen snapshot path: ${relative}`);
+  return frozenFiles.get(relative);
+}
+const repositoryRoot = mkdtempSync(path.join(os.tmpdir(), "programmable-v413-frozen-"));
+after(() => rmSync(repositoryRoot, { recursive: true, force: true }));
+const sourceBinding = parseStrictJson(decodeExactUtf8(frozenBytes(client.V4_RELEASE_BINDING_PATH), "historical binding"));
+for (const file of [...sourceBinding.clientFiles, ...sourceBinding.machineContracts, sourceBinding.existingApiReleaseBinding]) {
+  assert.equal(`sha256:${digest(frozenBytes(file.path))}`, file.sha256, "frozen binding file digest");
+}
+for (const relative of [
+  ...sourceBinding.clientFiles.map(value => value.path),
+  ...sourceBinding.machineContracts.map(value => value.path),
+  api.V4_RELEASE_BINDING_PATH,
+  client.V4_RELEASE_BINDING_PATH,
+  "docs/operations/releases/custom-launch-v4.1.3/cli-release-binding.schema.json",
+]) write(repositoryRoot, relative, frozenBytes(relative));
 function write(root, relative, value) {
   const destination = path.join(root, relative);
   mkdirSync(path.dirname(destination), { recursive: true });
@@ -184,7 +234,7 @@ test("4.1.3 asset manifest requires its own exact client record and no future re
   assert.equal(releaseBindingTools("4.1.2"), previousClient);
   assert.equal(releaseBindingTools("4.1.0"), api);
   assert.equal(releaseBindingTools("4.0.0"), legacy);
-  for (const version of ["4.1.4", "4.2.0", "4.1.3-preview"]) {
+  for (const version of ["4.1.5", "4.2.0", "4.1.3-preview"]) {
     assert.throws(() => releaseBindingTools(version), /Unsupported/);
   }
   const names = releaseNames("4.1.3");

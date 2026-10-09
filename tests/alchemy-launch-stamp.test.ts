@@ -32,6 +32,7 @@ import {
 } from "viem";
 
 import {
+  createLaunchStampReaderV1,
   advanceLaunchStampRouterSlice,
   createInitialLaunchStampRouterSlice,
   hydrateLaunchStampAnchor,
@@ -980,4 +981,25 @@ describe("canonical Launch Stamp Router reader", () => {
     );
     expect(result.slice.tokens).toEqual([]);
   });
+});
+
+it("keeps successor scans isolated from the historical router", async () => {
+  const router = "0xBE4bF6Ac8c6F012E1C8f25747A9fBccB2FDAC4C3";
+  const start = 26_152_286n;
+  const reader = createLaunchStampReaderV1({
+    routerAddress: router,
+    routerRuntimeCodeHash: "0xf2d611fb92718c63cf5767300e79d7c9b49480b2e9001448b96c1385f4edb6f3",
+    routerStartBlock: start,
+    initialCursor: { blockNumber: String(start - 1n), blockHash: hex32(1) },
+  });
+  const item = fixture({ seed: 1, blockNumber: start + 1n });
+  const launchLog = item.logs.at(-1)!;
+  const getLogs = vi.fn(async () => [{ ...launchLog, address: router }]);
+  const client = { getLogs } as unknown as LaunchStampReaderClient;
+  const range = { fromBlock: item.anchor.blockNumber, toBlock: item.anchor.blockNumber, latestBlock: item.anchor.blockNumber + 64n };
+  expect(await reader.scanLaunchStampAnchors(client, range)).toEqual([item.anchor]);
+  expect(getLogs.mock.calls).toHaveLength(1);
+  expect(getLogs).toHaveBeenCalledWith(expect.objectContaining({ address: router }));
+  getLogs.mockResolvedValueOnce([launchLog]);
+  await expect(reader.scanLaunchStampAnchors(client, range)).rejects.toThrow();
 });

@@ -173,6 +173,14 @@ export const CANONICAL_LAUNCH_STAMP_V1 = Object.freeze({
   poolManagerAddress: "0x000000000004444c5dc75cB358380D2e3dE08A90",
 } as const);
 
+/** Finalized scan boundary captured before the successor deployment. */
+export const CANONICAL_LAUNCH_STAMP_24H_V1 = Object.freeze({
+  ...CANONICAL_LAUNCH_STAMP_V1,
+  routerAddress: "0xBE4bF6Ac8c6F012E1C8f25747A9fBccB2FDAC4C3",
+  routerRuntimeCodeHash: "0xf2d611fb92718c63cf5767300e79d7c9b49480b2e9001448b96c1385f4edb6f3",
+  routerStartBlock: "26152286",
+} as const);
+
 export const CANONICAL_ROBINHOOD_LAUNCH_STAMP_V1 = Object.freeze({
   chainId: 4663,
   routerAddress: "0x34965F2A2ee9254522232C32F02056E92BE0C98a",
@@ -390,7 +398,8 @@ export function isLaunchStampProvenanceV1(
 ): value is LaunchStampProvenanceV1 {
   const canonical = isRecord(value)
     ? value.chainId === CANONICAL_LAUNCH_STAMP_V1.chainId
-      ? CANONICAL_LAUNCH_STAMP_V1
+      ? typeof value.routerAddress === "string" && sameHex(value.routerAddress, CANONICAL_LAUNCH_STAMP_24H_V1.routerAddress)
+        ? CANONICAL_LAUNCH_STAMP_24H_V1 : CANONICAL_LAUNCH_STAMP_V1
       : value.chainId === CANONICAL_ROBINHOOD_LAUNCH_STAMP_V1.chainId
         ? CANONICAL_ROBINHOOD_LAUNCH_STAMP_V1
         : null

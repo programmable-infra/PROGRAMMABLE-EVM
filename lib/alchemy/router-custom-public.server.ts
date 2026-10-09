@@ -17,9 +17,9 @@ import {
 } from "../server/projection-target/canonical-json";
 import { canonicalSha256 } from "../server/projection-target/hashing";
 import {
-  readAlchemyRouterCustomIdentitySourceV1,
   type AlchemyRouterCustomIdentitySourceV1,
 } from "./explore.server";
+import { readAllEthereumCustomIdentitySourcesV1 } from "./custom-router-successor.server";
 import {
   LAUNCH_STAMP_ROUTER_BINDING,
 } from "./launch-registry.server";
@@ -533,7 +533,7 @@ export function createRouterCustomIdentitySnapshotReaderV1(
 ) {
   const now = dependencies.now ?? Date.now;
   const readCurrentSource = dependencies.readCurrentSource ??
-    readAlchemyRouterCustomIdentitySourceV1;
+    readAllEthereumCustomIdentitySourcesV1;
   const readDurableSnapshot = dependencies.readDurableSnapshot ??
     readDurableRouterCustomIdentitySnapshotV1;
   const persistDurableSnapshot = dependencies.persistDurableSnapshot ??

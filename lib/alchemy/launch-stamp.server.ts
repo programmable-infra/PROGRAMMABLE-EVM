@@ -300,428 +300,483 @@ async function mapWithConcurrency<Input, Output>(
   return results;
 }
 
-function anchorFromLog(log: Log): LaunchStampAnchor {
-  if (
-    !log.blockNumber ||
-    !log.blockHash ||
-    !log.transactionHash ||
-    !isAddressEqual(log.address, LAUNCH_STAMP_ROUTER_ADDRESS)
-  ) {
-    fail("Launch Stamp discovery returned incomplete provenance");
-  }
-  const decoded = decodeEventLog({
-    abi: [launchStampLaunchEvent],
-    data: log.data,
-    topics: log.topics,
-    strict: true,
-  });
-  const args = decoded.args;
-  if (!isAddressEqual(args.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS)) {
-    fail("Launch Stamp event used a non-canonical PoolManager");
-  }
-  return {
-    launchId: args.launchId,
-    token: getAddress(args.token),
-    hook: getAddress(args.hook),
-    poolManager: getAddress(args.poolManager),
-    poolId: args.poolId,
-    stampHash: args.stampHash,
-    blockNumber: log.blockNumber,
-    blockHash: log.blockHash,
-    transactionHash: log.transactionHash,
-    transactionIndex: requireLogIndex(
-      log.transactionIndex,
-      "Launch Stamp transaction index",
-    ),
-    logIndex: requireLogIndex(log.logIndex, "Launch Stamp log index"),
-  };
-}
-
-export async function scanLaunchStampAnchors(
-  client: LaunchStampReaderClient,
-  input: Readonly<{
-    fromBlock: bigint;
-    toBlock: bigint;
-    latestBlock?: bigint;
-  }>,
-) {
-  if (input.fromBlock < LAUNCH_STAMP_ROUTER_START_BLOCK) {
-    fail("Launch Stamp scan begins before the canonical Router deployment");
-  }
-  const latestBlock = input.latestBlock ?? (await client.getBlockNumber());
-  const highestFinalized = latestBlock - LAUNCH_STAMP_FINALITY_CONFIRMATIONS;
-  if (input.toBlock > highestFinalized) {
-    fail("Launch Stamp scan includes a block without 64 confirmations");
-  }
-  if (input.fromBlock > input.toBlock) return [] as LaunchStampAnchor[];
-
-  const anchors: LaunchStampAnchor[] = [];
-  let cursor = input.fromBlock;
-  let chunkSize = INITIAL_LOG_CHUNK;
-  while (cursor <= input.toBlock) {
-    const end = cursor + chunkSize - 1n < input.toBlock
-      ? cursor + chunkSize - 1n
-      : input.toBlock;
-    try {
-      const logs = await client.getLogs({
-        address: LAUNCH_STAMP_ROUTER_ADDRESS,
-        event: launchStampLaunchEvent,
-        fromBlock: cursor,
-        toBlock: end,
-        strict: true,
-      });
-      anchors.push(...logs.map((log) => anchorFromLog(log)));
-      cursor = end + 1n;
-    } catch (error) {
-      const attempted = end - cursor + 1n;
-      if (attempted <= MINIMUM_LOG_CHUNK) {
-        throw new LaunchStampReaderError(
-          `Launch Stamp log scan failed at the minimum ${MINIMUM_LOG_CHUNK}-block window`,
-          { cause: error },
-        );
-      }
-      chunkSize = attempted / 2n;
-      if (chunkSize < MINIMUM_LOG_CHUNK) chunkSize = MINIMUM_LOG_CHUNK;
-    }
+/** Isolate each immutable Router deployment while keeping historical readers intact. */
+export function createLaunchStampReaderV1(binding: Readonly<{
+  routerAddress: Address;
+  routerRuntimeCodeHash: Hex;
+  routerStartBlock: bigint;
+  initialCursor: LaunchStampRouterCursor;
+}>) {
+  const LAUNCH_STAMP_ROUTER_ADDRESS = getAddress(binding.routerAddress);
+  const LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH = binding.routerRuntimeCodeHash;
+  const LAUNCH_STAMP_ROUTER_START_BLOCK = binding.routerStartBlock;
+  const LAUNCH_STAMP_ROUTER_INITIAL_CURSOR = Object.freeze({ ...binding.initialCursor });
+  if (BigInt(binding.initialCursor.blockNumber) !== binding.routerStartBlock - 1n) {
+    throw new TypeError("Router discovery cursor must precede its deployment");
   }
 
-  anchors.sort((left, right) =>
-    left.blockNumber === right.blockNumber
-      ? left.transactionIndex === right.transactionIndex
-        ? left.logIndex - right.logIndex
-        : left.transactionIndex - right.transactionIndex
-      : left.blockNumber < right.blockNumber ? -1 : 1
-  );
-  const identities = new Set<string>();
-  for (const anchor of anchors) {
-    const identity = `${anchor.transactionHash.toLowerCase()}:${anchor.logIndex}`;
-    if (identities.has(identity)) fail("Duplicate Launch Stamp discovery anchor");
-    identities.add(identity);
-  }
-  return anchors;
-}
-
-function componentFromLog(log: Log): ParsedLaunchStampComponent {
-  const decoded = decodeEventLog({
-    abi: [launchStampComponentEvent],
-    data: log.data,
-    topics: log.topics,
-    strict: true,
-  });
-  const kind = Number(decoded.args.kind);
-  if (kind !== 0 && kind !== 1 && kind !== 2) {
-    fail("Launch Stamp component kind is invalid");
-  }
-  return {
-    launchId: decoded.args.launchId,
-    component: getAddress(decoded.args.component),
-    kind,
-    runtimeCodeHash: decoded.args.runtimeCodeHash,
-    logIndex: requireLogIndex(log.logIndex, "Component log index"),
-  };
-}
-
-function routeFromLog(log: Log): ParsedLaunchStampRoute {
-  const decoded = decodeEventLog({
-    abi: [launchStampRouteEvent],
-    data: log.data,
-    topics: log.topics,
-    strict: true,
-  });
-  const kind = Number(decoded.args.kind);
-  if (kind !== 1 && kind !== 2) fail("Launch Stamp route kind is invalid");
-  return {
-    launchId: decoded.args.launchId,
-    kind,
-    routePayloadHash: decoded.args.routePayloadHash,
-    expectedResultHash: decoded.args.expectedResultHash,
-    permitDigest: decoded.args.permitDigest,
-    logIndex: requireLogIndex(log.logIndex, "Route log index"),
-  };
-}
-
-function parseRouterRun(run: readonly Log[]) {
-  if (
-    run.length < 4 ||
-    run.length > 18 ||
-    !sameHex(run.at(-2)?.topics[0] ?? "", LAUNCH_STAMP_ROUTE_TOPIC) ||
-    !sameHex(run.at(-1)?.topics[0] ?? "", LAUNCH_STAMP_LAUNCH_TOPIC) ||
-    run.slice(0, -2).some((log) =>
-      !sameHex(log.topics[0] ?? "", LAUNCH_STAMP_COMPONENT_TOPIC)
-    )
-  ) {
-    fail("Router logs are not a contiguous Component -> Route -> Launch group");
-  }
-  for (let index = 1; index < run.length; index += 1) {
+  function anchorFromLog(log: Log): LaunchStampAnchor {
     if (
-      requireLogIndex(run[index]?.logIndex, "Router log index") !==
-      requireLogIndex(run[index - 1]?.logIndex, "Router log index") + 1
+      !log.blockNumber ||
+      !log.blockHash ||
+      !log.transactionHash ||
+      !isAddressEqual(log.address, LAUNCH_STAMP_ROUTER_ADDRESS)
     ) {
-      fail("Router stamp logs are not contiguous");
+      fail("Launch Stamp discovery returned incomplete provenance");
     }
-  }
-  const components = run.slice(0, -2).map(componentFromLog);
-  if (components.length < 2 || components.length > 16) {
-    fail("Launch Stamp component count is outside the Router bound");
-  }
-  const route = routeFromLog(run.at(-2) as Log);
-  const launchLog = run.at(-1) as Log;
-  const launch = anchorFromLog(launchLog);
-  if (
-    !sameHex(route.launchId, launch.launchId) ||
-    components.some((component) => !sameHex(component.launchId, launch.launchId))
-  ) {
-    fail("Router stamp group contains mixed launch identities");
-  }
-  return { components, route, launch, launchLog };
-}
-
-export function parseLaunchStampReceipt(
-  anchor: LaunchStampAnchor,
-  receipt: TransactionReceipt,
-): ParsedLaunchStampReceipt {
-  if (
-    receipt.status !== "success" ||
-    !sameHex(receipt.transactionHash, anchor.transactionHash) ||
-    receipt.blockNumber !== anchor.blockNumber ||
-    receipt.transactionIndex !== anchor.transactionIndex ||
-    !sameHex(requireHex(receipt.blockHash, "Receipt block hash"), anchor.blockHash)
-  ) {
-    fail("Launch Stamp receipt provenance mismatch");
+    const decoded = decodeEventLog({
+      abi: [launchStampLaunchEvent],
+      data: log.data,
+      topics: log.topics,
+      strict: true,
+    });
+    const args = decoded.args;
+    if (!isAddressEqual(args.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS)) {
+      fail("Launch Stamp event used a non-canonical PoolManager");
+    }
+    return {
+      launchId: args.launchId,
+      token: getAddress(args.token),
+      hook: getAddress(args.hook),
+      poolManager: getAddress(args.poolManager),
+      poolId: args.poolId,
+      stampHash: args.stampHash,
+      blockNumber: log.blockNumber,
+      blockHash: log.blockHash,
+      transactionHash: log.transactionHash,
+      transactionIndex: requireLogIndex(
+        log.transactionIndex,
+        "Launch Stamp transaction index",
+      ),
+      logIndex: requireLogIndex(log.logIndex, "Launch Stamp log index"),
+    };
   }
 
-  const ordered = [...receipt.logs].sort(
-    (left, right) =>
-      requireLogIndex(left.logIndex, "Receipt log index") -
-      requireLogIndex(right.logIndex, "Receipt log index"),
-  );
-  const runs: Log[][] = [];
-  let current: Log[] = [];
-  for (const log of ordered) {
-    if (isAddressEqual(log.address, LAUNCH_STAMP_ROUTER_ADDRESS)) {
-      const previous = current.at(-1);
+  async function scanLaunchStampAnchors(
+    client: LaunchStampReaderClient,
+    input: Readonly<{
+      fromBlock: bigint;
+      toBlock: bigint;
+      latestBlock?: bigint;
+    }>,
+  ) {
+    if (input.fromBlock < LAUNCH_STAMP_ROUTER_START_BLOCK) {
+      fail("Launch Stamp scan begins before the canonical Router deployment");
+    }
+    const latestBlock = input.latestBlock ?? (await client.getBlockNumber());
+    const highestFinalized = latestBlock - LAUNCH_STAMP_FINALITY_CONFIRMATIONS;
+    if (input.toBlock > highestFinalized) {
+      fail("Launch Stamp scan includes a block without 64 confirmations");
+    }
+    if (input.fromBlock > input.toBlock) return [] as LaunchStampAnchor[];
+
+    const anchors: LaunchStampAnchor[] = [];
+    let cursor = input.fromBlock;
+    let chunkSize = INITIAL_LOG_CHUNK;
+    while (cursor <= input.toBlock) {
+      const end = cursor + chunkSize - 1n < input.toBlock
+        ? cursor + chunkSize - 1n
+        : input.toBlock;
+      try {
+        const logs = await client.getLogs({
+          address: LAUNCH_STAMP_ROUTER_ADDRESS,
+          event: launchStampLaunchEvent,
+          fromBlock: cursor,
+          toBlock: end,
+          strict: true,
+        });
+        anchors.push(...logs.map((log) => anchorFromLog(log)));
+        cursor = end + 1n;
+      } catch (error) {
+        const attempted = end - cursor + 1n;
+        if (attempted <= MINIMUM_LOG_CHUNK) {
+          throw new LaunchStampReaderError(
+            `Launch Stamp log scan failed at the minimum ${MINIMUM_LOG_CHUNK}-block window`,
+            { cause: error },
+          );
+        }
+        chunkSize = attempted / 2n;
+        if (chunkSize < MINIMUM_LOG_CHUNK) chunkSize = MINIMUM_LOG_CHUNK;
+      }
+    }
+
+    anchors.sort((left, right) =>
+      left.blockNumber === right.blockNumber
+        ? left.transactionIndex === right.transactionIndex
+          ? left.logIndex - right.logIndex
+          : left.transactionIndex - right.transactionIndex
+        : left.blockNumber < right.blockNumber ? -1 : 1
+    );
+    const identities = new Set<string>();
+    for (const anchor of anchors) {
+      const identity = `${anchor.transactionHash.toLowerCase()}:${anchor.logIndex}`;
+      if (identities.has(identity)) fail("Duplicate Launch Stamp discovery anchor");
+      identities.add(identity);
+    }
+    return anchors;
+  }
+
+  function componentFromLog(log: Log): ParsedLaunchStampComponent {
+    const decoded = decodeEventLog({
+      abi: [launchStampComponentEvent],
+      data: log.data,
+      topics: log.topics,
+      strict: true,
+    });
+    const kind = Number(decoded.args.kind);
+    if (kind !== 0 && kind !== 1 && kind !== 2) {
+      fail("Launch Stamp component kind is invalid");
+    }
+    return {
+      launchId: decoded.args.launchId,
+      component: getAddress(decoded.args.component),
+      kind,
+      runtimeCodeHash: decoded.args.runtimeCodeHash,
+      logIndex: requireLogIndex(log.logIndex, "Component log index"),
+    };
+  }
+
+  function routeFromLog(log: Log): ParsedLaunchStampRoute {
+    const decoded = decodeEventLog({
+      abi: [launchStampRouteEvent],
+      data: log.data,
+      topics: log.topics,
+      strict: true,
+    });
+    const kind = Number(decoded.args.kind);
+    if (kind !== 1 && kind !== 2) fail("Launch Stamp route kind is invalid");
+    return {
+      launchId: decoded.args.launchId,
+      kind,
+      routePayloadHash: decoded.args.routePayloadHash,
+      expectedResultHash: decoded.args.expectedResultHash,
+      permitDigest: decoded.args.permitDigest,
+      logIndex: requireLogIndex(log.logIndex, "Route log index"),
+    };
+  }
+
+  function parseRouterRun(run: readonly Log[]) {
+    if (
+      run.length < 4 ||
+      run.length > 18 ||
+      !sameHex(run.at(-2)?.topics[0] ?? "", LAUNCH_STAMP_ROUTE_TOPIC) ||
+      !sameHex(run.at(-1)?.topics[0] ?? "", LAUNCH_STAMP_LAUNCH_TOPIC) ||
+      run.slice(0, -2).some((log) =>
+        !sameHex(log.topics[0] ?? "", LAUNCH_STAMP_COMPONENT_TOPIC)
+      )
+    ) {
+      fail("Router logs are not a contiguous Component -> Route -> Launch group");
+    }
+    for (let index = 1; index < run.length; index += 1) {
       if (
-        previous &&
-        requireLogIndex(log.logIndex, "Router log index") !==
-          requireLogIndex(previous.logIndex, "Router log index") + 1
+        requireLogIndex(run[index]?.logIndex, "Router log index") !==
+        requireLogIndex(run[index - 1]?.logIndex, "Router log index") + 1
       ) {
+        fail("Router stamp logs are not contiguous");
+      }
+    }
+    const components = run.slice(0, -2).map(componentFromLog);
+    if (components.length < 2 || components.length > 16) {
+      fail("Launch Stamp component count is outside the Router bound");
+    }
+    const route = routeFromLog(run.at(-2) as Log);
+    const launchLog = run.at(-1) as Log;
+    const launch = anchorFromLog(launchLog);
+    if (
+      !sameHex(route.launchId, launch.launchId) ||
+      components.some((component) => !sameHex(component.launchId, launch.launchId))
+    ) {
+      fail("Router stamp group contains mixed launch identities");
+    }
+    return { components, route, launch, launchLog };
+  }
+
+  function parseLaunchStampReceipt(
+    anchor: LaunchStampAnchor,
+    receipt: TransactionReceipt,
+  ): ParsedLaunchStampReceipt {
+    if (
+      receipt.status !== "success" ||
+      !sameHex(receipt.transactionHash, anchor.transactionHash) ||
+      receipt.blockNumber !== anchor.blockNumber ||
+      receipt.transactionIndex !== anchor.transactionIndex ||
+      !sameHex(requireHex(receipt.blockHash, "Receipt block hash"), anchor.blockHash)
+    ) {
+      fail("Launch Stamp receipt provenance mismatch");
+    }
+
+    const ordered = [...receipt.logs].sort(
+      (left, right) =>
+        requireLogIndex(left.logIndex, "Receipt log index") -
+        requireLogIndex(right.logIndex, "Receipt log index"),
+    );
+    const runs: Log[][] = [];
+    let current: Log[] = [];
+    for (const log of ordered) {
+      if (isAddressEqual(log.address, LAUNCH_STAMP_ROUTER_ADDRESS)) {
+        const previous = current.at(-1);
+        if (
+          previous &&
+          requireLogIndex(log.logIndex, "Router log index") !==
+            requireLogIndex(previous.logIndex, "Router log index") + 1
+        ) {
+          runs.push(current);
+          current = [];
+        }
+        current.push(log);
+      } else if (current.length > 0) {
         runs.push(current);
         current = [];
       }
-      current.push(log);
-    } else if (current.length > 0) {
-      runs.push(current);
-      current = [];
     }
+    if (current.length > 0) runs.push(current);
+    const groups = runs.map(parseRouterRun);
+    const matches = groups.filter(({ launch }) =>
+      launch.logIndex === anchor.logIndex &&
+      sameHex(launch.launchId, anchor.launchId)
+    );
+    if (matches.length !== 1) fail("Launch Stamp anchor has no unique receipt group");
+    const group = matches[0];
+    if (
+      !sameHex(group.launch.token, anchor.token) ||
+      !sameHex(group.launch.hook, anchor.hook) ||
+      !sameHex(group.launch.poolManager, anchor.poolManager) ||
+      !sameHex(group.launch.poolId, anchor.poolId) ||
+      !sameHex(group.launch.stampHash, anchor.stampHash) ||
+      group.launch.transactionIndex !== anchor.transactionIndex
+    ) {
+      fail("Launch Stamp anchor arguments differ from its receipt");
+    }
+
+    const matchingInitializes = ordered.filter((log) =>
+      isAddressEqual(log.address, LAUNCH_STAMP_POOL_MANAGER_ADDRESS) &&
+      sameHex(log.topics[0] ?? "", POOL_MANAGER_INITIALIZE_TOPIC) &&
+      requireLogIndex(log.logIndex, "Initialize log index") <
+        (group.components[0]?.logIndex ?? 0) &&
+      sameHex(log.topics[1] ?? "", anchor.poolId)
+    );
+    if (matchingInitializes.length !== 1) {
+      fail("Launch Stamp receipt must contain exactly one prior pool initialization");
+    }
+    const initialize = matchingInitializes[0] as Log;
+    const decoded = decodeEventLog({
+      abi: [poolManagerInitializeEvent],
+      data: initialize.data,
+      topics: initialize.topics,
+      strict: true,
+    });
+    const poolKey = {
+      currency0: getAddress(decoded.args.currency0),
+      currency1: getAddress(decoded.args.currency1),
+      fee: Number(decoded.args.fee),
+      tickSpacing: Number(decoded.args.tickSpacing),
+      hooks: getAddress(decoded.args.hooks),
+    } satisfies LaunchStampPoolKey;
+    if (
+      !sameHex(decoded.args.id, anchor.poolId) ||
+      !isAddressEqual(poolKey.hooks, anchor.hook) ||
+      !sameHex(computeOfficialV4PoolId(poolKey), anchor.poolId)
+    ) {
+      fail("Pool initialization does not reconstruct the stamped PoolKey");
+    }
+    return {
+      components: group.components,
+      route: group.route,
+      poolKey,
+      initializeLogIndex: requireLogIndex(
+        initialize.logIndex,
+        "Initialize log index",
+      ),
+    };
   }
-  if (current.length > 0) runs.push(current);
-  const groups = runs.map(parseRouterRun);
-  const matches = groups.filter(({ launch }) =>
-    launch.logIndex === anchor.logIndex &&
-    sameHex(launch.launchId, anchor.launchId)
-  );
-  if (matches.length !== 1) fail("Launch Stamp anchor has no unique receipt group");
-  const group = matches[0];
-  if (
-    !sameHex(group.launch.token, anchor.token) ||
-    !sameHex(group.launch.hook, anchor.hook) ||
-    !sameHex(group.launch.poolManager, anchor.poolManager) ||
-    !sameHex(group.launch.poolId, anchor.poolId) ||
-    !sameHex(group.launch.stampHash, anchor.stampHash) ||
-    group.launch.transactionIndex !== anchor.transactionIndex
+
+  async function readRouterState(
+    client: LaunchStampReaderClient,
+    anchor: LaunchStampAnchor,
+    poolKey: LaunchStampPoolKey,
   ) {
-    fail("Launch Stamp anchor arguments differ from its receipt");
+    const blockNumber = anchor.blockNumber;
+    const [chainId, poolManager, record, tokenLaunchId, poolLaunchId, tokenProof,
+      computedPoolKeyHash] = await Promise.all([
+      client.readContract({
+        address: LAUNCH_STAMP_ROUTER_ADDRESS,
+        abi: launchStampRouterReadAbi,
+        functionName: "CHAIN_ID",
+        blockNumber,
+      }),
+      client.readContract({
+        address: LAUNCH_STAMP_ROUTER_ADDRESS,
+        abi: launchStampRouterReadAbi,
+        functionName: "POOL_MANAGER",
+        blockNumber,
+      }),
+      client.readContract({
+        address: LAUNCH_STAMP_ROUTER_ADDRESS,
+        abi: launchStampRouterReadAbi,
+        functionName: "launchStamp",
+        args: [anchor.launchId],
+        blockNumber,
+      }),
+      client.readContract({
+        address: LAUNCH_STAMP_ROUTER_ADDRESS,
+        abi: launchStampRouterReadAbi,
+        functionName: "launchIdByToken",
+        args: [anchor.token],
+        blockNumber,
+      }),
+      client.readContract({
+        address: LAUNCH_STAMP_ROUTER_ADDRESS,
+        abi: launchStampRouterReadAbi,
+        functionName: "launchIdByPool",
+        args: [LAUNCH_STAMP_POOL_MANAGER_ADDRESS, anchor.poolId],
+        blockNumber,
+      }),
+      client.readContract({
+        address: LAUNCH_STAMP_ROUTER_ADDRESS,
+        abi: launchStampRouterReadAbi,
+        functionName: "stampProof",
+        args: [anchor.token],
+        blockNumber,
+      }),
+      client.readContract({
+        address: LAUNCH_STAMP_ROUTER_ADDRESS,
+        abi: launchStampRouterReadAbi,
+        functionName: "computePoolKeyHash",
+        args: [poolKey],
+        blockNumber,
+      }),
+    ]);
+    return {
+      chainId,
+      poolManager,
+      record: record as StampRecord,
+      tokenLaunchId,
+      poolLaunchId,
+      tokenProof,
+      computedPoolKeyHash,
+    };
   }
 
-  const matchingInitializes = ordered.filter((log) =>
-    isAddressEqual(log.address, LAUNCH_STAMP_POOL_MANAGER_ADDRESS) &&
-    sameHex(log.topics[0] ?? "", POOL_MANAGER_INITIALIZE_TOPIC) &&
-    requireLogIndex(log.logIndex, "Initialize log index") <
-      (group.components[0]?.logIndex ?? 0) &&
-    sameHex(log.topics[1] ?? "", anchor.poolId)
-  );
-  if (matchingInitializes.length !== 1) {
-    fail("Launch Stamp receipt must contain exactly one prior pool initialization");
-  }
-  const initialize = matchingInitializes[0] as Log;
-  const decoded = decodeEventLog({
-    abi: [poolManagerInitializeEvent],
-    data: initialize.data,
-    topics: initialize.topics,
-    strict: true,
-  });
-  const poolKey = {
-    currency0: getAddress(decoded.args.currency0),
-    currency1: getAddress(decoded.args.currency1),
-    fee: Number(decoded.args.fee),
-    tickSpacing: Number(decoded.args.tickSpacing),
-    hooks: getAddress(decoded.args.hooks),
-  } satisfies LaunchStampPoolKey;
-  if (
-    !sameHex(decoded.args.id, anchor.poolId) ||
-    !isAddressEqual(poolKey.hooks, anchor.hook) ||
-    !sameHex(computeOfficialV4PoolId(poolKey), anchor.poolId)
+  function validateRouterState(
+    anchor: LaunchStampAnchor,
+    parsed: ParsedLaunchStampReceipt,
+    state: Awaited<ReturnType<typeof readRouterState>>,
   ) {
-    fail("Pool initialization does not reconstruct the stamped PoolKey");
+    const record = state.record;
+    if (
+      state.chainId !== 1n ||
+      !isAddressEqual(state.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS) ||
+      !sameHex(state.tokenLaunchId, anchor.launchId) ||
+      !sameHex(state.poolLaunchId, anchor.launchId) ||
+      !sameHex(state.tokenProof[0], anchor.launchId) ||
+      !sameHex(state.tokenProof[1], anchor.stampHash) ||
+      !sameHex(state.computedPoolKeyHash, record.poolKeyHash) ||
+      record.kind !== parsed.route.kind ||
+      !isAddressEqual(record.token, anchor.token) ||
+      !isAddressEqual(record.hook, anchor.hook) ||
+      !isAddressEqual(record.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS) ||
+      !sameHex(record.poolId, anchor.poolId) ||
+      !sameHex(record.routePayloadHash, parsed.route.routePayloadHash) ||
+      !sameHex(record.expectedResultHash, parsed.route.expectedResultHash) ||
+      !sameHex(record.permitDigest, parsed.route.permitDigest) ||
+      !sameHex(record.stampHash, anchor.stampHash) ||
+      record.componentSetHash === ZERO_HASH ||
+      record.poolKeyHash === ZERO_HASH ||
+      record.routeLauncherRuntimeCodeHash === ZERO_HASH ||
+      record.launchWallet === "0x0000000000000000000000000000000000000000" ||
+      record.routeLauncher === "0x0000000000000000000000000000000000000000"
+    ) {
+      fail("Launch Stamp Router getter bundle does not match the receipt");
+    }
+    return record;
   }
-  return {
-    components: group.components,
-    route: group.route,
-    poolKey,
-    initializeLogIndex: requireLogIndex(
-      initialize.logIndex,
-      "Initialize log index",
-    ),
-  };
-}
 
-async function readRouterState(
-  client: LaunchStampReaderClient,
-  anchor: LaunchStampAnchor,
-  poolKey: LaunchStampPoolKey,
-) {
-  const blockNumber = anchor.blockNumber;
-  const [chainId, poolManager, record, tokenLaunchId, poolLaunchId, tokenProof,
-    computedPoolKeyHash] = await Promise.all([
-    client.readContract({
-      address: LAUNCH_STAMP_ROUTER_ADDRESS,
-      abi: launchStampRouterReadAbi,
-      functionName: "CHAIN_ID",
-      blockNumber,
-    }),
-    client.readContract({
-      address: LAUNCH_STAMP_ROUTER_ADDRESS,
-      abi: launchStampRouterReadAbi,
-      functionName: "POOL_MANAGER",
-      blockNumber,
-    }),
-    client.readContract({
-      address: LAUNCH_STAMP_ROUTER_ADDRESS,
-      abi: launchStampRouterReadAbi,
-      functionName: "launchStamp",
-      args: [anchor.launchId],
-      blockNumber,
-    }),
-    client.readContract({
-      address: LAUNCH_STAMP_ROUTER_ADDRESS,
-      abi: launchStampRouterReadAbi,
-      functionName: "launchIdByToken",
-      args: [anchor.token],
-      blockNumber,
-    }),
-    client.readContract({
-      address: LAUNCH_STAMP_ROUTER_ADDRESS,
-      abi: launchStampRouterReadAbi,
-      functionName: "launchIdByPool",
-      args: [LAUNCH_STAMP_POOL_MANAGER_ADDRESS, anchor.poolId],
-      blockNumber,
-    }),
-    client.readContract({
-      address: LAUNCH_STAMP_ROUTER_ADDRESS,
-      abi: launchStampRouterReadAbi,
-      functionName: "stampProof",
-      args: [anchor.token],
-      blockNumber,
-    }),
-    client.readContract({
-      address: LAUNCH_STAMP_ROUTER_ADDRESS,
-      abi: launchStampRouterReadAbi,
-      functionName: "computePoolKeyHash",
-      args: [poolKey],
-      blockNumber,
-    }),
-  ]);
-  return {
-    chainId,
-    poolManager,
-    record: record as StampRecord,
-    tokenLaunchId,
-    poolLaunchId,
-    tokenProof,
-    computedPoolKeyHash,
-  };
-}
-
-function validateRouterState(
-  anchor: LaunchStampAnchor,
-  parsed: ParsedLaunchStampReceipt,
-  state: Awaited<ReturnType<typeof readRouterState>>,
-) {
-  const record = state.record;
-  if (
-    state.chainId !== 1n ||
-    !isAddressEqual(state.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS) ||
-    !sameHex(state.tokenLaunchId, anchor.launchId) ||
-    !sameHex(state.poolLaunchId, anchor.launchId) ||
-    !sameHex(state.tokenProof[0], anchor.launchId) ||
-    !sameHex(state.tokenProof[1], anchor.stampHash) ||
-    !sameHex(state.computedPoolKeyHash, record.poolKeyHash) ||
-    record.kind !== parsed.route.kind ||
-    !isAddressEqual(record.token, anchor.token) ||
-    !isAddressEqual(record.hook, anchor.hook) ||
-    !isAddressEqual(record.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS) ||
-    !sameHex(record.poolId, anchor.poolId) ||
-    !sameHex(record.routePayloadHash, parsed.route.routePayloadHash) ||
-    !sameHex(record.expectedResultHash, parsed.route.expectedResultHash) ||
-    !sameHex(record.permitDigest, parsed.route.permitDigest) ||
-    !sameHex(record.stampHash, anchor.stampHash) ||
-    record.componentSetHash === ZERO_HASH ||
-    record.poolKeyHash === ZERO_HASH ||
-    record.routeLauncherRuntimeCodeHash === ZERO_HASH ||
-    record.launchWallet === "0x0000000000000000000000000000000000000000" ||
-    record.routeLauncher === "0x0000000000000000000000000000000000000000"
+  async function verifyComponents(
+    client: LaunchStampReaderClient,
+    anchor: LaunchStampAnchor,
+    parsed: ParsedLaunchStampReceipt,
+    kind: "custom-graph" | "classic",
   ) {
-    fail("Launch Stamp Router getter bundle does not match the receipt");
-  }
-  return record;
-}
-
-async function verifyComponents(
-  client: LaunchStampReaderClient,
-  anchor: LaunchStampAnchor,
-  parsed: ParsedLaunchStampReceipt,
-  kind: "custom-graph" | "classic",
-) {
-  const addresses = new Set<string>();
-  let tokenSeen = false;
-  let hookSeen = false;
-  const components = await mapWithConcurrency(
-    parsed.components,
-    COMPONENT_CONCURRENCY,
-    async (component): Promise<LaunchStampProvenanceV1["components"][number]> => {
-      const key = component.component.toLowerCase();
-      if (addresses.has(key)) fail("Launch Stamp contains duplicate components");
-      addresses.add(key);
-      const componentKind = component.kind === 1
-        ? "token"
-        : component.kind === 2 ? "hook" : "other";
-      const sharedHook = kind === "classic" &&
-        componentKind === "hook" &&
-        isAddressEqual(component.component, anchor.hook);
-      const scope = sharedHook ? "shared-infrastructure" : "exclusive";
-      if (componentKind === "token" && isAddressEqual(component.component, anchor.token)) {
-        tokenSeen = true;
-      }
-      if (componentKind === "hook" && isAddressEqual(component.component, anchor.hook)) {
-        hookSeen = true;
-      }
-      await assertRuntimeCodeHash(
-        client,
-        component.component,
-        component.runtimeCodeHash,
-        anchor.blockNumber,
-        `Component ${component.component}`,
-      );
-      if (sharedHook) {
-        const priorExclusiveLaunchId = await client.readContract({
-          address: LAUNCH_STAMP_ROUTER_ADDRESS,
-          abi: launchStampRouterReadAbi,
-          functionName: "launchIdByComponent",
-          args: [component.component],
-          blockNumber: anchor.blockNumber,
-        });
-        if (!sameHex(priorExclusiveLaunchId, ZERO_HASH)) {
-          fail("Classic shared hook is already bound as an exclusive component");
+    const addresses = new Set<string>();
+    let tokenSeen = false;
+    let hookSeen = false;
+    const components = await mapWithConcurrency(
+      parsed.components,
+      COMPONENT_CONCURRENCY,
+      async (component): Promise<LaunchStampProvenanceV1["components"][number]> => {
+        const key = component.component.toLowerCase();
+        if (addresses.has(key)) fail("Launch Stamp contains duplicate components");
+        addresses.add(key);
+        const componentKind = component.kind === 1
+          ? "token"
+          : component.kind === 2 ? "hook" : "other";
+        const sharedHook = kind === "classic" &&
+          componentKind === "hook" &&
+          isAddressEqual(component.component, anchor.hook);
+        const scope = sharedHook ? "shared-infrastructure" : "exclusive";
+        if (componentKind === "token" && isAddressEqual(component.component, anchor.token)) {
+          tokenSeen = true;
+        }
+        if (componentKind === "hook" && isAddressEqual(component.component, anchor.hook)) {
+          hookSeen = true;
+        }
+        await assertRuntimeCodeHash(
+          client,
+          component.component,
+          component.runtimeCodeHash,
+          anchor.blockNumber,
+          `Component ${component.component}`,
+        );
+        if (sharedHook) {
+          const priorExclusiveLaunchId = await client.readContract({
+            address: LAUNCH_STAMP_ROUTER_ADDRESS,
+            abi: launchStampRouterReadAbi,
+            functionName: "launchIdByComponent",
+            args: [component.component],
+            blockNumber: anchor.blockNumber,
+          });
+          if (!sameHex(priorExclusiveLaunchId, ZERO_HASH)) {
+            fail("Classic shared hook is already bound as an exclusive component");
+          }
+          return {
+            address: component.component,
+            kind: componentKind,
+            scope,
+            runtimeCodeHash: component.runtimeCodeHash,
+            logIndex: component.logIndex,
+            exclusiveProof: null,
+          };
+        }
+        const [launchId, runtimeCodeHash, proof] = await Promise.all([
+          client.readContract({
+            address: LAUNCH_STAMP_ROUTER_ADDRESS,
+            abi: launchStampRouterReadAbi,
+            functionName: "launchIdByComponent",
+            args: [component.component],
+            blockNumber: anchor.blockNumber,
+          }),
+          client.readContract({
+            address: LAUNCH_STAMP_ROUTER_ADDRESS,
+            abi: launchStampRouterReadAbi,
+            functionName: "componentRuntimeCodeHash",
+            args: [component.component],
+            blockNumber: anchor.blockNumber,
+          }),
+          client.readContract({
+            address: LAUNCH_STAMP_ROUTER_ADDRESS,
+            abi: launchStampRouterReadAbi,
+            functionName: "stampProof",
+            args: [component.component],
+            blockNumber: anchor.blockNumber,
+          }),
+        ]);
+        if (
+          !sameHex(launchId, anchor.launchId) ||
+          !sameHex(runtimeCodeHash, component.runtimeCodeHash) ||
+          !sameHex(proof[0], anchor.launchId) ||
+          !sameHex(proof[1], anchor.stampHash)
+        ) {
+          fail(`Exclusive component proof mismatch for ${component.component}`);
         }
         return {
           address: component.component,
@@ -729,589 +784,558 @@ async function verifyComponents(
           scope,
           runtimeCodeHash: component.runtimeCodeHash,
           logIndex: component.logIndex,
-          exclusiveProof: null,
+          exclusiveProof: {
+            launchId: proof[0],
+            stampHash: proof[1],
+          },
         };
-      }
-      const [launchId, runtimeCodeHash, proof] = await Promise.all([
-        client.readContract({
-          address: LAUNCH_STAMP_ROUTER_ADDRESS,
-          abi: launchStampRouterReadAbi,
-          functionName: "launchIdByComponent",
-          args: [component.component],
-          blockNumber: anchor.blockNumber,
-        }),
-        client.readContract({
-          address: LAUNCH_STAMP_ROUTER_ADDRESS,
-          abi: launchStampRouterReadAbi,
-          functionName: "componentRuntimeCodeHash",
-          args: [component.component],
-          blockNumber: anchor.blockNumber,
-        }),
-        client.readContract({
-          address: LAUNCH_STAMP_ROUTER_ADDRESS,
-          abi: launchStampRouterReadAbi,
-          functionName: "stampProof",
-          args: [component.component],
-          blockNumber: anchor.blockNumber,
-        }),
-      ]);
-      if (
-        !sameHex(launchId, anchor.launchId) ||
-        !sameHex(runtimeCodeHash, component.runtimeCodeHash) ||
-        !sameHex(proof[0], anchor.launchId) ||
-        !sameHex(proof[1], anchor.stampHash)
-      ) {
-        fail(`Exclusive component proof mismatch for ${component.component}`);
-      }
-      return {
-        address: component.component,
-        kind: componentKind,
-        scope,
-        runtimeCodeHash: component.runtimeCodeHash,
-        logIndex: component.logIndex,
-        exclusiveProof: {
-          launchId: proof[0],
-          stampHash: proof[1],
-        },
-      };
-    },
-  );
-  if (!tokenSeen || !hookSeen) {
-    fail("Launch Stamp is missing its canonical token or hook component");
-  }
-  return components;
-}
-
-async function optionalRead<T>(reader: () => Promise<T>): Promise<T | null> {
-  try {
-    return await reader();
-  } catch {
-    return null;
-  }
-}
-
-function normalizedDisplayText(value: unknown) {
-  if (typeof value !== "string") return null;
-  const normalized = value.trim();
-  return normalized && !hasUnsafeDisplayCharacters(normalized)
-    ? normalized
-    : null;
-}
-
-function normalizedTokenName(value: unknown) {
-  const normalized = normalizedDisplayText(value);
-  return normalized &&
-      characterLength(normalized) <= MAX_TOKEN_NAME_CHARACTERS &&
-      utf8ByteLength(normalized) <= MAX_TOKEN_NAME_BYTES
-    ? normalized
-    : null;
-}
-
-function normalizedTokenSymbol(value: unknown) {
-  const normalized = normalizedDisplayText(value);
-  return normalized &&
-      utf8ByteLength(normalized) <= MAX_TOKEN_SYMBOL_BYTES &&
-      isValidTokenSymbol(normalized)
-    ? normalized
-    : null;
-}
-
-function normalizedDescription(value: unknown) {
-  const normalized = normalizedDisplayText(value);
-  return normalized && utf8ByteLength(normalized) <= MAX_TOKEN_DESCRIPTION_BYTES
-    ? normalized
-    : null;
-}
-
-function metadataField(
-  value: unknown,
-  index: number,
-  key: "description" | "website" | "image" | "extraData",
-) {
-  if (Array.isArray(value)) return value[index];
-  if (typeof value !== "object" || value === null) return undefined;
-  return (value as Record<string, unknown>)[key];
-}
-
-function normalizedSocialExtraData(value: unknown): Hex | null {
-  if (
-    typeof value !== "string" ||
-    value.length > 2 + MAX_SOCIAL_EXTRA_DATA_BYTES * 2 ||
-    !/^0x(?:[0-9a-f]{2})+$/iu.test(value)
-  ) {
-    return null;
-  }
-  const extraData = value as Hex;
-  return decodeSocialMetadata(extraData) ? extraData : null;
-}
-
-function addressSymbolFallback(address: Address) {
-  return `A${address.slice(-9)}`.toUpperCase();
-}
-
-function optionalBigInt(value: unknown) {
-  try {
-    const normalized = BigInt(value as bigint);
-    return normalized >= 0n ? normalized : null;
-  } catch {
-    return null;
-  }
-}
-
-async function readTokenAndPoolState(
-  client: LaunchStampReaderClient,
-  deployment: ReadyOnchainDeployment,
-  anchor: LaunchStampAnchor,
-  blockNumber: bigint,
-) {
-  const [name, symbol, decimals, totalSupply, metadata, slot0, liquidity] =
-    await Promise.all([
-      optionalRead(() => client.readContract({
-        address: anchor.token,
-        abi: uerc20ReadAbi,
-        functionName: "name",
-        blockNumber,
-      })),
-      optionalRead(() => client.readContract({
-        address: anchor.token,
-        abi: uerc20ReadAbi,
-        functionName: "symbol",
-        blockNumber,
-      })),
-      optionalRead(() => client.readContract({
-        address: anchor.token,
-        abi: uerc20ReadAbi,
-        functionName: "decimals",
-        blockNumber,
-      })),
-      optionalRead(() => client.readContract({
-        address: anchor.token,
-        abi: uerc20ReadAbi,
-        functionName: "totalSupply",
-        blockNumber,
-      })),
-      optionalRead(() => client.readContract({
-        address: anchor.token,
-        abi: uerc20ReadAbi,
-        functionName: "metadata",
-        blockNumber,
-      })),
-      client.readContract({
-        address: deployment.stateView,
-        abi: stateViewReadAbi,
-        functionName: "getSlot0",
-        args: [anchor.poolId],
-        blockNumber,
-      }),
-      client.readContract({
-        address: deployment.stateView,
-        abi: stateViewReadAbi,
-        functionName: "getLiquidity",
-        args: [anchor.poolId],
-        blockNumber,
-      }),
-  ]);
-  if (slot0[0] === 0n) fail("Stamped pool is not initialized in StateView");
-  const normalizedName = normalizedTokenName(name) ??
-    `Token ${anchor.token.slice(0, 8)}…${anchor.token.slice(-4)}`;
-  const normalizedSymbol = normalizedTokenSymbol(symbol) ??
-    addressSymbolFallback(anchor.token);
-  const parsedDecimals = decimals === null ? null : Number(decimals);
-  const normalizedDecimals = parsedDecimals !== null &&
-      Number.isSafeInteger(parsedDecimals) &&
-      parsedDecimals >= 0 &&
-      parsedDecimals <= 255
-    ? parsedDecimals
-    : null;
-  const normalizedSupply = totalSupply === null ? null : optionalBigInt(totalSupply);
-  const description = normalizedDescription(
-    metadataField(metadata, 0, "description"),
-  );
-  const website = sanitizeWebsiteUrl(metadataField(metadata, 1, "website"));
-  const imageUrl = sanitizeImageUrl(metadataField(metadata, 2, "image"));
-  const metadataExtraData = normalizedSocialExtraData(
-    metadataField(metadata, 3, "extraData"),
-  );
-  const links = buildTokenLinks(website, metadataExtraData ?? "0x");
-  return {
-    name: normalizedName,
-    symbol: normalizedSymbol,
-    description,
-    imageUrl,
-    links: links.length > 0 ? links : undefined,
-    metadataExtraData,
-    decimals: normalizedDecimals,
-    totalSupplyRaw: normalizedSupply?.toString(),
-    totalSupply: normalizedSupply === null || normalizedDecimals === null
-      ? undefined
-      : formatUnits(normalizedSupply, normalizedDecimals),
-    currentTick: Number(slot0[1]),
-    protocolFeePips: Number(slot0[2]),
-    lpFeePips: Number(slot0[3]),
-    activeLiquidity: liquidity.toString(),
-  };
-}
-
-export async function hydrateLaunchStampAnchor(
-  deployment: ReadyOnchainDeployment,
-  anchor: LaunchStampAnchor,
-  options: LaunchStampReaderOptions & Readonly<{
-    latestBlock?: LaunchStampCanonicalBlock;
-    stateBlock?: LaunchStampCanonicalBlock;
-    receipt?: TransactionReceipt;
-  }> = {},
-): Promise<HydratedLaunchStamp> {
-  requireCanonicalDeployment(deployment);
-  if (
-    anchor.blockNumber < LAUNCH_STAMP_ROUTER_START_BLOCK ||
-    !isAddressEqual(anchor.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS)
-  ) {
-    fail("Launch Stamp anchor is outside the canonical Router binding");
-  }
-  const client = options.client ?? createReaderClient(deployment);
-  const chainId = await client.getChainId();
-  if (chainId !== 1) fail("Launch Stamp RPC is not Ethereum mainnet");
-  const latestNumber = options.latestBlock?.number ?? (await client.getBlockNumber());
-  if (latestNumber < anchor.blockNumber + LAUNCH_STAMP_FINALITY_CONFIRMATIONS) {
-    fail("Launch Stamp anchor does not have 64 confirmations");
-  }
-  const latestBlock = options.latestBlock ?? await canonicalBlock(client, latestNumber);
-  if (latestBlock.number !== latestNumber) fail("Latest block proof mismatch");
-  const stateBlock = options.stateBlock ?? await canonicalBlock(
-    client,
-    latestNumber - LAUNCH_STAMP_FINALITY_CONFIRMATIONS,
-  );
-  if (
-    stateBlock.number > latestNumber - LAUNCH_STAMP_FINALITY_CONFIRMATIONS ||
-    stateBlock.number < anchor.blockNumber
-  ) {
-    fail("Launch Stamp state block is outside the finalized scan boundary");
-  }
-  const receipt = options.receipt ?? await client.getTransactionReceipt({
-    hash: anchor.transactionHash,
-  });
-  const parsed = parseLaunchStampReceipt(anchor, receipt);
-  const launchBlock = await canonicalBlock(client, anchor.blockNumber);
-  if (!sameHex(launchBlock.hash, anchor.blockHash)) {
-    fail("Launch Stamp anchor block is no longer canonical");
-  }
-  await Promise.all([
-    assertRuntimeCodeHash(
-      client,
-      LAUNCH_STAMP_ROUTER_ADDRESS,
-      LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
-      anchor.blockNumber,
-      "Launch Stamp Router",
-    ),
-    assertRuntimeCodeHash(
-      client,
-      LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
-      LAUNCH_STAMP_POOL_MANAGER_RUNTIME_CODE_HASH,
-      anchor.blockNumber,
-      "PoolManager",
-    ),
-    assertRuntimeCodeHash(
-      client,
-      deployment.stateView,
-      deployment.stateViewRuntimeCodeHash,
-      stateBlock.number,
-      "StateView",
-    ),
-  ]);
-  const state = await readRouterState(client, anchor, parsed.poolKey);
-  const record = validateRouterState(anchor, parsed, state);
-  const kind = parsed.route.kind === 1 ? "custom-graph" : "classic";
-  const components = await verifyComponents(client, anchor, parsed, kind);
-  await assertRuntimeCodeHash(
-    client,
-    record.routeLauncher,
-    record.routeLauncherRuntimeCodeHash,
-    anchor.blockNumber,
-    "Launch route launcher",
-  );
-  const tokenAndPool = await readTokenAndPoolState(
-    client,
-    deployment,
-    anchor,
-    stateBlock.number,
-  );
-  const provenance: LaunchStampProvenanceV1 = {
-    schemaVersion: "programmable.launch-stamp-provenance.v1",
-    chainId: 1,
-    routerAddress: LAUNCH_STAMP_ROUTER_ADDRESS,
-    routerRuntimeCodeHash: LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
-    routerStartBlock: LAUNCH_STAMP_ROUTER_START_BLOCK.toString(),
-    finalityConfirmations: Number(LAUNCH_STAMP_FINALITY_CONFIRMATIONS),
-    kind,
-    launchId: anchor.launchId,
-    stampHash: anchor.stampHash,
-    launchWallet: record.launchWallet,
-    transactionHash: anchor.transactionHash,
-    blockNumber: anchor.blockNumber.toString(),
-    blockHash: anchor.blockHash,
-    transactionIndex: anchor.transactionIndex,
-    routeLogIndex: parsed.route.logIndex,
-    launchLogIndex: anchor.logIndex,
-    finalizedAtBlockNumber: latestBlock.number.toString(),
-    finalizedAtBlockHash: latestBlock.hash,
-    poolManagerAddress: LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
-    poolId: anchor.poolId,
-    poolKey: parsed.poolKey,
-    poolKeyHash: record.poolKeyHash,
-    componentSetHash: record.componentSetHash,
-    routePayloadHash: record.routePayloadHash,
-    routeLauncherAddress: record.routeLauncher,
-    routeLauncherRuntimeCodeHash: record.routeLauncherRuntimeCodeHash,
-    expectedResultHash: record.expectedResultHash,
-    permitDigest: record.permitDigest,
-    components,
-    tokenProof: {
-      tokenAddress: anchor.token,
-      launchId: anchor.launchId,
-      stampHash: anchor.stampHash,
-    },
-    poolProof: {
-      poolManagerAddress: LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
-      poolId: anchor.poolId,
-      launchId: anchor.launchId,
-      stampHash: anchor.stampHash,
-    },
-  };
-  const token: LauncherToken = {
-    id: `1:${anchor.token.toLowerCase()}`,
-    name: tokenAndPool.name,
-    symbol: tokenAndPool.symbol,
-    ...(tokenAndPool.description ? { description: tokenAndPool.description } : {}),
-    ...(tokenAndPool.imageUrl ? { imageUrl: tokenAndPool.imageUrl } : {}),
-    ...(tokenAndPool.links ? { links: tokenAndPool.links } : {}),
-    tokenAddress: anchor.token,
-    hookAddress: anchor.hook,
-    poolId: anchor.poolId,
-    creatorAddress: record.launchWallet,
-    launchBlockNumber: anchor.blockNumber.toString(),
-    launchTransactionHash: anchor.transactionHash,
-    launchTransactionIndex: anchor.transactionIndex,
-    launchLogIndex: anchor.logIndex,
-    launchedAt: new Date(Number(launchBlock.timestamp) * 1_000).toISOString(),
-    ...(tokenAndPool.totalSupply ? { totalSupply: tokenAndPool.totalSupply } : {}),
-    ...(tokenAndPool.totalSupplyRaw
-      ? { totalSupplyRaw: tokenAndPool.totalSupplyRaw }
-      : {}),
-    ...(tokenAndPool.decimals === null
-      ? {}
-      : { tokenDecimals: tokenAndPool.decimals }),
-    activeLiquidity: tokenAndPool.activeLiquidity,
-    currentTick: tokenAndPool.currentTick,
-    protocolFeePips: tokenAndPool.protocolFeePips,
-    lpFeePips: tokenAndPool.lpFeePips,
-    totalSwapFeeBps: null,
-    launchModel: kind === "custom-graph" ? "custom-graph" : "classic",
-    launchModelVersion: "programmable-launch-stamp-router-v1",
-    liquidityPath: "programmable-v4",
-    ...(tokenAndPool.metadataExtraData
-      ? { metadataExtraData: tokenAndPool.metadataExtraData }
-      : {}),
-    launchStampProvenance: provenance,
-  };
-  return { token, launchStampProvenance: provenance };
-}
-
-function validateSliceCursor(cursor: LaunchStampRouterCursor) {
-  if (!/^(?:0|[1-9]\d*)$/u.test(cursor.blockNumber)) {
-    fail("Launch Stamp Router cursor block is invalid");
-  }
-  const number = BigInt(cursor.blockNumber);
-  if (number < LAUNCH_STAMP_ROUTER_START_BLOCK - 1n) {
-    fail("Launch Stamp Router cursor predates its canonical anchor");
-  }
-  if (
-    number === LAUNCH_STAMP_ROUTER_START_BLOCK - 1n &&
-    !sameHex(cursor.blockHash, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockHash)
-  ) {
-    fail("Launch Stamp Router initial cursor hash mismatch");
-  }
-  return number;
-}
-
-export function createInitialLaunchStampRouterSlice(): LaunchStampRouterSlice {
-  return {
-    cursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
-    tokens: [],
-  };
-}
-
-export async function advanceLaunchStampRouterSlice(
-  deployment: ReadyOnchainDeployment,
-  slice: LaunchStampRouterSlice,
-  options: LaunchStampReaderOptions = {},
-): Promise<AdvanceLaunchStampRouterResult> {
-  requireCanonicalDeployment(deployment);
-  const client = options.client ?? createReaderClient(deployment);
-  if ((await client.getChainId()) !== 1) {
-    fail("Launch Stamp RPC is not Ethereum mainnet");
-  }
-  let workingSlice = slice;
-  let cursorNumber = validateSliceCursor(workingSlice.cursor);
-  let cursorBlock = await canonicalBlock(client, cursorNumber);
-  let rebuiltAfterReorg = false;
-  if (!sameHex(cursorBlock.hash, slice.cursor.blockHash)) {
-    if (cursorNumber === LAUNCH_STAMP_ROUTER_START_BLOCK - 1n) {
-      fail("Launch Stamp Router initial cursor is no longer canonical");
+      },
+    );
+    if (!tokenSeen || !hookSeen) {
+      fail("Launch Stamp is missing its canonical token or hook component");
     }
-    workingSlice = createInitialLaunchStampRouterSlice();
-    cursorNumber = LAUNCH_STAMP_ROUTER_START_BLOCK - 1n;
-    cursorBlock = await canonicalBlock(client, cursorNumber);
-    if (!sameHex(cursorBlock.hash, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockHash)) {
-      fail("Launch Stamp Router canonical rebuild anchor mismatch");
+    return components;
+  }
+
+  async function optionalRead<T>(reader: () => Promise<T>): Promise<T | null> {
+    try {
+      return await reader();
+    } catch {
+      return null;
     }
-    rebuiltAfterReorg = true;
   }
-  const latestNumber = await client.getBlockNumber();
-  if (latestNumber < LAUNCH_STAMP_FINALITY_CONFIRMATIONS) {
-    fail("Ethereum head is below the Launch Stamp finality depth");
+
+  function normalizedDisplayText(value: unknown) {
+    if (typeof value !== "string") return null;
+    const normalized = value.trim();
+    return normalized && !hasUnsafeDisplayCharacters(normalized)
+      ? normalized
+      : null;
   }
-  const latestBlock = await canonicalBlock(client, latestNumber);
-  const highestSafeNumber = latestNumber - LAUNCH_STAMP_FINALITY_CONFIRMATIONS;
-  if (highestSafeNumber < LAUNCH_STAMP_ROUTER_START_BLOCK - 1n) {
-    fail("Ethereum head does not finalize the canonical Router deployment");
+
+  function normalizedTokenName(value: unknown) {
+    const normalized = normalizedDisplayText(value);
+    return normalized &&
+        characterLength(normalized) <= MAX_TOKEN_NAME_CHARACTERS &&
+        utf8ByteLength(normalized) <= MAX_TOKEN_NAME_BYTES
+      ? normalized
+      : null;
   }
-  if (cursorNumber > highestSafeNumber) {
-    fail("Launch Stamp Router cursor is ahead of the 64-confirmation boundary");
+
+  function normalizedTokenSymbol(value: unknown) {
+    const normalized = normalizedDisplayText(value);
+    return normalized &&
+        utf8ByteLength(normalized) <= MAX_TOKEN_SYMBOL_BYTES &&
+        isValidTokenSymbol(normalized)
+      ? normalized
+      : null;
   }
-  let targetNumber = cursorNumber + MAXIMUM_CATCH_UP_BLOCKS < highestSafeNumber
-    ? cursorNumber + MAXIMUM_CATCH_UP_BLOCKS
-    : highestSafeNumber;
-  let targetBlock = await canonicalBlock(client, targetNumber);
-  await Promise.all([
-    assertRuntimeCodeHash(
-      client,
-      LAUNCH_STAMP_ROUTER_ADDRESS,
-      LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
-      targetNumber,
-      "Launch Stamp Router",
-    ),
-    assertRuntimeCodeHash(
-      client,
-      LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
-      LAUNCH_STAMP_POOL_MANAGER_RUNTIME_CODE_HASH,
-      targetNumber,
-      "PoolManager",
-    ),
-  ]);
-  const fromBlock = cursorNumber + 1n;
-  if (fromBlock > targetNumber) {
+
+  function normalizedDescription(value: unknown) {
+    const normalized = normalizedDisplayText(value);
+    return normalized && utf8ByteLength(normalized) <= MAX_TOKEN_DESCRIPTION_BYTES
+      ? normalized
+      : null;
+  }
+
+  function metadataField(
+    value: unknown,
+    index: number,
+    key: "description" | "website" | "image" | "extraData",
+  ) {
+    if (Array.isArray(value)) return value[index];
+    if (typeof value !== "object" || value === null) return undefined;
+    return (value as Record<string, unknown>)[key];
+  }
+
+  function normalizedSocialExtraData(value: unknown): Hex | null {
+    if (
+      typeof value !== "string" ||
+      value.length > 2 + MAX_SOCIAL_EXTRA_DATA_BYTES * 2 ||
+      !/^0x(?:[0-9a-f]{2})+$/iu.test(value)
+    ) {
+      return null;
+    }
+    const extraData = value as Hex;
+    return decodeSocialMetadata(extraData) ? extraData : null;
+  }
+
+  function addressSymbolFallback(address: Address) {
+    return `A${address.slice(-9)}`.toUpperCase();
+  }
+
+  function optionalBigInt(value: unknown) {
+    try {
+      const normalized = BigInt(value as bigint);
+      return normalized >= 0n ? normalized : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function readTokenAndPoolState(
+    client: LaunchStampReaderClient,
+    deployment: ReadyOnchainDeployment,
+    anchor: LaunchStampAnchor,
+    blockNumber: bigint,
+  ) {
+    const [name, symbol, decimals, totalSupply, metadata, slot0, liquidity] =
+      await Promise.all([
+        optionalRead(() => client.readContract({
+          address: anchor.token,
+          abi: uerc20ReadAbi,
+          functionName: "name",
+          blockNumber,
+        })),
+        optionalRead(() => client.readContract({
+          address: anchor.token,
+          abi: uerc20ReadAbi,
+          functionName: "symbol",
+          blockNumber,
+        })),
+        optionalRead(() => client.readContract({
+          address: anchor.token,
+          abi: uerc20ReadAbi,
+          functionName: "decimals",
+          blockNumber,
+        })),
+        optionalRead(() => client.readContract({
+          address: anchor.token,
+          abi: uerc20ReadAbi,
+          functionName: "totalSupply",
+          blockNumber,
+        })),
+        optionalRead(() => client.readContract({
+          address: anchor.token,
+          abi: uerc20ReadAbi,
+          functionName: "metadata",
+          blockNumber,
+        })),
+        client.readContract({
+          address: deployment.stateView,
+          abi: stateViewReadAbi,
+          functionName: "getSlot0",
+          args: [anchor.poolId],
+          blockNumber,
+        }),
+        client.readContract({
+          address: deployment.stateView,
+          abi: stateViewReadAbi,
+          functionName: "getLiquidity",
+          args: [anchor.poolId],
+          blockNumber,
+        }),
+    ]);
+    if (slot0[0] === 0n) fail("Stamped pool is not initialized in StateView");
+    const normalizedName = normalizedTokenName(name) ??
+      `Token ${anchor.token.slice(0, 8)}…${anchor.token.slice(-4)}`;
+    const normalizedSymbol = normalizedTokenSymbol(symbol) ??
+      addressSymbolFallback(anchor.token);
+    const parsedDecimals = decimals === null ? null : Number(decimals);
+    const normalizedDecimals = parsedDecimals !== null &&
+        Number.isSafeInteger(parsedDecimals) &&
+        parsedDecimals >= 0 &&
+        parsedDecimals <= 255
+      ? parsedDecimals
+      : null;
+    const normalizedSupply = totalSupply === null ? null : optionalBigInt(totalSupply);
+    const description = normalizedDescription(
+      metadataField(metadata, 0, "description"),
+    );
+    const website = sanitizeWebsiteUrl(metadataField(metadata, 1, "website"));
+    const imageUrl = sanitizeImageUrl(metadataField(metadata, 2, "image"));
+    const metadataExtraData = normalizedSocialExtraData(
+      metadataField(metadata, 3, "extraData"),
+    );
+    const links = buildTokenLinks(website, metadataExtraData ?? "0x");
     return {
-      slice: workingSlice,
-      scannedFromBlock: null,
-      scannedToBlock: targetNumber.toString(),
-      discovered: 0,
-      hydrated: 0,
-      boundedByDensity: false,
-      rebuiltAfterReorg,
-      highestSafeBlockNumber: highestSafeNumber.toString(),
-      caughtUp: true,
+      name: normalizedName,
+      symbol: normalizedSymbol,
+      description,
+      imageUrl,
+      links: links.length > 0 ? links : undefined,
+      metadataExtraData,
+      decimals: normalizedDecimals,
+      totalSupplyRaw: normalizedSupply?.toString(),
+      totalSupply: normalizedSupply === null || normalizedDecimals === null
+        ? undefined
+        : formatUnits(normalizedSupply, normalizedDecimals),
+      currentTick: Number(slot0[1]),
+      protocolFeePips: Number(slot0[2]),
+      lpFeePips: Number(slot0[3]),
+      activeLiquidity: liquidity.toString(),
     };
   }
-  let anchors = await scanLaunchStampAnchors(client, {
-    fromBlock,
-    toBlock: targetNumber,
-    latestBlock: latestNumber,
-  });
-  let boundedByDensity = false;
-  if (anchors.length > MAXIMUM_ANCHORS_PER_ADVANCE) {
-    const firstDeferredBlock = anchors[MAXIMUM_ANCHORS_PER_ADVANCE]?.blockNumber;
-    if (firstDeferredBlock === undefined || firstDeferredBlock <= fromBlock) {
-      fail("A single block exceeds the bounded Launch Stamp hydration limit");
+
+  async function hydrateLaunchStampAnchor(
+    deployment: ReadyOnchainDeployment,
+    anchor: LaunchStampAnchor,
+    options: LaunchStampReaderOptions & Readonly<{
+      latestBlock?: LaunchStampCanonicalBlock;
+      stateBlock?: LaunchStampCanonicalBlock;
+      receipt?: TransactionReceipt;
+    }> = {},
+  ): Promise<HydratedLaunchStamp> {
+    requireCanonicalDeployment(deployment);
+    if (
+      anchor.blockNumber < LAUNCH_STAMP_ROUTER_START_BLOCK ||
+      !isAddressEqual(anchor.poolManager, LAUNCH_STAMP_POOL_MANAGER_ADDRESS)
+    ) {
+      fail("Launch Stamp anchor is outside the canonical Router binding");
     }
-    targetNumber = firstDeferredBlock - 1n;
-    targetBlock = await canonicalBlock(client, targetNumber);
-    anchors = anchors.filter((anchor) => anchor.blockNumber <= targetNumber);
-    if (anchors.length > MAXIMUM_ANCHORS_PER_ADVANCE) {
-      fail("Launch Stamp density could not be reduced at a block boundary");
+    const client = options.client ?? createReaderClient(deployment);
+    const chainId = await client.getChainId();
+    if (chainId !== 1) fail("Launch Stamp RPC is not Ethereum mainnet");
+    const latestNumber = options.latestBlock?.number ?? (await client.getBlockNumber());
+    if (latestNumber < anchor.blockNumber + LAUNCH_STAMP_FINALITY_CONFIRMATIONS) {
+      fail("Launch Stamp anchor does not have 64 confirmations");
     }
-    boundedByDensity = true;
-  }
-  const receiptHashes = [...new Set(
-    anchors.map((anchor) => anchor.transactionHash.toLowerCase()),
-  )] as Hex[];
-  const receipts = new Map<string, TransactionReceipt>();
-  await mapWithConcurrency(
-    receiptHashes,
-    COMPONENT_CONCURRENCY,
-    async (hash) => {
-      const receipt = await client.getTransactionReceipt({ hash });
-      receipts.set(hash.toLowerCase(), receipt);
-    },
-  );
-  const hydrated = await mapWithConcurrency(
-    anchors,
-    HYDRATION_CONCURRENCY,
-    (anchor) => hydrateLaunchStampAnchor(deployment, anchor, {
+    const latestBlock = options.latestBlock ?? await canonicalBlock(client, latestNumber);
+    if (latestBlock.number !== latestNumber) fail("Latest block proof mismatch");
+    const stateBlock = options.stateBlock ?? await canonicalBlock(
       client,
-      latestBlock,
-      stateBlock: targetBlock,
-      receipt: receipts.get(anchor.transactionHash.toLowerCase()),
-    }),
-  );
-  const tokenAddresses = new Set<string>();
-  const launchIds = new Set<string>();
-  const poolIds = new Set<string>();
-  const eventIds = new Set<string>();
-  for (const token of workingSlice.tokens) {
-    const provenance = token.launchStampProvenance;
-    if (!provenance) fail("Launch Stamp Router slice contains an unstamped token");
-    const tokenKey = token.tokenAddress.toLowerCase();
-    const launchKey = provenance.launchId.toLowerCase();
-    const poolKey = `${provenance.poolManagerAddress.toLowerCase()}:${provenance.poolId.toLowerCase()}`;
-    const eventKey = `${provenance.transactionHash.toLowerCase()}:${provenance.launchLogIndex}`;
+      latestNumber - LAUNCH_STAMP_FINALITY_CONFIRMATIONS,
+    );
     if (
-      tokenAddresses.has(tokenKey) ||
-      launchIds.has(launchKey) ||
-      poolIds.has(poolKey) ||
-      eventIds.has(eventKey)
+      stateBlock.number > latestNumber - LAUNCH_STAMP_FINALITY_CONFIRMATIONS ||
+      stateBlock.number < anchor.blockNumber
     ) {
-      fail("Launch Stamp Router slice contains duplicate provenance");
+      fail("Launch Stamp state block is outside the finalized scan boundary");
     }
-    tokenAddresses.add(tokenKey);
-    launchIds.add(launchKey);
-    poolIds.add(poolKey);
-    eventIds.add(eventKey);
-  }
-  const newTokens: LauncherToken[] = [];
-  for (const result of hydrated) {
-    const tokenKey = result.token.tokenAddress.toLowerCase();
-    const launchKey = result.launchStampProvenance.launchId.toLowerCase();
-    const poolKey = `${result.launchStampProvenance.poolManagerAddress.toLowerCase()}:${result.launchStampProvenance.poolId.toLowerCase()}`;
-    const eventKey = `${result.launchStampProvenance.transactionHash.toLowerCase()}:${result.launchStampProvenance.launchLogIndex}`;
-    if (
-      tokenAddresses.has(tokenKey) ||
-      launchIds.has(launchKey) ||
-      poolIds.has(poolKey) ||
-      eventIds.has(eventKey)
-    ) {
-      fail("Launch Stamp Router advancement conflicts with persisted provenance");
+    const receipt = options.receipt ?? await client.getTransactionReceipt({
+      hash: anchor.transactionHash,
+    });
+    const parsed = parseLaunchStampReceipt(anchor, receipt);
+    const launchBlock = await canonicalBlock(client, anchor.blockNumber);
+    if (!sameHex(launchBlock.hash, anchor.blockHash)) {
+      fail("Launch Stamp anchor block is no longer canonical");
     }
-    tokenAddresses.add(tokenKey);
-    launchIds.add(launchKey);
-    poolIds.add(poolKey);
-    eventIds.add(eventKey);
-    newTokens.push(result.token);
-  }
-  return {
-    slice: {
-      cursor: {
-        blockNumber: targetNumber.toString(),
-        blockHash: targetBlock.hash,
+    await Promise.all([
+      assertRuntimeCodeHash(
+        client,
+        LAUNCH_STAMP_ROUTER_ADDRESS,
+        LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+        anchor.blockNumber,
+        "Launch Stamp Router",
+      ),
+      assertRuntimeCodeHash(
+        client,
+        LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
+        LAUNCH_STAMP_POOL_MANAGER_RUNTIME_CODE_HASH,
+        anchor.blockNumber,
+        "PoolManager",
+      ),
+      assertRuntimeCodeHash(
+        client,
+        deployment.stateView,
+        deployment.stateViewRuntimeCodeHash,
+        stateBlock.number,
+        "StateView",
+      ),
+    ]);
+    const state = await readRouterState(client, anchor, parsed.poolKey);
+    const record = validateRouterState(anchor, parsed, state);
+    const kind = parsed.route.kind === 1 ? "custom-graph" : "classic";
+    const components = await verifyComponents(client, anchor, parsed, kind);
+    await assertRuntimeCodeHash(
+      client,
+      record.routeLauncher,
+      record.routeLauncherRuntimeCodeHash,
+      anchor.blockNumber,
+      "Launch route launcher",
+    );
+    const tokenAndPool = await readTokenAndPoolState(
+      client,
+      deployment,
+      anchor,
+      stateBlock.number,
+    );
+    const provenance: LaunchStampProvenanceV1 = {
+      schemaVersion: "programmable.launch-stamp-provenance.v1",
+      chainId: 1,
+      routerAddress: LAUNCH_STAMP_ROUTER_ADDRESS,
+      routerRuntimeCodeHash: LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+      routerStartBlock: LAUNCH_STAMP_ROUTER_START_BLOCK.toString(),
+      finalityConfirmations: Number(LAUNCH_STAMP_FINALITY_CONFIRMATIONS),
+      kind,
+      launchId: anchor.launchId,
+      stampHash: anchor.stampHash,
+      launchWallet: record.launchWallet,
+      transactionHash: anchor.transactionHash,
+      blockNumber: anchor.blockNumber.toString(),
+      blockHash: anchor.blockHash,
+      transactionIndex: anchor.transactionIndex,
+      routeLogIndex: parsed.route.logIndex,
+      launchLogIndex: anchor.logIndex,
+      finalizedAtBlockNumber: latestBlock.number.toString(),
+      finalizedAtBlockHash: latestBlock.hash,
+      poolManagerAddress: LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
+      poolId: anchor.poolId,
+      poolKey: parsed.poolKey,
+      poolKeyHash: record.poolKeyHash,
+      componentSetHash: record.componentSetHash,
+      routePayloadHash: record.routePayloadHash,
+      routeLauncherAddress: record.routeLauncher,
+      routeLauncherRuntimeCodeHash: record.routeLauncherRuntimeCodeHash,
+      expectedResultHash: record.expectedResultHash,
+      permitDigest: record.permitDigest,
+      components,
+      tokenProof: {
+        tokenAddress: anchor.token,
+        launchId: anchor.launchId,
+        stampHash: anchor.stampHash,
       },
-      tokens: [...workingSlice.tokens, ...newTokens],
-    },
-    scannedFromBlock: fromBlock.toString(),
-    scannedToBlock: targetNumber.toString(),
-    discovered: anchors.length,
-    hydrated: hydrated.length,
-    boundedByDensity,
-    rebuiltAfterReorg,
-    highestSafeBlockNumber: highestSafeNumber.toString(),
-    caughtUp: targetNumber === highestSafeNumber,
-  };
+      poolProof: {
+        poolManagerAddress: LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
+        poolId: anchor.poolId,
+        launchId: anchor.launchId,
+        stampHash: anchor.stampHash,
+      },
+    };
+    const token: LauncherToken = {
+      id: `1:${anchor.token.toLowerCase()}`,
+      name: tokenAndPool.name,
+      symbol: tokenAndPool.symbol,
+      ...(tokenAndPool.description ? { description: tokenAndPool.description } : {}),
+      ...(tokenAndPool.imageUrl ? { imageUrl: tokenAndPool.imageUrl } : {}),
+      ...(tokenAndPool.links ? { links: tokenAndPool.links } : {}),
+      tokenAddress: anchor.token,
+      hookAddress: anchor.hook,
+      poolId: anchor.poolId,
+      creatorAddress: record.launchWallet,
+      launchBlockNumber: anchor.blockNumber.toString(),
+      launchTransactionHash: anchor.transactionHash,
+      launchTransactionIndex: anchor.transactionIndex,
+      launchLogIndex: anchor.logIndex,
+      launchedAt: new Date(Number(launchBlock.timestamp) * 1_000).toISOString(),
+      ...(tokenAndPool.totalSupply ? { totalSupply: tokenAndPool.totalSupply } : {}),
+      ...(tokenAndPool.totalSupplyRaw
+        ? { totalSupplyRaw: tokenAndPool.totalSupplyRaw }
+        : {}),
+      ...(tokenAndPool.decimals === null
+        ? {}
+        : { tokenDecimals: tokenAndPool.decimals }),
+      activeLiquidity: tokenAndPool.activeLiquidity,
+      currentTick: tokenAndPool.currentTick,
+      protocolFeePips: tokenAndPool.protocolFeePips,
+      lpFeePips: tokenAndPool.lpFeePips,
+      totalSwapFeeBps: null,
+      launchModel: kind === "custom-graph" ? "custom-graph" : "classic",
+      launchModelVersion: "programmable-launch-stamp-router-v1",
+      liquidityPath: "programmable-v4",
+      ...(tokenAndPool.metadataExtraData
+        ? { metadataExtraData: tokenAndPool.metadataExtraData }
+        : {}),
+      launchStampProvenance: provenance,
+    };
+    return { token, launchStampProvenance: provenance };
+  }
+
+  function validateSliceCursor(cursor: LaunchStampRouterCursor) {
+    if (!/^(?:0|[1-9]\d*)$/u.test(cursor.blockNumber)) {
+      fail("Launch Stamp Router cursor block is invalid");
+    }
+    const number = BigInt(cursor.blockNumber);
+    if (number < LAUNCH_STAMP_ROUTER_START_BLOCK - 1n) {
+      fail("Launch Stamp Router cursor predates its canonical anchor");
+    }
+    if (
+      number === LAUNCH_STAMP_ROUTER_START_BLOCK - 1n &&
+      !sameHex(cursor.blockHash, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockHash)
+    ) {
+      fail("Launch Stamp Router initial cursor hash mismatch");
+    }
+    return number;
+  }
+
+  function createInitialLaunchStampRouterSlice(): LaunchStampRouterSlice {
+    return {
+      cursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
+      tokens: [],
+    };
+  }
+
+  async function advanceLaunchStampRouterSlice(
+    deployment: ReadyOnchainDeployment,
+    slice: LaunchStampRouterSlice,
+    options: LaunchStampReaderOptions = {},
+  ): Promise<AdvanceLaunchStampRouterResult> {
+    requireCanonicalDeployment(deployment);
+    const client = options.client ?? createReaderClient(deployment);
+    if ((await client.getChainId()) !== 1) {
+      fail("Launch Stamp RPC is not Ethereum mainnet");
+    }
+    let workingSlice = slice;
+    let cursorNumber = validateSliceCursor(workingSlice.cursor);
+    let cursorBlock = await canonicalBlock(client, cursorNumber);
+    let rebuiltAfterReorg = false;
+    if (!sameHex(cursorBlock.hash, slice.cursor.blockHash)) {
+      if (cursorNumber === LAUNCH_STAMP_ROUTER_START_BLOCK - 1n) {
+        fail("Launch Stamp Router initial cursor is no longer canonical");
+      }
+      workingSlice = createInitialLaunchStampRouterSlice();
+      cursorNumber = LAUNCH_STAMP_ROUTER_START_BLOCK - 1n;
+      cursorBlock = await canonicalBlock(client, cursorNumber);
+      if (!sameHex(cursorBlock.hash, LAUNCH_STAMP_ROUTER_INITIAL_CURSOR.blockHash)) {
+        fail("Launch Stamp Router canonical rebuild anchor mismatch");
+      }
+      rebuiltAfterReorg = true;
+    }
+    const latestNumber = await client.getBlockNumber();
+    if (latestNumber < LAUNCH_STAMP_FINALITY_CONFIRMATIONS) {
+      fail("Ethereum head is below the Launch Stamp finality depth");
+    }
+    const latestBlock = await canonicalBlock(client, latestNumber);
+    const highestSafeNumber = latestNumber - LAUNCH_STAMP_FINALITY_CONFIRMATIONS;
+    if (highestSafeNumber < LAUNCH_STAMP_ROUTER_START_BLOCK - 1n) {
+      fail("Ethereum head does not finalize the canonical Router deployment");
+    }
+    if (cursorNumber > highestSafeNumber) {
+      fail("Launch Stamp Router cursor is ahead of the 64-confirmation boundary");
+    }
+    let targetNumber = cursorNumber + MAXIMUM_CATCH_UP_BLOCKS < highestSafeNumber
+      ? cursorNumber + MAXIMUM_CATCH_UP_BLOCKS
+      : highestSafeNumber;
+    let targetBlock = await canonicalBlock(client, targetNumber);
+    await Promise.all([
+      assertRuntimeCodeHash(
+        client,
+        LAUNCH_STAMP_ROUTER_ADDRESS,
+        LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+        targetNumber,
+        "Launch Stamp Router",
+      ),
+      assertRuntimeCodeHash(
+        client,
+        LAUNCH_STAMP_POOL_MANAGER_ADDRESS,
+        LAUNCH_STAMP_POOL_MANAGER_RUNTIME_CODE_HASH,
+        targetNumber,
+        "PoolManager",
+      ),
+    ]);
+    const fromBlock = cursorNumber + 1n;
+    if (fromBlock > targetNumber) {
+      return {
+        slice: workingSlice,
+        scannedFromBlock: null,
+        scannedToBlock: targetNumber.toString(),
+        discovered: 0,
+        hydrated: 0,
+        boundedByDensity: false,
+        rebuiltAfterReorg,
+        highestSafeBlockNumber: highestSafeNumber.toString(),
+        caughtUp: true,
+      };
+    }
+    let anchors = await scanLaunchStampAnchors(client, {
+      fromBlock,
+      toBlock: targetNumber,
+      latestBlock: latestNumber,
+    });
+    let boundedByDensity = false;
+    if (anchors.length > MAXIMUM_ANCHORS_PER_ADVANCE) {
+      const firstDeferredBlock = anchors[MAXIMUM_ANCHORS_PER_ADVANCE]?.blockNumber;
+      if (firstDeferredBlock === undefined || firstDeferredBlock <= fromBlock) {
+        fail("A single block exceeds the bounded Launch Stamp hydration limit");
+      }
+      targetNumber = firstDeferredBlock - 1n;
+      targetBlock = await canonicalBlock(client, targetNumber);
+      anchors = anchors.filter((anchor) => anchor.blockNumber <= targetNumber);
+      if (anchors.length > MAXIMUM_ANCHORS_PER_ADVANCE) {
+        fail("Launch Stamp density could not be reduced at a block boundary");
+      }
+      boundedByDensity = true;
+    }
+    const receiptHashes = [...new Set(
+      anchors.map((anchor) => anchor.transactionHash.toLowerCase()),
+    )] as Hex[];
+    const receipts = new Map<string, TransactionReceipt>();
+    await mapWithConcurrency(
+      receiptHashes,
+      COMPONENT_CONCURRENCY,
+      async (hash) => {
+        const receipt = await client.getTransactionReceipt({ hash });
+        receipts.set(hash.toLowerCase(), receipt);
+      },
+    );
+    const hydrated = await mapWithConcurrency(
+      anchors,
+      HYDRATION_CONCURRENCY,
+      (anchor) => hydrateLaunchStampAnchor(deployment, anchor, {
+        client,
+        latestBlock,
+        stateBlock: targetBlock,
+        receipt: receipts.get(anchor.transactionHash.toLowerCase()),
+      }),
+    );
+    const tokenAddresses = new Set<string>();
+    const launchIds = new Set<string>();
+    const poolIds = new Set<string>();
+    const eventIds = new Set<string>();
+    for (const token of workingSlice.tokens) {
+      const provenance = token.launchStampProvenance;
+      if (!provenance) fail("Launch Stamp Router slice contains an unstamped token");
+      const tokenKey = token.tokenAddress.toLowerCase();
+      const launchKey = provenance.launchId.toLowerCase();
+      const poolKey = `${provenance.poolManagerAddress.toLowerCase()}:${provenance.poolId.toLowerCase()}`;
+      const eventKey = `${provenance.transactionHash.toLowerCase()}:${provenance.launchLogIndex}`;
+      if (
+        tokenAddresses.has(tokenKey) ||
+        launchIds.has(launchKey) ||
+        poolIds.has(poolKey) ||
+        eventIds.has(eventKey)
+      ) {
+        fail("Launch Stamp Router slice contains duplicate provenance");
+      }
+      tokenAddresses.add(tokenKey);
+      launchIds.add(launchKey);
+      poolIds.add(poolKey);
+      eventIds.add(eventKey);
+    }
+    const newTokens: LauncherToken[] = [];
+    for (const result of hydrated) {
+      const tokenKey = result.token.tokenAddress.toLowerCase();
+      const launchKey = result.launchStampProvenance.launchId.toLowerCase();
+      const poolKey = `${result.launchStampProvenance.poolManagerAddress.toLowerCase()}:${result.launchStampProvenance.poolId.toLowerCase()}`;
+      const eventKey = `${result.launchStampProvenance.transactionHash.toLowerCase()}:${result.launchStampProvenance.launchLogIndex}`;
+      if (
+        tokenAddresses.has(tokenKey) ||
+        launchIds.has(launchKey) ||
+        poolIds.has(poolKey) ||
+        eventIds.has(eventKey)
+      ) {
+        fail("Launch Stamp Router advancement conflicts with persisted provenance");
+      }
+      tokenAddresses.add(tokenKey);
+      launchIds.add(launchKey);
+      poolIds.add(poolKey);
+      eventIds.add(eventKey);
+      newTokens.push(result.token);
+    }
+    return {
+      slice: {
+        cursor: {
+          blockNumber: targetNumber.toString(),
+          blockHash: targetBlock.hash,
+        },
+        tokens: [...workingSlice.tokens, ...newTokens],
+      },
+      scannedFromBlock: fromBlock.toString(),
+      scannedToBlock: targetNumber.toString(),
+      discovered: anchors.length,
+      hydrated: hydrated.length,
+      boundedByDensity,
+      rebuiltAfterReorg,
+      highestSafeBlockNumber: highestSafeNumber.toString(),
+      caughtUp: targetNumber === highestSafeNumber,
+    };
+  }
+  return Object.freeze({ scanLaunchStampAnchors, parseLaunchStampReceipt, hydrateLaunchStampAnchor, createInitialLaunchStampRouterSlice, advanceLaunchStampRouterSlice });
 }
+
+export const { scanLaunchStampAnchors, parseLaunchStampReceipt, hydrateLaunchStampAnchor, createInitialLaunchStampRouterSlice, advanceLaunchStampRouterSlice } = createLaunchStampReaderV1({
+  routerAddress: LAUNCH_STAMP_ROUTER_ADDRESS,
+  routerRuntimeCodeHash: LAUNCH_STAMP_ROUTER_RUNTIME_CODE_HASH,
+  routerStartBlock: LAUNCH_STAMP_ROUTER_START_BLOCK,
+  initialCursor: LAUNCH_STAMP_ROUTER_INITIAL_CURSOR,
+});
