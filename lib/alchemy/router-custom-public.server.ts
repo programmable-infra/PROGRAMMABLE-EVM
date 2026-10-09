@@ -811,7 +811,8 @@ export async function readWebsiteRouterCustomIdentitySnapshotV1(
   const refresh = dependencies.refresh ?? readFinalizedRouterCustomIdentitySnapshotCoreV1;
   // Saved bytes are deliberately parsed as last-known-good, even when recently
   // written. Reading them first would bypass a successful current observation.
-  return refresh();
+  const snapshot = await refresh();
+  return enrichRouterCustomSnapshotWithFinalizedMetadataV1(snapshot);
 }
 
 export async function readFinalizedRouterCustomIdentitySnapshotV1(

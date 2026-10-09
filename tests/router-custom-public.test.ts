@@ -182,6 +182,8 @@ describe("finalized Router Custom public projection", () => {
     });
     await expect(readWebsiteRouterCustomIdentitySnapshotV1({ refresh })).resolves.toMatchObject({ status: "current" });
     expect(readCurrentSource).toHaveBeenCalledOnce();
+    expect(mocks.enrichRouterCustomSnapshotWithFinalizedMetadataV1)
+      .toHaveBeenCalledWith(expect.objectContaining({ identityCommitment: snapshot.identityCommitment }));
   });
 
   it("keeps saved website identities marked last-known-good when the current provider fails", async () => {
