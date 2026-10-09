@@ -38,6 +38,33 @@ describe("Codex price history", () => {
 });
 
 describe("Codex server market adapter", () => {
+  it.each([4663, 1])("reads the paired ticker in the existing batch on chain %s", async chainId => {
+    vi.stubEnv("CODEX_API_KEY", "test-private-key");
+    const quote = `0x${"cd".repeat(20)}`;
+    const fetcher = vi.fn().mockResolvedValue(Response.json({ data: {
+      filterTokens: { results: [{ ...row(), token: { address, networkId: chainId } }] },
+      filterPairs: { results: [{ liquidity: "12", pair: pool({ networkId: chainId, token0: quote,
+        token0Data: { address: quote, networkId: chainId, symbol: "PAIR" },
+        token1Data: { address, networkId: chainId, symbol: "BASE" } }) }] },
+    } }));
+    vi.stubGlobal("fetch", fetcher);
+    expect((await readCodexMarkets([{ tokenAddress: address, poolId }], chainId)).get(address)?.quoteAsset)
+      .toEqual({ address: quote, symbol: "PAIR" });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetcher.mock.calls[0][1].body).query).toContain("token0Data { address networkId symbol }");
+  });
+  it.each([
+    { address, networkId: 4663, symbol: "WRONG_TOKEN" },
+    { address: pool().token0, networkId: 1, symbol: "WRONG_CHAIN" },
+    { address: pool().token0, networkId: 4663, symbol: "spoof\u202e" },
+  ])("ignores mismatched or unsafe paired metadata: %j", async token0Data => {
+    vi.stubEnv("CODEX_API_KEY", "test-private-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ data: {
+      filterTokens: { results: [row()] }, filterPairs: { results: [{ liquidity: "12", pair: pool({ token0Data }) }] },
+    } })));
+    expect((await readCodexMarkets([{ tokenAddress: address, poolId }])).get(address)?.quoteAsset)
+      .toEqual({ address: pool().token0, symbol: null });
+  });
   it("batches verified identities and distinguishes circulating cap from FDV", async () => {
     vi.stubEnv("CODEX_API_KEY", "test-private-key");
     const fetcher = vi.fn().mockResolvedValue(Response.json({ data: { filterTokens: { results: [row()] }, filterPairs: { results: [{ liquidity: "172345", pair: pool() }] } } }));

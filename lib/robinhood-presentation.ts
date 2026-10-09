@@ -95,5 +95,9 @@ export function coinTicker(value: string | null) {
 }
 
 export function coinPairTicker(symbol: string | null | undefined, pair: string | null | undefined) {
-  return `${coinTicker(symbol ?? null)} / ${pair || "…"}`;
+  const ticker = (value: string | null | undefined) => {
+    const clean = value?.replace(/\$/g, "").trim();
+    return clean && !/^0x[\da-f]{4}/i.test(clean) ? clean : "…";
+  };
+  return `${ticker(symbol)} / ${ticker(pair)}`;
 }

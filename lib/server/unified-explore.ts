@@ -1,5 +1,5 @@
 import { isEthereumModuleLaunchCandidate } from "@/lib/module-foundation/ethereum-release";
-import { ethereumPairPresentation } from "@/lib/launch-presentation-details";
+import { ethereumPairPresentation, launchPresentationDetails } from "@/lib/launch-presentation-details";
 import "server-only";
 
 import { readRobinhoodExploreCatalog } from "./robinhood-index/read";
@@ -26,10 +26,10 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
   // Each network can enrich its catalog as soon as it arrives. A slower index
   // must not hold up the other network's independent market request.
   const [[rh, rhMarkets], [eth, ethMarkets]] = await Promise.all([
-    dependencies.robinhood().then(async catalog => [catalog,
+    dependencies.robinhood().catch(() => ({ status: "unavailable" as const, updatedAt: null, items: [], sourceEvidence: null })).then(async catalog => [catalog,
       await dependencies.robinhoodMarkets(catalog.items).catch(() => new Map<string, RobinhoodCoinMarket>()),
     ] as const),
-    dependencies.ethereum().then(async catalog => [catalog,
+    dependencies.ethereum().catch(() => ({ status: "unavailable" as const, updatedAt: null, entries: [], sourceEvidence: null })).then(async catalog => [catalog,
       await dependencies.ethereumMarkets(catalog.entries, 1).catch(() => new Map<string, RobinhoodCoinMarket>()),
     ] as const),
   ]);
@@ -68,6 +68,19 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
   }
   const selection = selectUnifiedExplorePage<(typeof rhRows)[number] | (typeof ethRows)[number] | (typeof recentRows)[number]>(
     [...rhRows, ...ethRows, ...recentRows], page, query, filters, values, size);
+  const symbols = new Map([...rhRows, ...ethRows, ...recentRows].map(row => [exploreIdentityKey(row), row.symbol]));
+  // Pair identity belongs to the launch, and survives optional price expiry.
+  // Resolve catalog tickers on the same chain before using the exact pool observation.
+  const items = selection.items.map(row => {
+    const market = markets.get(exploreIdentityKey(row));
+    const pair = launchPresentationDetails(row, row.chainId, market).pair;
+    if (!pair) return row;
+    const quoteSymbol = symbols.get(exploreIdentityKey({ chainId: row.chainId, tokenAddress: pair.address }));
+    const resolved = launchPresentationDetails({ ...row, quoteAsset: pair.address,
+      quoteSymbol: ("quoteSymbol" in row ? row.quoteSymbol : null) || quoteSymbol }, row.chainId, market).pair;
+    return resolved && !resolved.label.startsWith("0x")
+      ? { ...row, quoteAsset: resolved.address, quoteSymbol: resolved.label } : row;
+  });
   const selectedKeys = new Set(selection.items.map(exploreIdentityKey));
   const selectedRh = rhRows.filter(row => selectedKeys.has(exploreIdentityKey(row)));
   const rhPresentations = await dependencies.robinhoodPresentations(selectedRh, rhMarkets)
@@ -86,5 +99,5 @@ export async function readUnifiedLaunches(page = 1, query = "", filters: Robinho
       .map(item => item.presentation),
   ];
   return { scope: "all" as const, status, sources, sourceEvidence: { robinhood: rh.sourceEvidence, ethereum: eth.sourceEvidence },
-    updatedAt, ...selection, presentations };
+    updatedAt, ...selection, items, presentations };
 }
