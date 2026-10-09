@@ -9,7 +9,9 @@ import { Currency } from "@uniswap/v4-core/src/types/Currency.sol";
 import { PoolId, PoolIdLibrary } from "@uniswap/v4-core/src/types/PoolId.sol";
 import { PoolKey } from "@uniswap/v4-core/src/types/PoolKey.sol";
 
-import { ProgrammableLaunchStampRouter24hV1 as ProgrammableLaunchStampRouterV1 } from "../../src/robinhood-custom-launch/ProgrammableLaunchStampRouter24hV1.sol";
+import {
+    ProgrammableLaunchStampRouter24hV1 as ProgrammableLaunchStampRouterV1
+} from "../../src/robinhood-custom-launch/ProgrammableLaunchStampRouter24hV1.sol";
 import {
     IProgrammableCreate2GraphDeployerV1
 } from "../../src/robinhood-custom-launch/interfaces/IProgrammableCreate2GraphDeployerV1.sol";
