@@ -1,58 +1,89 @@
 ---
-description: Choose a launch source and build a complete, verifiable coin index
+description: Index Module Mode and Custom Launches on Ethereum and Robinhood Chain
 ---
 
 # Index launches
 
-Use the chain and token contract address to identify a coin. Its launch source determines which events, contract reads and finality checks your indexer needs. Keep the original source record alongside the normalized coin so that you can reproduce the verification.
+Use this guide to add Programmable coins to a wallet, explorer or trading terminal. Public indexing does not require a launch API key or a wallet signature.
 
-## Choose the source
+A coin is identified by **chain ID + token address**. A verified launch record proves its Programmable origin. Prices, images and trading routes are added separately.
 
-| Launch source | Integration guide |
+## Choose your integration
+
+| Launch type | Chain | Source and verification |
+| --- | --- | --- |
+| Module Mode | Ethereum Mainnet · `1` | [Foundation: Ethereum](foundation-indexing.md#ethereum-module-launches). Verify the Router stamp and module implementation. |
+| Module Mode | Robinhood Chain · `4663` | [Foundation: Robinhood](foundation-indexing.md#robinhood-module-launches). Verify the factory release and launch record. |
+| Custom Launch | Ethereum Mainnet · `1` | [Ethereum Custom indexing](ethereum-custom-indexing.md). Include every published Router generation. |
+| Custom Launch | Robinhood Chain · `4663` | [Robinhood Custom indexing](robinhood-terminal-indexer.md). Read finalized projections and retain the historical source adapters. |
+
+For older Robinhood Module Mode launches, retain the [Native and Engine adapter](module-mode-indexing.md). A new module within the same interface does not need a name-based allowlist. A new source interface needs its own adapter.
+
+## Start with discovery
+
+The website feeds are the shortest path to discovering currently listed coins:
+
+```text
+https://programmable.market/api/explore/ethereum?page=1&pageSize=50&sort=newest
+https://programmable.market/api/explore/robinhood?page=1&pageSize=50&sort=newest
+```
+
+Read every page through `page.totalPages`, deduplicate by chain and token address, and retain each record's `sourceEvidence`. These are website discovery feeds. For a complete onchain history, backfill the original sources in the selected guide, including historical releases and launches excluded from the website's display.
+
+For a verified integration:
+
+1. **Resolve the source.** Download its deployment descriptor, ABI, runtime hashes, start block and finality rules. Keep historical bindings when a new release appears.
+2. **Collect and verify.** Follow all pages or scan bounded block ranges. Check receipts, events and contract readbacks against that source at a consistent canonical block.
+3. **Store the evidence.** Keep source identity, launch ID, transaction hash, block number and hash, finality, token, hook and pool references. Commit records and their checkpoint together.
+4. **Display the coin.** Add the verified Programmable label, pair, image and links. Missing optional data must not remove the launch.
+5. **Keep updating.** Resume with overlap and deduplicate. After a reorganization, roll back to a common canonical checkpoint and replay.
+
+A `confirmed` Explore record is not yet `finalized`. HTTP 200 alone does not establish complete coverage. Preserve the last verified data during a provider failure, mark it stale and retry with backoff. Do not replace an unavailable feed with an empty successful result.
+
+## Label the launch correctly
+
+| Record | What it establishes |
 | --- | --- |
-| Custom Launch Plans on Robinhood, including atomic execution and stamping | [Custom Launch Plan indexing](robinhood-terminal-indexer.md#custom-launch-plans) |
-| Foundation on Robinhood and Ethereum | [Foundation indexing](foundation-indexing.md) |
-| Earlier Native and Engine launches on Robinhood | [Native and Engine indexing](module-mode-indexing.md) |
-| Custom V4 on Robinhood, with separate token and hook contracts | [Router V1 indexing](robinhood-terminal-indexer.md) |
-| MultiRole Custom on Robinhood, including shared token and hook contracts | [Router V2 indexing](robinhood-terminal-indexer.md#multirole-v2) |
-| Ethereum Classic and Custom | [Ethereum Router verification](verify.md) |
+| Application submitted or approved | The project has entered or passed review. It has not necessarily launched. |
+| Wallet signature or submitted transaction | The user authorized or broadcast a transaction. Check its receipt. |
+| Canonical receipt and matching source record | The launch was included onchain. Apply the source's finality rules. |
+| Verified, finalized launch evidence | The coin can be attributed to Programmable. |
+| Image, price, liquidity or supported route | Separate presentation and trading information, each with its own freshness. |
 
-Robinhood Chain is `eip155:4663`; Ethereum Mainnet is `eip155:1`. Contracts with the same address on different chains are separate identities. Each guide provides its source discovery and verification rules.
+Ethereum Module Mode can have a `custom-graph` stamp and `custom` category. Verify its module implementation before classifying the launch; do not discard it based on that category. Robinhood modules use factory, launcher or host evidence and do not require an Ethereum-style Custom stamp.
 
-## Build a complete index
+Custom Launch may use an existing token. Index the token bound by the verified launch record even when the launch transaction does not deploy a new ERC-20. Keep the token address separate from the controller, graph account, hook and pool.
 
-1. **Bind the source.** Read its deployment descriptor, ABI, runtime hashes, start block and finality policy. Keep each historical binding when the active release changes.
-2. **Collect every launch.** Scan bounded event ranges or traverse the complete feed. Preserve opaque cursors, retain any required overlap and deduplicate by the source's canonical identity.
-3. **Verify the records.** Check the source's events, getters, component bindings and finality evidence. Save the block hashes and evidence needed to repeat those checks.
-4. **Save a recoverable checkpoint.** Commit records and their checkpoint together. After a reorganization, return to the last common canonical checkpoint and replay. Incomplete coverage stays unknown.
-5. **Add display data.** Attach metadata, prices and charts with their source and observation time. A missing image, price or trading route must not remove a verified launch.
+## Show the pair, image and links
 
-Robinhood Module Mode uses its factory, launcher or host as the source and does not require a Custom Router stamp. Ethereum Module Mode uses the canonical Router's `custom-graph` stamp plus its verified module implementation. Treat module IDs and configurations as data; a new module within a supported interface does not require a name-based allowlist. A changed source interface needs its own adapter.
-
-A verified launch establishes origin. Track market data and trading support separately, so a terminal can show the coin while its quotes or execution are unavailable.
-
-## Terminal stages
-
-Foundation coins trade in their Uniswap v4 pool from launch. They have no later bonding-curve completion or pool migration. A terminal may group them by valuation using its own labels and thresholds.
-
-For example, a terminal could use a **20 ETH fully diluted valuation (FDV)** milestone:
-
-| Example display stage | Example rule |
+| Field | Rule |
 | --- | --- |
-| New Pairs | Verified launch, below 16 ETH FDV |
-| Almost Bonded | At least 16 ETH and below 20 ETH FDV |
-| Completed | At least 20 ETH FDV |
+| Pair | Resolve the launched token and its actual paired currency from the verified pool. Display `TOKEN/QUOTE`, without leading dollar signs. Do not assume every quote is ETH or USDC. |
+| Name, symbol and decimals | Read the token contracts on the correct chain. Keep addresses as identity even when symbols match. A missing symbol is unknown, not a contract address used as a ticker. |
+| Native currency | Distinguish the native currency from wrapped ETH using the actual PoolKey and chain definition. |
+| Image and social links | Use the launch's bound or published metadata. Validate supplied digests and URLs. Missing metadata may use a placeholder while the coin remains listed. |
+| Market data | Match chain, token, PoolManager and pool ID. Record the provider and observation time. Never attach a same-symbol market or a pool from another chain. |
+| Valuation | FDV is token price × total supply with correct decimals. Use “market cap” only with independently established circulating supply. Unknown or stale prices remain unknown. |
 
-These are optional display settings. If a terminal uses a “Bonded” or “Migrated” column, identify this as a valuation milestone, retain the existing pool and leave migration transaction and destination-pool fields absent. Terminals that reserve those columns for actual migrations should use a direct-pool listing.
+Use [the source-specific guides](#choose-your-integration) for metadata commitments and exact response fields. Display symbols do not replace addresses in requests or storage keys.
 
-Calculate FDV as token price multiplied by total supply, with the correct decimals. Convert an ERC-20 quote through a validated, sufficiently liquid price source, and retain the source, time and block. Use circulating market cap only when circulating supply is independently established. Missing or stale prices leave the valuation stage unknown; they do not remove the coin.
+## Pools and trading
 
-An optional progress bar can use `clamp(FDV / 20 ETH, 0, 1)`. Its value can fall after sells. If a terminal retains a reached milestone instead, record the crossing time and apply the same reorganization policy as the rest of the index. Neither setting changes the pool or its liquidity custody.
+Foundation coins use a Uniswap v4 pool from launch. They do not need a later bonding-curve completion or migration. Custom projects may use different liquidity models; read the actual contracts and pool evidence.
 
-## Service freshness
+Verify current liquidity, hook requirements and the intended router's buy and sell paths before enabling trading. A valid Programmable stamp alone does not prove sellability, an audit or locked liquidity.
 
-Check the selected source's coverage and finalized checkpoint. HTTP success alone does not establish complete data. The Developer API's normalized Robinhood feed is separate from the Custom V4 and MultiRole feeds; a failed normalized lookup does not mean those sources contain no launches. [Service status](../status.md) explains these availability states.
+Codex and other market-data providers may enrich the verified launch with price and pool data. They do not replace its original onchain provenance. GMGN and other terminals must consume the relevant source and support the pool's route themselves; a label or route on one site does not activate it on another.
 
-For current website discovery, traverse the chain-specific feeds at `/api/explore/ethereum?page=1&pageSize=50&sort=newest` and `/api/explore/robinhood?page=1&pageSize=50&sort=newest` on `programmable.market`. Follow `page.totalPages`, deduplicate by `(chainId, tokenAddress)`, and retain `sourceEvidence` with the records. These feeds expose the website's launch index; verify the original source before assigning provenance. Prices and presentation fields are optional. A `confirmed` item in the combined Explore feed is still waiting for the finalized index and must not be recorded as finalized.
+## If a launch is missing
 
-Each terminal decides which sources it indexes, displays and trades. This documentation does not activate a provider's integration.
+| Symptom | Check |
+| --- | --- |
+| New Ethereum launches are missing, older ones appear | Read both the primary Router and the manifest's Router generations extension. |
+| Some Module Mode coins are missing | Include the chain's Foundation adapter and retained Native/Engine history. Do not require a fixed module name or Custom stamp on Robinhood. |
+| An existing-token Custom Launch is missing | Resolve the token from the verified stamp or projection, not only token deployment events. |
+| A token shows on Explore but not in a normalized feed | Check that feed's source coverage. The normalized Developer feed does not cover every module source or every Robinhood source. |
+| The coin exists but has no image, ticker or price | Retry metadata and market enrichment independently of launch verification. |
+| A third-party label or swap is missing | Check that provider's source coverage and router support. Do not relaunch an already verified coin to repair indexing. |
+
+Keep the chain ID, token address, launch transaction, source address and source version with any indexing report. Include the pool ID when the issue concerns a market. See [service status](../status.md) for coverage and freshness terminology.

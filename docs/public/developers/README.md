@@ -1,6 +1,6 @@
 # Developers
 
-Use the guide for the task you want to complete.
+Use the guide for the task you want to complete on Ethereum Mainnet (`1`) or Robinhood Chain (`4663`).
 
 | Task | Guide |
 | --- | --- |
