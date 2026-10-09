@@ -17,12 +17,12 @@ import { IMemeLaunchV3 } from "./interfaces/IMemeLaunchV3.sol";
 /// @title ProgrammableLaunchStampRouterV1
 /// @notice Executes one authority-permitted launch and writes its provenance stamp atomically.
 /// @dev A stamp proves origin through this exact Router. It is not an audit, safety, or tradability claim.
-contract ProgrammableLaunchStampRouterV1 is IProgrammableLaunchStampRouterV1, EIP712, ReentrancyGuard {
+contract ProgrammableLaunchStampRouter24hV1 is IProgrammableLaunchStampRouterV1, EIP712, ReentrancyGuard {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
     uint256 private constant MAX_CUSTOM_GRAPH_TARGETS = 16;
-    uint64 private constant MAX_PERMIT_LIFETIME = 1 hours;
+    uint64 private constant MAX_PERMIT_LIFETIME = 24 hours;
     uint8 private constant CLASSIC_TOKEN_RESULT_INDEX = 0;
     uint8 private constant CLASSIC_REWARD_VAULT_RESULT_INDEX = 1;
     uint8 private constant CLASSIC_POSITION_RECIPIENT_RESULT_INDEX = 2;
