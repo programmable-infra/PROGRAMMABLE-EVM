@@ -5,6 +5,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { MAX_FLY_RELEASES_V1, MAX_FLY_RELEASE_READBACKS_V1,
+  readCompleteFlyReleasesV1, validateCompleteFlyReleasesV1,
+} from "./fly-release-pagination-v1.mjs";
+
 import {
   canonicalizeJson,
   parseStrictJson,
@@ -552,11 +556,13 @@ function exactReadinessIdentity(value, stageBundle, backendSource) {
   return structuredClone(value);
 }
 
-function validateFlyGraphqlRequest(value) {
+function validateFlyGraphqlRequest(value, expected = {
+  query: FLY_RELEASES_QUERY, variables: { appName: ROBINHOOD_FLY_APP, first: 256 },
+}) {
   assertExactKeys(value, ["query", "variables"], "Fly releases GraphQL request");
-  assertExactKeys(value.variables, ["appName", "first"], "Fly releases GraphQL variables");
-  if (value.query !== FLY_RELEASES_QUERY || value.variables.appName !== ROBINHOOD_FLY_APP
-    || value.variables.first !== 256) {
+  assertExactKeys(value.variables, Object.keys(expected.variables), "Fly releases GraphQL variables");
+  if (value.query !== expected.query
+    || canonicalizeJson(value.variables) !== canonicalizeJson(expected.variables)) {
     throw new TypeError("Fly releases GraphQL query differs from the pinned read-only query");
   }
 }
@@ -590,7 +596,7 @@ function normalizeFlyBodies(fly, backendSource, observedAt) {
     throw new TypeError("Fly release inventory cursors are invalid");
   }
   const releases = releaseConnection.nodes;
-  if (!Array.isArray(releases) || releases.length < 1 || releases.length > 256
+  if (!Array.isArray(releases) || releases.length < 1 || releases.length > MAX_FLY_RELEASES_V1
     || !Number.isSafeInteger(releaseConnection.totalCount)
     || releaseConnection.totalCount !== releases.length) {
     throw new TypeError("Fly releasesUnprocessed inventory count is invalid or incomplete");
@@ -807,20 +813,30 @@ function validateRobinhoodBackendPromotionInput({
     maximumResponseBytes: BACKEND_RESPONSE_BYTES.readiness,
   });
   if (!Array.isArray(input.flyReadbacks) || input.flyReadbacks.length < 5
-    || input.flyReadbacks.length > 19) {
+    || input.flyReadbacks.length > MAX_FLY_RELEASE_READBACKS_V1 + 18) {
     throw new TypeError("backend promotion Fly inventory has an invalid bounded size");
   }
-  const releases = normalizeReadback(input.flyReadbacks[0], {
-    kind: "releases",
-    hostname: ROBINHOOD_FLY_GRAPHQL_HOSTNAME,
-    pathPattern: /^\/graphql$/u,
-    authentication: "fly-api-token-redacted",
-    method: "POST",
-    requestBodyValidator: validateFlyGraphqlRequest,
-    captureObservedAt: input.observedAt,
-    maximumResponseBytes: BACKEND_RESPONSE_BYTES.releases,
+  let releaseReadbackCount = 0;
+  const inventory = validateCompleteFlyReleasesV1({
+    firstRequest: { query: FLY_RELEASES_QUERY, variables: { appName: ROBINHOOD_FLY_APP, first: 256 } },
+    read: (request, kind) => {
+      const readback = input.flyReadbacks[releaseReadbackCount++];
+      const normalized = normalizeReadback(readback, {
+        kind,
+        hostname: ROBINHOOD_FLY_GRAPHQL_HOSTNAME,
+        pathPattern: /^\/graphql$/u,
+        authentication: "fly-api-token-redacted",
+        method: "POST",
+        requestBodyValidator: value => validateFlyGraphqlRequest(value, request),
+        captureObservedAt: input.observedAt,
+        maximumResponseBytes: BACKEND_RESPONSE_BYTES.releases,
+      });
+      return { value: normalized.body, readback, responseByteLength: normalized.responseByteLength };
+    },
   });
-  const app = normalizeReadback(input.flyReadbacks[1], {
+  const releases = { body: inventory.value,
+    responseByteLength: inventory.observations.reduce((total, entry) => total + entry.responseByteLength, 0) };
+  const app = normalizeReadback(input.flyReadbacks[releaseReadbackCount], {
     kind: "app",
     hostname: ROBINHOOD_FLY_MACHINES_HOSTNAME,
     pathPattern: /^\/v1\/apps\/programmable-custom-launch-api$/u,
@@ -828,7 +844,7 @@ function validateRobinhoodBackendPromotionInput({
     captureObservedAt: input.observedAt,
     maximumResponseBytes: BACKEND_RESPONSE_BYTES.app,
   });
-  const machineList = normalizeReadback(input.flyReadbacks[2], {
+  const machineList = normalizeReadback(input.flyReadbacks[releaseReadbackCount + 1], {
     kind: "machine-list",
     hostname: ROBINHOOD_FLY_MACHINES_HOSTNAME,
     pathPattern: /^\/v1\/apps\/programmable-custom-launch-api\/machines$/u,
@@ -843,13 +859,13 @@ function validateRobinhoodBackendPromotionInput({
   const machineIds = listedMachines.map(({ id } = {}) => id).sort();
   if (machineIds.some((id) => typeof id !== "string" || !/^[a-z0-9]{6,64}$/u.test(id))
     || new Set(machineIds).size !== machineIds.length
-    || input.flyReadbacks.length !== 3 + machineIds.length * 2) {
+    || input.flyReadbacks.length !== releaseReadbackCount + 2 + machineIds.length * 2) {
     throw new TypeError("Fly per-machine inventory is missing, duplicated, or excessive");
   }
   const machines = new Map();
   const metadata = new Map();
   for (const [index, machineId] of machineIds.entries()) {
-    const machineOffset = 3 + index * 2;
+    const machineOffset = releaseReadbackCount + 2 + index * 2;
     machines.set(machineId, normalizeReadback(input.flyReadbacks[machineOffset], {
       kind: `machine:${machineId}`,
       hostname: ROBINHOOD_FLY_MACHINES_HOSTNAME,
@@ -895,11 +911,15 @@ function validateRobinhoodBackendPromotionInput({
     "machine-list",
     ...flyIdentity.machines.flatMap(({ slot }) => [`machine:${slot}`, `metadata:${slot}`]),
   ];
-  const flyReceipts = input.flyReadbacks.map((readback, index) => safeReadbackReceipt(
-    readback,
-    flyKinds[index],
-    flyIdentity.safeResponses[index],
-  ));
+  const baseReadbacks = [input.flyReadbacks[0], ...input.flyReadbacks.slice(releaseReadbackCount)];
+  const flyReceipts = baseReadbacks.map((readback, index) => {
+    const receipt = safeReadbackReceipt(readback, flyKinds[index], flyIdentity.safeResponses[index]);
+    return index === 0 && releaseReadbackCount > 1 ? Object.freeze({ ...receipt,
+      requestSha256: framedSha256("programmable.fly-release-page-requests.v1",
+        inventory.observations.map(({ readback }) => ({ kind: readback.kind,
+          requestSha256: readback.request.sha256, responseSha256: readback.response.bodySha256 }))),
+    }) : receipt;
+  });
   const flySafeReadbacksDigest = framedSha256(FLY_SAFE_READBACKS_DOMAIN, flyReceipts);
   const safeReceiptDigest = framedSha256(
     BACKEND_SAFE_RECEIPTS_DOMAIN,
@@ -1822,20 +1842,24 @@ async function freshVerifyRobinhoodBackendPromotionInput({
     maximumResponseBytes: BACKEND_RESPONSE_BYTES.readiness,
     responseBudget,
   });
-  const releasesReadback = await fetchRawReadback({
-    kind: "releases",
-    hostname: ROBINHOOD_FLY_GRAPHQL_HOSTNAME,
-    requestPath: "/graphql",
-    authentication: "fly-api-token-redacted",
-    token: flyAuthorization,
-    fetchImpl,
-    method: "POST",
-    requestBody: {
-      query: FLY_RELEASES_QUERY,
-      variables: { appName: ROBINHOOD_FLY_APP, first: 256 },
+  const releaseInventory = await readCompleteFlyReleasesV1({
+    firstRequest: { query: FLY_RELEASES_QUERY, variables: { appName: ROBINHOOD_FLY_APP, first: 256 } },
+    read: async (requestBody, kind) => {
+      const readback = await fetchRawReadback({
+        kind,
+        hostname: ROBINHOOD_FLY_GRAPHQL_HOSTNAME,
+        requestPath: "/graphql",
+        authentication: "fly-api-token-redacted",
+        token: flyAuthorization,
+        fetchImpl,
+        method: "POST",
+        requestBody,
+        maximumResponseBytes: BACKEND_RESPONSE_BYTES.releases,
+        responseBudget,
+      });
+      return { readback, value: parseBody(readback.response.bodyBytesBase64,
+        "fresh Fly release page", BACKEND_RESPONSE_BYTES.releases).value };
     },
-    maximumResponseBytes: BACKEND_RESPONSE_BYTES.releases,
-    responseBudget,
   });
   const appReadback = await fetchRawReadback({
     kind: "app",
@@ -1905,7 +1929,8 @@ async function freshVerifyRobinhoodBackendPromotionInput({
     observedAt: backendInputObservedAt,
     backendSource: structuredClone(capturedInput.backendSource),
     readinessReadback,
-    flyReadbacks: [releasesReadback, appReadback, listReadback, ...perMachine],
+    flyReadbacks: [...releaseInventory.observations.map(entry => entry.readback),
+      appReadback, listReadback, ...perMachine],
     backendPromotionInputDigest: null,
   });
   const fresh = validateRobinhoodBackendPromotionInput({
