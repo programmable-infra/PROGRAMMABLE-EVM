@@ -76,6 +76,7 @@ const DEMO_MODE = new URLSearchParams(window.location.search).has("demo");
 const EVENT_LOG_CHUNK_SIZE = 10_000n;
 const MAX_ROUTER_LAUNCHES = 4_096;
 const MAX_BATCH_CALLS = 64;
+const CLAIM_PACKET_CURSOR_KEY = "programmable.ethereum.claim-packet-cursor.v1";
 const ROUTER_QUORUM_RPC_GROUPS = Object.freeze([
   Object.freeze([
     "https://mainnet.gateway.tenderly.co",
@@ -236,6 +237,8 @@ function loadConfirmedBatchLock() {
       phase: parsed.phase,
       receipts,
       failureStatus: parsed.failureStatus,
+      packetCursor: typeof parsed.packetCursor === "string" && parsed.packetCursor.length <= 512
+        ? parsed.packetCursor : null,
     };
   } catch {
     return invalidConfirmedBatchLock();
@@ -1460,7 +1463,7 @@ function renderSummary() {
     elements.actionDetail.textContent = "Gemeinsamer Claim nicht unterstützt";
     elements.action.disabled = true;
   } else {
-    const nextCount = nextWalletClaimBatch(claimable).length;
+    const nextCount = Math.min(claimable.length, WALLET_CLAIM_BATCH_LIMIT);
     const multipleBatches = nextCount < claimable.length;
     elements.actionLabel.textContent = multipleBatches
       ? "Nächstes Fee-Paket claimen" : "Geprüfte Fees claimen";
@@ -2972,6 +2975,8 @@ async function reconcileConfirmedBatchLock() {
 
     try {
       await verifyCanonicalConfirmedBatchReceipts(lock.receipts);
+      if (lock.packetCursor)
+        window.localStorage.setItem(CLAIM_PACKET_CURSOR_KEY, lock.packetCursor);
       clearConfirmedBatchLock(lock.batchId);
     } catch {
       // A reorged, missing or divergent receipt remains locked until a later scan.
@@ -3343,7 +3348,7 @@ async function claimAll() {
   if (allClaims.length === 0) return;
   // Validate uniqueness across the whole inventory, including later packets.
   buildWalletSendCalls(expectedAccount, allClaims);
-  const claims = nextWalletClaimBatch(allClaims);
+  const claims = nextWalletClaimBatch(allClaims, window.localStorage.getItem(CLAIM_PACKET_CURSOR_KEY));
   requireAtomicClaimCapability(state.capability);
   state.busy = true;
   setError();
@@ -3368,6 +3373,7 @@ async function claimAll() {
         phase: "submitting",
         receipts: null,
         failureStatus: null,
+        packetCursor: claims.at(-1).id,
       };
       if (!saveConfirmedBatchLock(submissionLock, { requireEmpty: true }))
         throw new Error(

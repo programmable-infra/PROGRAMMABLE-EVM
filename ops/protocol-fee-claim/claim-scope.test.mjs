@@ -12,8 +12,19 @@ test("MetaMask packets keep all claims available without exceeding ten calls", (
   assert.equal(WALLET_CLAIM_BATCH_LIMIT, 10);
   assert.equal(buildWalletSendCalls(TREASURY, first).calls.length, 10);
   assert.equal(buildWalletSendCalls(TREASURY, second).calls.length, 4);
-  assert.deepEqual([...first, ...second], inventory);
+  assert.deepEqual([...first, ...second], [...inventory].sort((a, b) => a.id.localeCompare(b.id)));
   assert.deepEqual(nextWalletClaimBatch([]), []);
+});
+
+test("new fees in an earlier packet cannot starve the remaining claims", () => {
+  const inventory = CLAIMS.slice(0, 14);
+  const first = nextWalletClaimBatch(inventory);
+  const remaining = inventory.filter(claim => !first.includes(claim))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const next = nextWalletClaimBatch(inventory, first.at(-1).id);
+  assert.deepEqual(next.slice(0, remaining.length), remaining);
+  assert.equal(next.length, 10);
+  assert.equal(new Set(next.map(claim => claim.id)).size, 10);
 });
 
 test("unsupported Router sources do not contaminate independent verified claims", () => {

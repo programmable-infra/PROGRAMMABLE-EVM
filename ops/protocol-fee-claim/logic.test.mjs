@@ -675,7 +675,7 @@ test("expands exact Router Vault legs and counts the actual wallet calls", () =>
   assert.match(preflight, /claims\.length > WALLET_CLAIM_BATCH_LIMIT/);
   assert.match(preflight, /buildWalletSendCalls\(state\.account, claims\)/);
   assert.match(section("async function claimAll", "async function resumeStoredBatch"),
-    /buildWalletSendCalls\(expectedAccount, allClaims\);[\s\S]*const claims = nextWalletClaimBatch\(allClaims\)/);
+    /buildWalletSendCalls\(expectedAccount, allClaims\);[\s\S]*const claims = nextWalletClaimBatch\(allClaims, window\.localStorage\.getItem\(CLAIM_PACKET_CURSOR_KEY\)\)/);
 
   const customRow = section(
     "function buildRouterCustomRow",
