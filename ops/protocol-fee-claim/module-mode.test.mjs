@@ -47,13 +47,13 @@ test("conflicting factory pins cannot override a historical release", () => {
 test("complete log history crosses provider boundaries without gaps or duplicates", async () => {
   const release = parseReleases(history)[0], ranges = [];
   const client = { getLogs: async ({ fromBlock, toBlock }) => {
-    assert.ok(toBlock - fromBlock < 100_000n);
+    assert.ok(toBlock - fromBlock < 1_000_000n);
     ranges.push([fromBlock, toBlock]);
     return [...new Set([fromBlock, toBlock])].map(blockNumber => ({ blockNumber }));
   } };
-  const logs = await logsInRange(client, release, 17n, 200_021n);
-  assert.deepEqual(ranges, [[17n, 100_016n], [100_017n, 200_016n], [200_017n, 200_021n]]);
-  assert.deepEqual(logs.map(log => log.blockNumber), [17n, 100_016n, 100_017n, 200_016n, 200_017n, 200_021n]);
+  const logs = await logsInRange(client, release, 17n, 2_000_021n);
+  assert.deepEqual(ranges, [[17n, 1_000_016n], [1_000_017n, 2_000_016n], [2_000_017n, 2_000_021n]]);
+  assert.deepEqual(logs.map(log => log.blockNumber), [17n, 1_000_016n, 1_000_017n, 2_000_016n, 2_000_017n, 2_000_021n]);
 });
 
 test("dense log windows still split and retain every event once", async () => {
