@@ -11,8 +11,8 @@ import { ETHEREUM_STAMPED_SWAP_PROTOCOL as protocol, ETHEREUM_PERMIT2_APPROVAL_G
 import type { PreparedTradeTransaction } from "@/lib/prepared-transaction";
 import { EthereumRpcBudget, EthereumRpcBudgetBusy, EthereumRpcProviderRateLimit, ethereumRpcRateLimited } from "./ethereum-rpc-budget";
 import { readEthereumFeeClassificationV1 } from "@/lib/server/custom-launch/ethereum-routing-fee-policy-v1";
-import { ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, ETHEREUM_ROUTING_FEE_POLICY_V1 } from "@/lib/custom-launch/ethereum-routing-fee-policy-v1";
-import { ethereumNative30Market, ethereumRouteRequiresFee, type EthereumSwapFeeV1 } from "@/lib/swap/ethereum-stamped";
+import { ETHEREUM_ROUTING_FEE_POLICY_V1 } from "@/lib/custom-launch/ethereum-routing-fee-policy-v1";
+import { ethereumNative30Market, ethereumRouteRequiresFee, ethereumRouteFeePolicy, type EthereumSwapFeeV1 } from "@/lib/swap/ethereum-stamped";
 import { ethereumNative30RequiredAddressesV1, proveEthereumNative30RuntimeV1, type EthereumNative30RuntimeProofV1 } from "@/lib/custom-launch/ethereum-native30-runtime-v1";
 import { proveEthereumNative30TradeAccrualV1 } from "@/lib/server/custom-launch/ethereum-native30-trade-v1";
 
@@ -179,13 +179,15 @@ async function prepare(request: ReturnType<typeof parseEthereumStampedSwapReques
   } else if (BigInt(nativeBalance) <= BigInt(request.amountIn)) throw new EthereumStampedSwapError("Keep some ETH in your wallet for gas.", "ETHEREUM_NATIVE_BALANCE", 400);
 
   const requiresFee = ethereumRouteRequiresFee(route);
-  const recipient = getAddress(ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient);
+  const feePolicy = requiresFee ? ethereumRouteFeePolicy(route) : null;
+  if (native30Proof && feePolicy && !same(native30Proof.recipient, feePolicy.policy.native30Waiver.recipient)) return unavailable("ETHEREUM_POOL_FEE_RECIPIENT_MISMATCH");
+  const recipient = getAddress(feePolicy?.policy.defaultCollection.recipient ?? ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient);
   const recipientBefore = requiresFee && !native30Proof
     ? same(request.owner, recipient) ? nativeBalance : await rpc("eth_getBalance", [recipient, reference], value => quantityV1(value).toString()) : "0";
   const routerNativeBefore = requiresFee
     ? await rpc("eth_getBalance", [getAddress(protocol.router.address), reference], value => quantityV1(value).toString()) : "0";
   let fee: EthereumSwapFeeV1 | undefined = requiresFee ? {
-    policyHash: ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, mode: native30Proof ? "pool_enforced_native30" : "programmable_routed",
+    policyHash: feePolicy!.policyHash, mode: native30Proof ? "pool_enforced_native30" : "programmable_routed",
     rateBps: 30, routedRateBps: native30Proof ? 0 : 30, recipient,
     grossNativeAmount: "0", platformFeeAmount: "0", netNativeAmount: "0", native30Proof: native30Proof ?? null, accrual: null,
   } : undefined;

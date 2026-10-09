@@ -36,6 +36,28 @@ export const ETHEREUM_ROUTING_FEE_POLICY_V1 = {
   "externalTradeFeeGuaranteed": false,
   "historicalSignedFeeObligations": "preserved"
 } as const;
+/** Treasury migration is an additional signed policy; historical V1 bindings stay exact. */
+export const ETHEREUM_ROUTING_FEE_POLICY_V2 = {
+  ...ETHEREUM_ROUTING_FEE_POLICY_V1,
+  policyVersion: "programmable.ethereum-routed-native-fee.v2",
+  defaultCollection: {
+    ...ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection,
+    recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+  },
+  native30Waiver: {
+    ...ETHEREUM_ROUTING_FEE_POLICY_V1.native30Waiver,
+    recipient: "0xD88539d3c4C460136a733A3Fd60cf6BF269079da",
+    hook: "EthereumNative30HookV3",
+    vault: "EthereumNativeFeeVaultV3",
+  },
+} as const;
+export type EthereumRoutingFeePolicy = typeof ETHEREUM_ROUTING_FEE_POLICY_V1 | typeof ETHEREUM_ROUTING_FEE_POLICY_V2;
+export const ETHEREUM_ROUTING_FEE_POLICY_HASH_V2 = canonicalBrowserSha256V2(ETHEREUM_ROUTING_FEE_POLICY_V2.schemaVersion, ETHEREUM_ROUTING_FEE_POLICY_V2);
+export function isEthereumRoutingFeePolicy(policy: unknown, policyHash: unknown): policy is EthereumRoutingFeePolicy {
+  return [ETHEREUM_ROUTING_FEE_POLICY_V1, ETHEREUM_ROUTING_FEE_POLICY_V2].some(expected =>
+    policyHash === canonicalBrowserSha256V2(expected.schemaVersion, expected)
+    && canonicalBrowserJsonV2(policy) === canonicalBrowserJsonV2(expected));
+}
 export const ETHEREUM_ROUTING_FEE_POLICY_HASH_V1 = canonicalBrowserSha256V2(ETHEREUM_ROUTING_FEE_POLICY_V1.schemaVersion, ETHEREUM_ROUTING_FEE_POLICY_V1);
 export const ETHEREUM_ROUTING_FEE_BOUNDARY_V1 = { chainId: "1", blockNumber: "26142122", blockHash: "0x823e99cec0bb5b6011afc44891a1fd897b7efcbd83658cb9bc176dc35f5f86a3" } as const;
 
@@ -44,7 +66,7 @@ export type EthereumRoutingFeePolicyBindingV1 = Readonly<{
   launchProfileVersion: "3.6.0";
   launchProfileHash: `sha256:${string}`;
   policyHash: `sha256:${string}`;
-  policy: typeof ETHEREUM_ROUTING_FEE_POLICY_V1;
+  policy: EthereumRoutingFeePolicy;
   enforcementBoundary: typeof ETHEREUM_ROUTING_FEE_BOUNDARY_V1;
   stampBinding: Readonly<{ launchId: `0x${string}`; stampHash: `0x${string}`;
     permitDigest: `0x${string}`; routePayloadHash: `0x${string}` }>;
@@ -68,8 +90,7 @@ export function parseEthereumRoutingFeePolicyV1(value: unknown): EthereumRouting
   if (Object.keys(binding).sort().join() !== ["schemaVersion", "launchProfileVersion", "launchProfileHash", "policyHash", "policy", "enforcementBoundary", "stampBinding", "bindingHash"].sort().join()
     || binding.schemaVersion !== "programmable.ethereum-launch-routing-fee-policy-binding.v1"
     || binding.launchProfileVersion !== "3.6.0" || !hash(binding.launchProfileHash)
-    || binding.policyHash !== ETHEREUM_ROUTING_FEE_POLICY_HASH_V1
-    || canonicalBrowserJsonV2(binding.policy) !== canonicalBrowserJsonV2(ETHEREUM_ROUTING_FEE_POLICY_V1)
+    || !isEthereumRoutingFeePolicy(binding.policy, binding.policyHash)
     || canonicalBrowserJsonV2(binding.enforcementBoundary) !== canonicalBrowserJsonV2(ETHEREUM_ROUTING_FEE_BOUNDARY_V1)
     || !binding.stampBinding || Object.keys(binding.stampBinding).sort().join() !== "launchId,permitDigest,routePayloadHash,stampHash"
     || !Object.values(binding.stampBinding).every(hex)) return invalid();

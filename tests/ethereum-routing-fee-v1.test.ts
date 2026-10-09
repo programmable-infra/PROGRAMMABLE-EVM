@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { decodeAbiParameters, decodeFunctionData, getContractAddress, parseAbiParameters, toHex, type Address, type Hex } from "viem";
 import recordingBytes from "./fixtures/ethereum-stamped-swap-rpc.json";
 import { canonicalBrowserSha256V2 } from "@/lib/custom-launch/browser-authority-v2";
-import { ETHEREUM_ROUTING_FEE_BOUNDARY_V1, ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, ETHEREUM_ROUTING_FEE_POLICY_V1,
+import { ETHEREUM_ROUTING_FEE_BOUNDARY_V1, ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, ETHEREUM_ROUTING_FEE_POLICY_V1, ETHEREUM_ROUTING_FEE_POLICY_V2, type EthereumRoutingFeePolicy,
   parseEthereumRoutingFeePolicyV1, type EthereumFeeClassificationV1 } from "@/lib/custom-launch/ethereum-routing-fee-policy-v1";
+import { ETHEREUM_NATIVE30_RECIPES_V2 } from "@/lib/custom-launch/ethereum-native30-recipes-v2";
 import { ETHEREUM_NATIVE30_RECIPES_V1 } from "@/lib/custom-launch/ethereum-native30-recipes-v1";
 import { materializeEthereumNative30RuntimeWordsV1, proveEthereumNative30RuntimeV1, rebuildEthereumNative30RuntimeProofV1,
   type EthereumNative30MarketV1 } from "@/lib/custom-launch/ethereum-native30-runtime-v1";
@@ -18,7 +19,7 @@ vi.mock("server-only", () => ({}));
 const recording = JSON.parse(brotliDecompressSync(Buffer.from(recordingBytes.brotliBase64, "base64")).toString());
 const oldEntry = recording.buy.snapshot.entries.find((entry: CanonicalTokenExploreEntry) => entry.tokenAddress.toLowerCase() === recording.buy.request.token.toLowerCase()) as CanonicalTokenExploreEntry;
 const zero = "0x0000000000000000000000000000000000000000" as Address;
-function fixture() {
+function fixture(selected: EthereumRoutingFeePolicy = ETHEREUM_ROUTING_FEE_POLICY_V1) {
   const entry = structuredClone(oldEntry);
   const stamp = entry.launchStampProvenance!;
   // Synthetic coordinates test only classification and encoding, never finality.
@@ -26,7 +27,7 @@ function fixture() {
     finalizedAtBlockNumber: String(BigInt(ETHEREUM_ROUTING_FEE_BOUNDARY_V1.blockNumber) + 100n) };
   const body = { schemaVersion: "programmable.ethereum-launch-routing-fee-policy-binding.v1" as const,
     launchProfileVersion: "3.6.0" as const, launchProfileHash: `sha256:${"11".repeat(32)}` as const,
-    policyHash: ETHEREUM_ROUTING_FEE_POLICY_HASH_V1, policy: ETHEREUM_ROUTING_FEE_POLICY_V1,
+    policyHash: canonicalBrowserSha256V2(selected.schemaVersion, selected), policy: selected,
     enforcementBoundary: ETHEREUM_ROUTING_FEE_BOUNDARY_V1,
     stampBinding: { launchId: stamp.launchId, stampHash: stamp.stampHash, permitDigest: stamp.permitDigest, routePayloadHash: stamp.routePayloadHash } };
   const policy = { ...body, bindingHash: canonicalBrowserSha256V2(body.schemaVersion, body) };
@@ -52,6 +53,23 @@ function commands(tx: ReturnType<typeof ethereumStampedSwapTransaction>) {
 }
 
 describe("Ethereum 3.6 routing fee", () => {
+  it("binds the new treasury independently while preserving exact legacy calldata", () => {
+    const old = fixture(), current = fixture(ETHEREUM_ROUTING_FEE_POLICY_V2);
+    expect(parseEthereumRoutingFeePolicyV1(current.policy)).toEqual(current.policy);
+    expect(current.policy.policyHash).toBe("sha256:e2025776ad3b12e6277575259cccf11444810365975209083fea534d8e70b4b5");
+    const oldBuy = commands(ethereumStampedSwapTransaction(old.route, old.request, 10000n));
+    const newBuy = commands(ethereumStampedSwapTransaction(current.route, current.request, 10000n));
+    expect(decodeAbiParameters(parseAbiParameters("address,address,uint256"), oldBuy[1][0]!)[1]).toBe(ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient);
+    expect(decodeAbiParameters(parseAbiParameters("address,address,uint256"), newBuy[1][0]!)[1]).toBe(ETHEREUM_ROUTING_FEE_POLICY_V2.defaultCollection.recipient);
+    const sell = commands(ethereumStampedSwapTransaction(current.route, { ...current.request, side: "sell" }, 9970n));
+    const [, actions] = decodeAbiParameters(parseAbiParameters("bytes,bytes[]"), sell[1][0]!);
+    expect(decodeAbiParameters(parseAbiParameters("address,address,uint256"), actions[2]!)).toEqual([
+      zero, ETHEREUM_ROUTING_FEE_POLICY_V2.defaultCollection.recipient, 30n,
+    ]);
+    const changed = structuredClone(old.policy); changed.policy = ETHEREUM_ROUTING_FEE_POLICY_V2;
+    expect(() => parseEthereumRoutingFeePolicyV1(changed)).toThrow();
+  });
+
   it("pins the backend policy hash and rejects even a rehashed recipient substitution", () => {
     const f = fixture();
     expect(ETHEREUM_ROUTING_FEE_POLICY_HASH_V1).toBe("sha256:5956cdeee628ba84dfa5214efd532011e59c202e4e1c1830b1eca279d58d79d3");
@@ -146,8 +164,7 @@ describe("Ethereum 3.6 routing fee", () => {
 });
 
 describe("Ethereum Native30 exact runtime waiver", () => {
-  function proofFixture() {
-    const recipe = ETHEREUM_NATIVE30_RECIPES_V1.native30_fee_kernel_v2;
+  function proofFixture(recipe = ETHEREUM_NATIVE30_RECIPES_V1.native30_fee_kernel_v2 as { hook: typeof ETHEREUM_NATIVE30_RECIPES_V1.native30_fee_kernel_v2.hook | typeof ETHEREUM_NATIVE30_RECIPES_V2.native30_fee_kernel_v3.hook; vault: typeof ETHEREUM_NATIVE30_RECIPES_V1.native30_fee_kernel_v2.vault | typeof ETHEREUM_NATIVE30_RECIPES_V2.native30_fee_kernel_v3.vault }) {
     const hooks = "0x12340000000000000000000000000000000020cc" as Address;
     const vault = getContractAddress({ from: hooks, nonce: 1n });
     const market: EthereumNative30MarketV1 = { chainId: "1", poolManager: "0x000000000004444c5dc75cB358380D2e3dE08A90",
@@ -160,6 +177,16 @@ describe("Ethereum Native30 exact runtime waiver", () => {
     const vaultCode = materializeEthereumNative30RuntimeWordsV1(recipe.vault, { poolManager: word(market.poolManager), kernel: word(hooks), creatorRecipient: word("0x1111000000000000000000000000000000000000") });
     return { market, codes: { [hooks.toLowerCase()]: hook, [vault.toLowerCase()]: vaultCode } };
   }
+  it("recognizes the separately compiled V3 treasury and rejects mixed custody versions", () => {
+    const current = proofFixture(ETHEREUM_NATIVE30_RECIPES_V2.native30_fee_kernel_v3);
+    const old = proofFixture();
+    const proof = proveEthereumNative30RuntimeV1(current.market, current.codes)!;
+    expect(proof.recipeId).toBe("native30_fee_kernel_v3");
+    expect(proof.recipient).toBe(ETHEREUM_ROUTING_FEE_POLICY_V2.defaultCollection.recipient);
+    expect(rebuildEthereumNative30RuntimeProofV1(JSON.parse(JSON.stringify(proof)), current.market)).toEqual(proof);
+    const vault = getContractAddress({ from: current.market.hooks, nonce: 1n }).toLowerCase();
+    expect(proveEthereumNative30RuntimeV1(current.market, { ...current.codes, [vault]: old.codes[vault]! })).toBeNull();
+  });
   it("recognizes exact Ethereum source and preserves the immutable recipient", () => {
     const f = proofFixture(), proof = proveEthereumNative30RuntimeV1(f.market, f.codes)!;
     expect(proof).not.toBeNull(); expect(proof.recipient).toBe(ETHEREUM_ROUTING_FEE_POLICY_V1.defaultCollection.recipient);

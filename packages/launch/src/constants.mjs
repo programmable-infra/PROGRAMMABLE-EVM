@@ -1,4 +1,4 @@
-export const PACKAGE_VERSION = "4.1.4";
+export const PACKAGE_VERSION = "4.1.5";
 export const PACK_CONFIG_SCHEMA_V1 = "programmable.launch-pack-config.v1";
 export const PACK_CONFIG_SCHEMA_V2 = "programmable.launch-pack-config.v2";
 export const PACK_CONFIG_SCHEMA_V3 = "programmable.launch-pack-config.v3";
