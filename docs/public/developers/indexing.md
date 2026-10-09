@@ -11,7 +11,7 @@ Use the chain and token contract address to identify a coin. Its launch source d
 | Launch source | Integration guide |
 | --- | --- |
 | Custom Launch Plans on Robinhood, including atomic execution and stamping | [Custom Launch Plan indexing](robinhood-terminal-indexer.md#custom-launch-plans) |
-| Foundation on Robinhood | [Foundation indexing](foundation-indexing.md) |
+| Foundation on Robinhood and Ethereum | [Foundation indexing](foundation-indexing.md) |
 | Earlier Native and Engine launches on Robinhood | [Native and Engine indexing](module-mode-indexing.md) |
 | Custom V4 on Robinhood, with separate token and hook contracts | [Router V1 indexing](robinhood-terminal-indexer.md) |
 | MultiRole Custom on Robinhood, including shared token and hook contracts | [Router V2 indexing](robinhood-terminal-indexer.md#multirole-v2) |
@@ -27,7 +27,7 @@ Robinhood Chain is `eip155:4663`; Ethereum Mainnet is `eip155:1`. Contracts with
 4. **Save a recoverable checkpoint.** Commit records and their checkpoint together. After a reorganization, return to the last common canonical checkpoint and replay. Incomplete coverage stays unknown.
 5. **Add display data.** Attach metadata, prices and charts with their source and observation time. A missing image, price or trading route must not remove a verified launch.
 
-Module Mode uses its factory, launcher or host as the source. It does not require a Custom Router stamp. Treat module IDs and configurations as data; a new module within a supported interface does not require a name-based allowlist. A changed source interface needs its own adapter.
+Robinhood Module Mode uses its factory, launcher or host as the source and does not require a Custom Router stamp. Ethereum Module Mode uses the canonical Router's `custom-graph` stamp plus its verified module implementation. Treat module IDs and configurations as data; a new module within a supported interface does not require a name-based allowlist. A changed source interface needs its own adapter.
 
 A verified launch establishes origin. Track market data and trading support separately, so a terminal can show the coin while its quotes or execution are unavailable.
 
@@ -52,5 +52,7 @@ An optional progress bar can use `clamp(FDV / 20 ETH, 0, 1)`. Its value can fall
 ## Service freshness
 
 Check the selected source's coverage and finalized checkpoint. HTTP success alone does not establish complete data. The Developer API's normalized Robinhood feed is separate from the Custom V4 and MultiRole feeds; a failed normalized lookup does not mean those sources contain no launches. [Service status](../status.md) explains these availability states.
+
+For current website discovery, traverse the chain-specific feeds at `/api/explore/ethereum?page=1&pageSize=50&sort=newest` and `/api/explore/robinhood?page=1&pageSize=50&sort=newest` on `programmable.market`. Follow `page.totalPages`, deduplicate by `(chainId, tokenAddress)`, and retain `sourceEvidence` with the records. These feeds expose the website's launch index; verify the original source before assigning provenance. Prices and presentation fields are optional. A `confirmed` item in the combined Explore feed is still waiting for the finalized index and must not be recorded as finalized.
 
 Each terminal decides which sources it indexes, displays and trades. This documentation does not activate a provider's integration.
