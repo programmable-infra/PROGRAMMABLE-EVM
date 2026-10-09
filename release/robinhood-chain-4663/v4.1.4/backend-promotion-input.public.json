@@ -1,13 +1,13 @@
 {
   "schemaVersion": "programmable.robinhood-custom-launch.backend-promotion-public-input.v2",
-  "captureId": "67f3db2a1ad9159bc67262d5c7f71ab82ba68f6b440e9e0fa80d94646f76e499",
-  "observedAt": "2026-10-09T07:23:48Z",
+  "captureId": "49f842d19ee9b180db8c657447390f2869a135654e8b88e1dcae972cc1c54eb9",
+  "observedAt": "2026-10-09T08:32:23Z",
   "backendSource": {
     "repository": "programmablehq/programmable-open-hook-v2-internal",
     "sourceCommit": "4e8ef3006e63fe2734929c358a670a09d59b8680",
     "sourceTree": "d54d8ed8581ac5129c793082725afd8d390ded2b"
   },
-  "backendPromotionInputDigest": "sha256:67f3db2a1ad9159bc67262d5c7f71ab82ba68f6b440e9e0fa80d94646f76e499",
+  "backendPromotionInputDigest": "sha256:49f842d19ee9b180db8c657447390f2869a135654e8b88e1dcae972cc1c54eb9",
   "readbackReceipts": {
     "readiness": {
       "kind": "readiness",
@@ -182,8 +182,8 @@
       }
     },
     "releaseIdentityDigest": "sha256:e6f959b05ae232551bda86d3a7725e0918f0c7873ea22cd36f0b6ad432a44911",
-    "observedAt": "2026-10-09T07:23:48Z",
-    "authorizationDigest": "sha256:a2a504d6bed30fc22efd37dc99b15bf8662550ee6ee88c03e964017657d17953"
+    "observedAt": "2026-10-09T08:32:23Z",
+    "authorizationDigest": "sha256:aee135a89c24a7a3a7c13f4a477bd6933fcb3096c36e8206c903b4f17f6caed5"
   },
   "flyControlPlane": {
     "schemaVersion": "programmable.custom-launch-api-fly-control-plane-receipt.v2",
@@ -209,8 +209,8 @@
     ],
     "safeReadbacksDigest": "sha256:e9b8153ff380d4fc9b94fb9f7c241047b5a0119e1b8eda42ca9c83cf81363b79",
     "releaseIdentityDigest": "sha256:ff61e82b51269c8158cb4b2597c127d2bb8de82aaaf8eb25db847c55407c79c0",
-    "observedAt": "2026-10-09T07:23:48Z",
-    "authorizationDigest": "sha256:8c65da6732342289bf9267eacfc7c9d06deb6bb036413abe831c0bf0d7a1d37d"
+    "observedAt": "2026-10-09T08:32:23Z",
+    "authorizationDigest": "sha256:b6a40dbcb5ca1c7690b25522b4ebf00c17cef4cad585bddb974cd62d32e8d74a"
   },
-  "publicInputDigest": "sha256:46b63cdf9138d9fbab2cbcbf852216d0782279a8bade48f9ae3bd7eca1b068f9"
+  "publicInputDigest": "sha256:b0a8ffbc802791040cf54c606d480726a38c3614d7fcde79200483b3b46e0ee4"
 }
