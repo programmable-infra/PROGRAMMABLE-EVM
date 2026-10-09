@@ -18,6 +18,7 @@ import { foundationCreatorFeesEqual } from "@/lib/module-foundation/creator-fees
 import { foundationChainProfile } from "@/lib/module-foundation/chains";
 import { FOUNDATION_DEFAULT_IMAGE, isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
 import { FoundationLaunchPreparation } from "@/lib/module-foundation/launch-preparation";
+import { FoundationLaunchBalanceError, foundationLaunchBalanceError } from "@/lib/module-foundation/launch-balance";
 import { normalizeFoundationSocialInput, normalizeFoundationSocialInputs } from "@/lib/module-foundation/social-input";
 import { ModuleFoundationTransactionResult } from "./module-foundation-review";
 import { ModuleFoundationPairDialog } from "./module-foundation-pair-dialog";
@@ -45,6 +46,8 @@ export interface ModuleFoundationBuilderProps {
   contextKey: string;
   catalog: readonly FoundationModuleDescriptor[];
   quoteAssets: readonly FoundationQuoteAsset[];
+  nativeBalance?: bigint;
+  onCheckFunding?: (initialBuy: string) => Promise<void>;
   onResolveQuote?: (address: Address) => Promise<FoundationQuoteAsset>;
   onResolveSuggestedInitialBuy?: () => Promise<string>;
   onUploadImage: (input: { image: { kind: "local"; sha256: Hex; mimeType: "image/webp"; bytes: number }; blob: Blob }) => Promise<FoundationImage>;
@@ -91,7 +94,7 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
     initialBuy: initial?.initialBuy ?? "", ...(initial?.quoteValuation !== undefined ? { quoteValuation: initial.quoteValuation } : {}), additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
-export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, recoveryAction, networkControl, availability, contextKey, catalog, quoteAssets, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, persistDraft = false, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
+export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, recoveryAction, networkControl, availability, contextKey, catalog, quoteAssets, nativeBalance, onCheckFunding, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, persistDraft = false, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
   const [restored] = useState(() => persistDraft && !initialDraft ? readFoundationLaunchDraft(availability.chainId) : null);
   const [draft, setDraft] = useState<EditableDraft>(() => restored?.draft ?? initialForm(initialDraft, quoteAssets, availability.chainId));
   const [buyEdited, setBuyEdited] = useState(restored?.buyEdited ?? (initialDraft?.initialBuy !== undefined));
@@ -107,7 +110,8 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
   const [errors, setErrors] = useState<Errors>({});
   const [operationError, setError] = useState("");
   const [walletError, setWalletError] = useState<{ context: string; message: string } | null>(null);
-  const error = walletAction && walletError?.context === contextKey ? walletError.message : operationError;
+  const fundingError = !walletAction && phase === "editing" ? foundationLaunchBalanceError(nativeBalance, initialBuy, availability.chainName) : undefined;
+  const error = walletAction && walletError?.context === contextKey ? walletError.message : fundingError || operationError;
   const [announcement, setAnnouncement] = useState("");
   const [result, setResult] = useState<FoundationTransactionResult | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -289,7 +293,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     return promise;
   }
 
-  const canWarm = Boolean(onWarmLaunch && !walletAction && !unavailable && !submissionBlocked && !imagePreparing && phase !== "result");
+  const canWarm = Boolean(onWarmLaunch && !walletAction && !unavailable && !submissionBlocked && !fundingError && !imagePreparing && phase !== "result");
   // Saving a selected image does not need to hold up the eventual launch click.
   useEffect(() => {
     if (!canWarm || !localImage || draft.image) return;
@@ -359,6 +363,9 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     lock.current = true;
     try {
       setPhase("preparing");
+      setError("");
+      await onCheckFunding?.(initialBuy);
+      assertCurrent();
       let selectedQuote = quote;
       if (!selectedQuote && /^0x[0-9a-fA-F]{40}$/.test(quoteAddress)) {
         selectedQuote = await resolveQuote();
@@ -367,6 +374,10 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
       let launchInitialBuy = initialBuy;
       if (!buyEdited && !launchInitialBuy && onResolveSuggestedInitialBuy) {
         launchInitialBuy = await onResolveSuggestedInitialBuy();
+        assertCurrent();
+      }
+      if (launchInitialBuy !== initialBuy) {
+        await onCheckFunding?.(launchInitialBuy);
         assertCurrent();
       }
       const checked = validate(selectedQuote, launchInitialBuy);
@@ -412,7 +423,8 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     } catch (caught) {
       launchPreparation.current.invalidate();
       if (active.current) {
-        setError(cleanError(caught, errorStage)); setPhase("editing");
+        // Funding messages follow the live balance, so a deposit clears them without a reload.
+        setError(caught instanceof FoundationLaunchBalanceError ? "" : cleanError(caught, errorStage)); setPhase("editing");
         const failure = caught as { code?: number; walletRequestAttempted?: boolean; walletRequestRejected?: boolean } | null;
         if (errorStage === "wallet" && (failure?.code === 4001 || failure?.walletRequestAttempted === false || failure?.walletRequestRejected === true)) setWarmRetry(value => value + 1);
       }
