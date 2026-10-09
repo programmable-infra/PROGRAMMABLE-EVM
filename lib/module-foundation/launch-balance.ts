@@ -14,6 +14,13 @@ export function foundationLaunchBalanceError(balance: bigint | undefined, initia
 export class FoundationLaunchBalance {
   private snapshot?: { value: bigint; time: number };
   private pending?: Promise<bigint | undefined>;
+  private listeners = new Set<() => void>();
+
+  getSnapshot = (): bigint | undefined => this.snapshot?.value;
+  subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  };
 
   constructor(private readonly readBalance: () => Promise<bigint>) {}
 
@@ -29,6 +36,7 @@ export class FoundationLaunchBalance {
       }, () => { clearTimeout(timer); resolve(undefined); });
     }).then(value => {
       this.snapshot = value === undefined ? undefined : { value, time: Date.now() };
+      this.listeners.forEach(listener => listener());
       return value;
     }).finally(() => { if (this.pending === request) this.pending = undefined; });
     this.pending = request;

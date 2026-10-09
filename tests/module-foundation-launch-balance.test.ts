@@ -17,10 +17,15 @@ describe("early launch funding feedback", () => {
   it("coalesces display and launch reads, and refreshes a funded wallet after a deposit", async () => {
     const read = vi.fn().mockResolvedValueOnce(0n).mockResolvedValueOnce(10n);
     const balance = new FoundationLaunchBalance(read);
+    const changed = vi.fn();
+    const unsubscribe = balance.subscribe(changed);
     expect(await Promise.all([balance.read(), balance.read()])).toEqual([0n, 0n]);
     expect(await balance.read()).toBe(0n);
     expect(read).toHaveBeenCalledTimes(1);
     expect(await balance.read(true)).toBe(10n);
+    expect(balance.getSnapshot()).toBe(10n);
+    expect(changed).toHaveBeenCalledTimes(2);
+    unsubscribe();
     expect(read).toHaveBeenCalledTimes(2);
   });
 
