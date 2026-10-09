@@ -3339,8 +3339,11 @@ async function claimAll() {
   await requireActiveRewardWallet(expectedAccount);
   const safetyError = claimSafetyError();
   if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
-  const claims = nextWalletClaimBatch(claimableClaims());
-  if (claims.length === 0) return;
+  const allClaims = claimableClaims();
+  if (allClaims.length === 0) return;
+  // Validate uniqueness across the whole inventory, including later packets.
+  buildWalletSendCalls(expectedAccount, allClaims);
+  const claims = nextWalletClaimBatch(allClaims);
   requireAtomicClaimCapability(state.capability);
   state.busy = true;
   setError();
