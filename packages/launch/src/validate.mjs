@@ -505,6 +505,7 @@ function validateV3LaunchRequest(request) {
         request.fundingIntentHash,
         {
           launchWallet: common.launchWallet,
+          router: launchProfile.router,
           predictedInitializer: launchProfileSelection.predictedInitializer,
           routeNamespace: launchProfileSelection.routeNamespace,
           routeNonce: launchProfileSelection.routeNonce,

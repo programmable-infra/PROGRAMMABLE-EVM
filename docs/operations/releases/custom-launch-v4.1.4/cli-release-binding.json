@@ -104,7 +104,7 @@
     },
     {
       "path": "packages/launch/src/validate.mjs",
-      "sha256": "sha256:5fc4d958ebbc0096f06beda3415d21ab52cedbd414a2330b815424fe7c96e955"
+      "sha256": "sha256:431a45fb19136153ec10b5bf85603ffda26fdc2871d73e095cc83184d8e787e9"
     },
     {
       "path": "packages/launch/src/profile-direct-native-v1.mjs",

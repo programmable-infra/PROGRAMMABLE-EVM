@@ -42,7 +42,7 @@ describe("profile-selected Robinhood well-known discovery", () => {
     // Robinhood 4.0.0 fixture remains historical; the complete document includes
     // the additive Ethereum 3.6 metadata and the immutable CLI release pointer.
     expect(createHash("sha256").update(JSON.stringify(original)).digest("hex"))
-      .toBe("3cffa5bc7910ea3d747a0dc946f6707e000365849cf3b8de9324c6ed2a69d881");
+      .toBe("bd0fd020a4d1c457620b08eab73708484df76f078b6737725803373952128a4c");
   });
 
   it("publishes successor fee and funding rules while pending authority stays closed", async () => {
