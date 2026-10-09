@@ -1,4 +1,5 @@
 "use client";
+import { CustomLaunchStartButton } from "./custom-launch-start-button";
 import { useLaunchStatusPolling } from "./use-launch-status-polling";
 import { launchStatusFingerprint, launchStatusUpdateMessage } from "@/lib/custom-launch-status-update";
 import { parseCustomLaunchReview, customLaunchReviewAllowsSigning, customLaunchReviewLabel, customLaunchReviewDescription, type CustomLaunchReview } from "@/lib/custom-launch-review";
@@ -1574,6 +1575,11 @@ export function selectMonotonicLaunchResource(
       && incoming.manualReview.revision > current.manualReview.revision)) return incoming;
   if (current.manualReview && incoming.manualReview?.reviewId === current.manualReview.reviewId
     && incoming.manualReview.revision < current.manualReview.revision) return current;
+  if (current.manualReview && incoming.manualReview?.reviewId === current.manualReview.reviewId
+    && incoming.manualReview.revision === current.manualReview.revision) {
+    if (!current.manualReview.launchRequestedAt && incoming.manualReview.launchRequestedAt) return incoming;
+    if (current.manualReview.launchRequestedAt && !incoming.manualReview.launchRequestedAt) return current;
+  }
   return updatedAtTime(incoming.updatedAt) > updatedAtTime(current.updatedAt)
     ? incoming
     : current;
@@ -3687,6 +3693,8 @@ export function DeveloperLaunchHistory({
                 <p className={styles.statusDescription}>
                   {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status) ? customLaunchReviewDescription(launch.manualReview) : statusDescription(launch.status)}
                 </p>
+                {launch.manualReview && !["submitted", "finalized", "failed", "cancelled"].includes(launch.status)
+                  ? <CustomLaunchStartButton key={`${resourceIdentity}:${launch.manualReview.revision}`} review={launch.manualReview} launchId={resourceIdentity} onStarted={refresh} /> : null}
                 <details className={styles.detailDisclosure}>
                   <summary>Request details</summary>
                 <dl className={styles.metadata}>

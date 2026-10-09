@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
+import { createManualReviewStartBridgeV1 } from "../lib/server/custom-launch/manual-review-start-v1";
 import { WEBSITE_ADMIN_WALLET } from "../lib/admin-access";
 import { createManualReviewBridgeV1 } from "../lib/server/custom-launch/manual-review-bridge-v1";
-import { customLaunchReviewAllowsSigning, customLaunchReviewDescription, customLaunchReviewLabel, type CustomLaunchReview } from "../lib/custom-launch-review";
+import { customLaunchReviewNeedsStart, customLaunchReviewOverdue, customLaunchReviewAllowsSigning, customLaunchReviewDescription, customLaunchReviewLabel, type CustomLaunchReview } from "../lib/custom-launch-review";
 
 const review: CustomLaunchReview = { schemaVersion: "programmable.custom-launch-manual-review.v1", reviewId: "10000000-0000-4000-8000-000000000001",
   subjectHash: `sha256:${"1".repeat(64)}`, chainId: "1", controller: WEBSITE_ADMIN_WALLET, state: "approved", revision: 2,
@@ -46,5 +47,41 @@ describe("manual launch approval", () => {
     expect(headers.get("X-Programmable-Wallet-Address")?.toLowerCase()).toBe(WEBSITE_ADMIN_WALLET.toLowerCase());
     expect((await f.route(request({ ...decision, reviewer: { privyUserId: "forged" } }))).status).toBe(400);
     expect(f.fetchBackend).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("24-hour review and launch windows", () => {
+  const approved = { ...review, expiresAt: "2026-10-09T04:00:00Z", launchRequestedAt: null, launchDeadline: null };
+  it("waits for owner start and caps signing at the approval deadline", () => {
+    const now = Date.parse("2026-10-09T03:30:00Z");
+    expect(customLaunchReviewNeedsStart(approved, now)).toBe(true);
+    expect(customLaunchReviewAllowsSigning(approved, now)).toBe(false);
+    expect(customLaunchReviewAllowsSigning({ ...review, expiresAt: approved.expiresAt }, now)).toBe(false);
+    const started = { ...approved, launchRequestedAt: new Date(now).toISOString(), launchDeadline: approved.expiresAt };
+    expect(customLaunchReviewAllowsSigning(started, now)).toBe(true);
+    expect(customLaunchReviewAllowsSigning(started, Date.parse(approved.expiresAt))).toBe(false);
+  });
+  it("marks pending applications overdue after 24 hours without changing their state", () => {
+    const pending = { ...review, state: "pending" as const, approvedAt: null, expiresAt: null };
+    const due = Date.parse(pending.submittedAt) + 86400000;
+    expect(customLaunchReviewOverdue(pending, due - 1)).toBe(false);
+    expect(customLaunchReviewOverdue(pending, due)).toBe(true);
+    expect(customLaunchReviewLabel(pending, due)).toBe("Review pending");
+  });
+  it("lets an authenticated non-admin start only through the owner-bound backend", async () => {
+    const owner = "0x2222222222222222222222222222222222222222" as const;
+    const fetchBackend = vi.fn<typeof fetch>().mockResolvedValue(Response.json({ review: approved }));
+    const route = createManualReviewStartBridgeV1({ authenticator: { authenticate: async () => ({ privyUserId: "did:privy:owner", privySessionId: "session", wallets: [owner] }) },
+      backendBaseUrl: "https://api.programmable.market", websiteToken: "w".repeat(43), bffAssertionKeyV2: "b".repeat(43), fetchBackend });
+    const request = (walletAddress = owner) => new Request("https://programmable.market/api/custom-launch-reviews/start", { method: "POST",
+      headers: { Origin: "https://programmable.market", "Content-Type": "application/json" }, body: JSON.stringify({ chainId: "1", launchId: review.reviewId, walletAddress }) });
+    expect((await route(request())).status).toBe(200);
+    const [url, init] = fetchBackend.mock.calls[0]!;
+    expect(String(url)).toBe("https://api.programmable.market/v1/wallet-admin/custom-launch-reviews/start");
+    expect(JSON.parse(String(init!.body))).toEqual({ chainId: "1", launchId: review.reviewId });
+    expect(new Headers(init!.headers).get("X-Programmable-Wallet-Address")).toBe(owner);
+    expect((await route(new Request("https://programmable.market/api/custom-launch-reviews/start", { method: "POST", body: JSON.stringify({ chainId: "1", launchId: review.reviewId, walletAddress: WEBSITE_ADMIN_WALLET }) }))).status).toBe(403);
+    expect(fetchBackend).toHaveBeenCalledTimes(1);
   });
 });

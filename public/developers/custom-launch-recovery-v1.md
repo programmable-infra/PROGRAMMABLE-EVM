@@ -27,3 +27,10 @@ Existing response bodies, manifest digests, signatures and review decisions are 
 Review pending takes precedence over the old unsigned plan deadline. Submitted transaction recovery takes precedence over review expiry. Unknown provider failures never become a finding that the submitted contract is unsafe.
 
 The website reads existing owner-authorized status endpoints while visible, displays review changes, and stops or cancels reads when the wallet context changes. It does not send email or Discord messages and does not open a signing prompt automatically.
+
+
+## Approval windows
+
+The review target is 24 hours after submission. An overdue review remains open until a reviewer decides. Approval gives the team a separate 24 hours to start. `Programmable-Next-Action: start_launch` means the controller should open its wallet handoff and select **Start launch**, or its agent should call `POST /v1/custom-launch-reviews/start` with `chainId` and `launchId` using the submitting wallet API key. Poll the same resource for the prepared wallet action.
+
+The resulting transaction lasts at most one hour and never beyond the approval expiry. Repeating start does not extend it. An expired transaction still needs the documented recovery path. Do not change calldata, resubmit or send a second transaction while an earlier send is unresolved.

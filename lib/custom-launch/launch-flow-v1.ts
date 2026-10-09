@@ -1,4 +1,4 @@
-import { customLaunchReviewAllowsSigning, customLaunchReviewDescription, customLaunchReviewLabel } from "../custom-launch-review";
+import { customLaunchReviewNeedsStart, customLaunchReviewAllowsSigning, customLaunchReviewDescription, customLaunchReviewLabel } from "../custom-launch-review";
 import type { LaunchPlanRecordV1, LaunchWalletStepV1 } from "./launch-plan-v1";
 import type { Hex } from "viem";
 
@@ -33,6 +33,10 @@ export function launchFlowStateV1(record: LaunchPlanRecordV1): { title: string; 
   const atomic = record.plan.executor === "atomic_execute_and_stamp_v2";
   if (["final", "source_verified", "indexed", "publicly_visible"].includes(record.status)) return {
     title: "Confirming website indexing", description: "Your launch is final onchain. Programmable is checking the saved website record before opening your program.", terminal: true,
+  };
+  if (record.manualReview && customLaunchReviewNeedsStart(record.manualReview)
+    && !record.steps.some(step => step.transactionHash)) return {
+    title: "Approved", description: customLaunchReviewDescription(record.manualReview), terminal: false,
   };
   if (record.status === "expired") return { title: "Preparation expired", description: "Ask your bot to replan this launch using its existing completed steps. Keep this launch ID and every transaction receipt; completed deployments must be reused.", terminal: false };
   if (record.steps.some(step => step.status === "failed") || record.status === "action_required") return {

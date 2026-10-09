@@ -1,5 +1,6 @@
 "use client";
 
+import { CustomLaunchStartButton } from "./custom-launch-start-button";
 import { customLaunchReviewAllowsSigning } from "@/lib/custom-launch-review";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
@@ -175,6 +176,8 @@ export function DeveloperUniversalLaunchFlow({ entry, highlighted = false, autoP
     {plan?.plan.publication?.description ? <p className={styles.description}>{plan.plan.publication.description}</p> : null}
     <div className={styles.progress} aria-live="polite"><h4>{indexedHref ? "Your program is ready" : busy === "send" ? "Confirm in your wallet" : unknownSend ? "Recover your wallet transaction" : state.title}</h4>
       <p>{indexedHref ? "The finalized launch is stored in the website index." : unknownSend ? "The wallet call may have been sent. Check the original wallet activity or explorer and recover its hash. This step stays paused until the same transaction is verified." : state.description}</p></div>
+    {plan?.manualReview && !hasUnresolved && !state.terminal
+      ? <CustomLaunchStartButton key={`${id}:${plan.manualReview.revision}`} review={plan.manualReview} launchId={id} onStarted={load} /> : null}
     <dl className={styles.summary}><div><dt>Controller wallet</dt><dd><span title={entry.controller}>{shortAddress(entry.controller)}</span></dd></div><div><dt>Wallet transactions</dt><dd>{steps.length} including Stamp</dd></div>
       <div><dt>{visibleReview ? "Current transaction value" : "Launch value limit"}</dt><dd>{formatEther(BigInt(visibleReview?.valueWei ?? plan?.plan.budgets.maxTotalValue ?? "0"))} ETH</dd></div>
       <div><dt>Current estimated gas cost</dt><dd>{visibleReview ? `${formatEther(BigInt(visibleReview.maxGasCostWei))} ETH` : ready && !hasUnresolved && autoPrepare && !error ? "Checking current cost…" : "Shown before confirmation"}</dd></div></dl>
