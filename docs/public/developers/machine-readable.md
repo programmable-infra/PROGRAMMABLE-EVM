@@ -12,7 +12,8 @@ Start with [product discovery](https://programmable.market/.well-known/programma
 
 | Contract layout | Interface |
 | --- | --- |
-| Separate token and hook on Robinhood | V4 profile selected by discovery |
+| New Custom Launch Plans on Robinhood | [Plan capabilities](https://api.programmable.market/v4/chains/4663/custom-launch-capabilities) and [generated contract](https://api.programmable.market/v4/chains/4663/custom-launch-contract/manifest.json) |
+| Historical separate token and hook on Robinhood | V4 profile selected by discovery; retain its read and recovery interfaces |
 | Shared token and hook on Robinhood | [MultiRole V2 capabilities](https://api.programmable.market/v4/chains/4663/multi-role-custom-launches/capabilities) |
 | Existing Ethereum integration | V3 profile selected by discovery |
 
@@ -22,7 +23,7 @@ Partner roots and subkeys follow `customLaunchApi.partnerCredentials`, including
 
 ## Module Mode
 
-[Foundation discovery](https://programmable.market/api/module-foundation) supplies the current launch interface and ABIs. Add `?token={checksummedTokenAddress}` to resolve an existing coin's release.
+[Ethereum Foundation discovery](https://programmable.market/api/module-foundation?chainId=1) and [Robinhood Foundation discovery](https://programmable.market/api/module-foundation?chainId=4663) supply the chain-specific launch interface and ABIs. Add `&token={checksummedTokenAddress}` to resolve an existing coin's release.
 
 The [Native indexer contract](https://programmable.market/api/module-mode/indexer/v1) describes earlier Native launches. It must not be used to decode Foundation events. The [indexing guide](indexing.md) explains how to select the right source.
 
@@ -35,6 +36,13 @@ The Developer API at `https://developers.programmable.family` is read only and n
 | `GET /api/v2/status` | Service health and index freshness |
 | `GET /api/v2/manifest` | Deployment addresses, hashes and verification rules |
 | `GET /api/v2/launches` | Indexed launch records |
+| `GET /api/v2/launches/1/{tokenAddress}` | Ethereum token lookup |
 | `GET /api/v2/token-list` | Token list |
 
 The [OpenAPI specification](../.gitbook/assets/programmable-v2.yaml) defines the fields and responses. Its source is maintained in the Developers repository and synchronized here.
+
+## Source coverage
+
+For all four launch variants, start with [Index launches](indexing.md). The normalized Developer API is not a complete substitute for the chain-specific Module Mode and Custom Launch sources. Inspect its status, coverage and manifest extensions before relying on a result.
+
+Ethereum Router indexing must include `launchStampRouter` and `extensions["programmable/launch-stamp-router-generations-v1"].routers[]`. The `programmable/module-discovery-v1` extension links to module sources and states whether the normalized feed covers them. Robinhood Custom Plans use the [finalized projection feed](https://api.programmable.market/v4/chains/4663/finalized-launch-projections) plus the historical adapters in the [Robinhood guide](robinhood-terminal-indexer.md).

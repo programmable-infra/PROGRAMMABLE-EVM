@@ -8,11 +8,12 @@ Start with the chain and token address. Then select the launch source and its ve
 
 | Source | Reference |
 | --- | --- |
-| Foundation | [Foundation indexing](foundation-indexing.md) |
+| Module Mode on Ethereum or Robinhood | [Foundation indexing](foundation-indexing.md) |
 | Earlier Native and Engine releases | [Native and Engine indexing](module-mode-indexing.md) |
 | Robinhood Custom with separate token and hook | [Router V1](robinhood-terminal-indexer.md#bind-the-exact-identity) |
 | Robinhood Custom with shared token and hook | [MultiRole V2](robinhood-terminal-indexer.md#multirole-v2) |
-| Ethereum Router launches | The manifest procedure below |
+| Ethereum Custom | [Ethereum Custom indexing](ethereum-custom-indexing.md) |
+| Robinhood Custom Launch Plans | [Finalized projections](robinhood-terminal-indexer.md#custom-launch-plans) |
 
 ## Verify Robinhood launches
 
@@ -24,7 +25,7 @@ Keep Robinhood inclusion, Ethereum posting and Ethereum finality separate. The A
 
 ## Verify Ethereum launches
 
-Read the [Developer manifest](https://developers.programmable.family/api/v2/manifest), select chain ID `1` and require a live `launchStampRouter`. Verify the Router runtime hash and ABI checksum.
+Read the [Developer manifest](https://developers.programmable.family/api/v2/manifest) for chain ID `1`. Include both `launchStampRouter` and `extensions["programmable/launch-stamp-router-generations-v1"].routers[]`, preserving each deployment's address, range, runtime hash and ABI checksum. Follow the [Router generation procedure](ethereum-custom-indexing.md#include-every-router-generation); scanning only the primary Router omits successor launches.
 
 Scan events from the published start block and apply the manifest's finality policy. Match the launch ID, token, hook, PoolManager and pool ID with the point lookup, `launchStamp` and `stampProof` at the same block. The hosted feed helps discover records; it does not replace these checks.
 

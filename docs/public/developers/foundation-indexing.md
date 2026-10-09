@@ -12,13 +12,15 @@ Robinhood Foundation uses a factory record. Ethereum Foundation uses a canonical
 
 Read [Ethereum Foundation discovery](https://programmable.market/api/module-foundation?chainId=1). For an existing coin, use `GET /api/module-foundation?chainId=1&token={checksummedTokenAddress}`. The response binds the module implementation, graph factory, runtime hashes, release digest and source commit. The [Ethereum release descriptor](https://github.com/programmablehq/PROGRAMMABLE/blob/production/contracts/deployments/ethereum-module-release-v1.json) supplies the versioned source.
 
-Discover Ethereum identities from the [canonical Router snapshot](https://programmable.market/api/indexers/v1/router-custom-identities). These launches have `custom-graph` provenance; the public `custom` category does not exclude Module Mode. Verify the Router stamp and its token, hook and pool proofs first. Then use `isEthereumModuleLaunchCandidate` and `decodeFoundationEthereumGraphLaunch` from the pinned source's `lib/module-foundation/ethereum-release.ts` and `ethereum-graph.ts` to identify the module implementation and decode its initializer. A matching display label alone is insufficient.
+Discover Ethereum identities from the [canonical Router snapshot](https://programmable.market/api/indexers/v1/router-custom-identities). These launches have `custom-graph` provenance; the public `custom` category does not exclude Module Mode. Verify the Router stamp and its token, hook and pool proofs first, including [every published Router generation](ethereum-custom-indexing.md#include-every-router-generation). Then use `isEthereumModuleLaunchCandidate` and `decodeFoundationEthereumGraphLaunch` from the pinned source's `lib/module-foundation/ethereum-release.ts` and `ethereum-graph.ts` to identify the module implementation and decode its initializer. A matching display label alone is insufficient.
 
 Verify the graph proxy, implementation, initializer, token, hook and pool using `readFoundationEthereumGraphLaunch` in `lib/server/module-foundation/ethereum-graph.ts`. Preserve the canonical token address as the coin identity; the graph account is not the token. Runtime, implementation and source checks determine the module family, independently of the coin's name or selected module IDs.
 
 The Robinhood factory events and `launchOf(token)` procedure below do not apply to this Ethereum graph. After verifying the graph, use its bound pool, ledger, module descriptors and token metadata for the corresponding reads below.
 
-## Resolve the launch source
+## Robinhood module launches
+
+### Resolve the launch source
 
 Read [Robinhood Foundation discovery](https://programmable.market/api/module-foundation?chainId=4663) for the current release. For an existing coin, use `GET /api/module-foundation?chainId=4663&token={checksummedTokenAddress}` to find its original release. Enumerate the [retained factory releases](https://api.programmable.market/v1/modules/foundation/releases) and follow each `availabilityPath`. Keep verified historical bindings when the active factory changes; current discovery alone is not a history of every factory.
 
@@ -34,7 +36,7 @@ The [Foundation integration source](https://github.com/programmablehq/PROGRAMMAB
 
 All three use SDK source kind `module-foundation-v1`; store `factoryVersion` separately. Discovery selects the version available for new launches. The Native V1 contract at `/api/module-mode/indexer/v1` does not describe Foundation.
 
-## Discover and verify coins
+### Discover and verify coins
 
 1. **Find launch events.** Scan the bound factory from `startBlock` in bounded ranges, using its versioned ABI. Reject removed logs.
 2. **Confirm the launch record.** Fetch the successful receipt and check its factory, transaction hash, block hash and log index. At a canonical block, compare `launchOf(token)` with the event's token, hook, ledger, pool ID and position IDs.
@@ -54,7 +56,7 @@ V2 and V3 events index `token`, `creator` and `poolId`. Their remaining fields a
 
 Keep a checkpoint per factory and release digest, and preserve raw integer amounts. The discovery helpers establish canonical L2 reads. Apply the release's rollup finality policy separately before marking a launch finalized.
 
-## Read the pool and trades
+### Read the pool and trades
 
 For factory V2 and V3, the PoolKey contains the sorted token and quote addresses, `fee: 0`, `tickSpacing: 60` and the launch's hook. Compute the pool ID as `keccak256(abi.encode(poolKey))` and check it against the factory and PoolManager. A v4 pool is identified by its PoolManager and pool ID.
 
@@ -100,4 +102,4 @@ Validate URLs and social data as untrusted display content. Missing optional met
 
 A verified pool price can fill a gap in external price data. Use the token's supply and decimals at the same block, and a current independent price for the quote asset. Store price multiplied by total supply as `fdvUsd`; populate `marketCapUsd` only with an established circulating supply. Missing prices remain unavailable. Charts should contain observed trades or prices with timestamps.
 
-The optional [terminal-stage example](indexing.md#terminal-stages) explains how to group coins by valuation. Foundation keeps its pool from launch; there is no migration transaction or replacement pool to report.
+Follow the shared [pair and metadata rules](indexing.md#show-the-pair-image-and-links) for display. Foundation keeps its pool from launch; there is no migration transaction or replacement pool to report.
