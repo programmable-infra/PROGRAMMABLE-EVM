@@ -54,8 +54,11 @@ function displayOverride(address: string): Pick<Metadata, "imageUrl" | "links"> 
 }
 
 async function readJson(url: string, signal: AbortSignal): Promise<unknown> {
+  // Different token selections share the same public metadata pages. Cache
+  // those pages together so per-token presentation misses cannot flood the API.
   const response = await fetch(url, {
-    signal, redirect: "error", cache: "no-store", headers: { accept: "application/json" },
+    signal, redirect: "error", cache: "force-cache", next: { revalidate: 30 },
+    credentials: "omit", headers: { accept: "application/json" },
   });
   if (!response.ok || response.redirected
     || response.headers.get("content-type")?.split(";", 1)[0]?.trim() !== "application/json"
@@ -204,9 +207,6 @@ async function readMetadata(tokens: readonly RobinhoodLaunch[]): Promise<Map<str
   return result;
 }
 
-const cachedMetadata = unstable_cache(async (tokens: readonly RobinhoodLaunch[]) =>
-  Array.from(await readMetadata(tokens)), ["robinhood-coin-metadata-v2"], { revalidate: 60 });
-
 // A new launch must not invalidate every older coin's artwork cache. Do not
 // cache a transient RPC failure as an empty, verified presentation either.
 const cachedModuleTokenMetadata = unstable_cache(async (token: RobinhoodLaunch) =>
@@ -255,7 +255,8 @@ export async function readRobinhoodPresentations(tokens: readonly RobinhoodLaunc
   const custom = ordered.filter(token => !isRobinhoodModuleSourceKind(token.sourceKind) && !token.launchProjection);
   const native = ordered.filter(token => isRobinhoodModuleSourceKind(token.sourceKind));
   const [metadata, moduleMetadata, markets] = await Promise.allSettled([
-    custom.length ? cachedMetadata(custom).then((entries) => new Map(entries)) : Promise.resolve(new Map<string, Metadata>()),
+    // Keep this outside unstable_cache, which disables the shared fetch cache.
+    custom.length ? readMetadata(custom) : Promise.resolve(new Map<string, Metadata>()),
     native.length ? readCachedModuleMetadata(native) : Promise.resolve(new Map<string, Metadata>()),
     knownMarkets ? Promise.resolve(knownMarkets) : readRobinhoodMarkets(tokens),
   ]);
