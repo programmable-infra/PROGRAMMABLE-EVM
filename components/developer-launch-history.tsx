@@ -1105,9 +1105,9 @@ function statusDescription(status: LaunchStatus) {
     case "awaiting_funding_authorization": return "Review and sign the exact USDC funding authorization. This does not send a transaction.";
     case "funding_authorization_verified": return "The funding signature passed verification. The Router transaction is being prepared.";
     case "simulating": return "The exact wallet transaction is being simulated.";
-    case "authorized": return "Review the exact Ethereum Mainnet transaction, then ask your wallet to send it.";
-    case "awaiting_wallet_signature": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
-    case "wallet_action_required": return "Review the exact Robinhood Chain Router transaction, then choose whether to send it from your wallet.";
+    case "authorized":
+    case "awaiting_wallet_signature":
+    case "wallet_action_required": return "Ready to launch. Confirm the transaction in your wallet.";
     case "submitted": return "The wallet transaction is being tracked onchain.";
     case "sequencer_soft_confirmed": return "Robinhood Chain reported a soft confirmation. Ethereum posting and finality are still pending.";
     case "ethereum_posted": return "The transaction was posted to Ethereum. Finality is still pending.";
@@ -2888,7 +2888,7 @@ export function DeveloperLaunchHistory({
     }
   };
 
-  const loadWalletReview = async (launch: LaunchResource) => {
+  const loadWalletReview = async (launch: LaunchResource): Promise<LaunchResource | undefined> => {
     const key = launchResourceKey(launch);
     const v3Review = launch.routeId === "custom-launch:create:v3"
       && ["awaiting_funding_authorization", "authorized"].includes(launch.status);
@@ -2903,13 +2903,7 @@ export function DeveloperLaunchHistory({
     setHydratingId(key);
     clearLaunchError(key);
     setError("");
-    setStatusMessage(
-      v4Review
-        ? "Loading the exact Robinhood Chain Router transaction for review."
-        : launch.status === "awaiting_funding_authorization"
-        ? "Loading the exact funding authorization for review."
-        : "Loading the exact Router transaction for review.",
-    );
+    setStatusMessage("Preparing your wallet confirmation…");
     try {
       const current = await readLaunchResource(launch);
       if (
@@ -2943,9 +2937,9 @@ export function DeveloperLaunchHistory({
         }));
         clearLaunchError(key);
         setStatusMessage(
-          "Robinhood Chain review loaded. Check every field before the separate owner wallet transaction.",
+          "Robinhood Chain transaction ready.",
         );
-        return;
+        return current;
       }
       const currentProjectBinding = walletProjectRequestBindingV1(current);
       if (!currentProjectBinding) {
@@ -2972,7 +2966,7 @@ export function DeveloperLaunchHistory({
           );
         }
         setStatusMessage(
-          "Funding review loaded. Check every field before the separate wallet signature.",
+          "Funding authorization ready.",
         );
       } else if (!routerTransactionReview(current)) {
         throw new Error(
@@ -2980,7 +2974,7 @@ export function DeveloperLaunchHistory({
         );
       } else {
         setStatusMessage(
-          "Router review loaded. Check every field before the separate wallet transaction.",
+          "Launch transaction ready.",
         );
       }
       updateLaunch(current);
@@ -2989,6 +2983,7 @@ export function DeveloperLaunchHistory({
         [key]: current,
       }));
       clearLaunchError(key);
+      return current;
     } catch (cause) {
       reportLaunchError(key, cause, "Unable to load the wallet review.");
     } finally {
@@ -3181,7 +3176,7 @@ export function DeveloperLaunchHistory({
     });
   }, [clearLaunchError, readLaunchResource, reportLaunchError, updateLaunch]);
 
-  const submitFundingAuthorization = async (launch: LaunchResource) => {
+  const submitFundingAuthorization = async (launch: LaunchResource, prepare = false) => {
     if (
       fundingInFlightRef.current
       || fundingId !== null
@@ -3193,6 +3188,11 @@ export function DeveloperLaunchHistory({
     clearLaunchError(key);
     setError("");
     try {
+      if (prepare) {
+        const current = await loadWalletReview(launch);
+        if (!current) return;
+        launch = current;
+      }
       const reviewedProjectBinding = walletProjectRequestBindingV1(launch);
       if (!reviewedProjectBinding) {
         throw new Error(
@@ -3248,6 +3248,8 @@ export function DeveloperLaunchHistory({
           "The funding authorization changed after review. Review the refreshed fields; no wallet signature was requested.",
         );
       }
+      // Event-only wallet boundary: use current time after async preparation, never render time.
+      // eslint-disable-next-line react-hooks/purity
       if (customLaunchWalletHandoffExpiredV1(current, Date.now())) {
         forgetPendingFunding(key);
         throw new Error(
@@ -3274,6 +3276,8 @@ export function DeveloperLaunchHistory({
         const signature = await signCustomLaunchFundingAuthorization(
           authorization,
         );
+        // Event-only wallet boundary: recheck expiry after the wallet returns.
+        // eslint-disable-next-line react-hooks/purity
         if (customLaunchWalletHandoffExpiredV1(current, Date.now())) {
           throw new Error(
             "This wallet handoff expired while the wallet was open. The signature was not submitted.",
@@ -3371,7 +3375,7 @@ export function DeveloperLaunchHistory({
     }
   };
 
-  const submitWalletTransaction = async (launch: LaunchResource, robinhoodAction: "estimate" | "send" = "send") => {
+  const submitWalletTransaction = async (launch: LaunchResource, robinhoodAction: "estimate" | "send" | "launch" = "send") => {
     if (
       sendInFlightRef.current
       || submittingId !== null
@@ -3382,6 +3386,11 @@ export function DeveloperLaunchHistory({
     clearLaunchError(key);
     setError("");
     try {
+      if (robinhoodAction === "launch" && ["custom-launch:create:v3", "custom-launch:create:v4"].includes(launch.routeId)) {
+        const current = await loadWalletReview(launch);
+        if (!current) return;
+        launch = current;
+      }
       if (launch.routeId === "custom-launch:create:v4") {
         if (launch.rawResourceV4 === null
           || !walletProjectMetadataReadyForReviewV1(launch)
@@ -3391,9 +3400,7 @@ export function DeveloperLaunchHistory({
             "Load and review the current Robinhood Chain transaction before opening the wallet.",
           );
         }
-        const result = await sendCustomLaunchWalletActionV4({
-          action: robinhoodAction,
-          reviewedCost: robinhoodCosts[key],
+        const walletInput = {
           reviewedResource: launch.rawResourceV4,
           loadFreshCapabilities: readV4Capabilities,
           loadFreshResource: async () => {
@@ -3405,11 +3412,22 @@ export function DeveloperLaunchHistory({
             }
             return current.rawResourceV4;
           },
-        });
+        };
+        let result = await sendCustomLaunchWalletActionV4({ ...walletInput,
+          action: robinhoodAction === "launch" ? "estimate" : robinhoodAction, reviewedCost: robinhoodCosts[key] });
+        if (robinhoodAction === "launch" && typeof result !== "string") {
+          const funding = parseRobinhoodFundingReviewV1(launch.rawResourceV4);
+          const estimatedCost = result;
+          setRobinhoodCosts(costs => Object.freeze({ ...costs, [key]: estimatedCost }));
+          if (!funding || funding.fundingPlan?.launchMode === "build-only" || robinhoodGasBudgetExceededV1(result, funding))
+            throw new Error("The current launch cost exceeds this request’s budget.");
+          if (result.shortfallWei !== "0") throw new Error("Not enough ETH for this launch and gas.");
+          result = await sendCustomLaunchWalletActionV4({ ...walletInput, action: "send", reviewedCost: result });
+        }
         if (typeof result !== "string") {
           setRobinhoodCosts((costs) => Object.freeze({ ...costs, [key]: result }));
           setStatusMessage(result.shortfallWei === "0"
-            ? "Robinhood costs loaded. Review the estimate before choosing Send transaction."
+            ? "The estimate changed. Review the updated cost and choose Sign and launch."
             : "The Robinhood balance does not cover the current launch estimate. Review the funding shortfall.");
           return;
         }
@@ -3483,6 +3501,8 @@ export function DeveloperLaunchHistory({
           "The wallet handoff changed after review. Reload its exact fields; no transaction was requested.",
         );
       }
+      // Event-only wallet boundary: use current time after async preparation, never render time.
+      // eslint-disable-next-line react-hooks/purity
       if (customLaunchWalletHandoffExpiredV1(current, Date.now())) {
         throw new Error(
           "This wallet handoff expired before the final wallet boundary. Reload the launch to request a current handoff.",
@@ -3540,6 +3560,7 @@ export function DeveloperLaunchHistory({
       setSubmittingId(null);
     }
   };
+
 
   return (
     <section
@@ -3631,16 +3652,10 @@ export function DeveloperLaunchHistory({
             );
             const projectMetadataReadyForProfile =
               walletProjectMetadataReadyForReviewV1(reviewLaunch);
-            const projectRequestBinding = walletProjectRequestBindingV1(
-              reviewLaunch,
-            );
             const robinhoodFunding = parseRobinhoodFundingReviewV1(reviewLaunch.rawResourceV4);
             const currentRobinhoodCost = robinhoodFunding?.account.toLowerCase() === account.toLowerCase()
               && robinhoodCostMatchesReviewV1(robinhoodCosts[key], robinhoodFunding,
                 currentTimeMs ?? Number.NaN) ? robinhoodCosts[key] : undefined;
-            const robinhoodSendReady = currentRobinhoodCost?.shortfallWei === "0"
-              && robinhoodFunding !== null && robinhoodFunding.fundingPlan?.launchMode !== "build-only"
-              && !robinhoodGasBudgetExceededV1(currentRobinhoodCost, robinhoodFunding);
             const fundingReview = fundingAuthorizationReview(reviewLaunch);
             const routerReview = routerTransactionReview(reviewLaunch);
             const transaction = reviewLaunch.routeId
@@ -3685,16 +3700,31 @@ export function DeveloperLaunchHistory({
                     {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status) ? customLaunchReviewLabel(launch.manualReview) : statusCopy(launch.status)}
                   </span>
                 </div>
-                <details
-                  className={styles.launchReview}
-                  open={highlightedLaunchId === resourceIdentity}
-                >
-                  <summary>Review launch</summary>
                 <p className={styles.statusDescription}>
-                  {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status) ? customLaunchReviewDescription(launch.manualReview) : statusDescription(launch.status)}
+                  {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status)
+                    ? customLaunchReviewDescription(launch.manualReview) : statusDescription(launch.status)}
                 </p>
                 {launch.manualReview && !["submitted", "finalized", "failed", "cancelled"].includes(launch.status)
                   ? <CustomLaunchStartButton key={`${resourceIdentity}:${launch.manualReview.revision}`} review={launch.manualReview} launchId={resourceIdentity} onStarted={refresh} /> : null}
+                {["authorized", "wallet_action_required", "awaiting_wallet_signature", "awaiting_funding_authorization"].includes(launch.status)
+                  && (!launch.manualReview || customLaunchReviewAllowsSigning(launch.manualReview)) ? (
+                  <button className={styles.walletButton} type="button"
+                    disabled={hydratingId !== null || submittingId !== null || fundingId !== null || checkingId !== null || Boolean(pollingIds[key]) || handoffExpired || launch.status === "awaiting_funding_authorization" && fundingRetryDelayMs !== null}
+                    aria-busy={hydratingId === key || submittingId === key || fundingId === key}
+                    onClick={() => {
+                      if (launch.status === "awaiting_funding_authorization") void submitFundingAuthorization(launch, true);
+                      else void submitWalletTransaction(launch, "launch");
+                    }}>
+                    {hydratingId === key ? "Preparing transaction…" : submittingId === key || fundingId === key ? "Confirm in your wallet…"
+                      : launch.status === "awaiting_funding_authorization" ? pendingFundingIds[key] ? "Retry USDC authorization" : "Authorize USDC" : "Sign and launch"}
+                  </button>
+                ) : null}
+                {["received", "validating", "pending_review", "prepared", "simulating", "funding_authorization_verified"].includes(launch.status)
+                  && launch.manualReview && customLaunchReviewAllowsSigning(launch.manualReview)
+                  ? <button className={styles.walletButton} type="button" disabled aria-busy="true">Preparing your launch…</button> : null}
+                {launchErrors[key] ? <p className={styles.inlineError} role="alert">{launchErrors[key]}</p> : null}
+                <details className={styles.launchReview}>
+                  <summary>Launch details</summary>
                 <details className={styles.detailDisclosure}>
                   <summary>Request details</summary>
                 <dl className={styles.metadata}>
@@ -4003,11 +4033,6 @@ export function DeveloperLaunchHistory({
                 {showTruthLedger ? (
                   <LaunchTruthLedger launch={reviewLaunch} />
                 ) : null}
-                {launchErrors[key] ? (
-                  <p className={styles.inlineError} role="alert">
-                    {launchErrors[key]}
-                  </p>
-                ) : null}
                 {[
                   "awaiting_funding_authorization",
                   "funding_authorization_verified",
@@ -4020,136 +4045,6 @@ export function DeveloperLaunchHistory({
                   "ethereum_posted",
                 ].includes(launch.status) ? (
                   <div className={styles.launchActions}>
-                    {["wallet_action_required", "awaiting_wallet_signature"]
-                      .includes(launch.status)
-                      && launch.routeId === "custom-launch:create:v4" ? (
-                        reviewLaunch.rawResourceV4 !== null
-                          && walletTransaction(reviewLaunch) !== null ? (
-                            <button
-                              className={styles.walletButton}
-                            aria-busy={submittingId === key || hydratingId === key || fundingId === key}
-                              disabled={
-                                submittingId !== null
-                                || hydratingId !== null
-                                || checkingId !== null
-                                || Boolean(pollingIds[key])
-                                || handoffExpired
-                                || !projectMetadataReadyForProfile
-                                || robinhoodFunding === null
-                                || robinhoodFunding.fundingPlan?.launchMode === "build-only"
-                              }
-                              type="button"
-                              onClick={() => void submitWalletTransaction(reviewLaunch, robinhoodSendReady ? "send" : "estimate")}
-                            >
-                              {robinhoodSendReady ? "Send transaction" : "Estimate launch cost"}
-                            </button>
-                          ) : (
-                            <button
-                              className={styles.walletButton}
-                            aria-busy={submittingId === key || hydratingId === key || fundingId === key}
-                              disabled={hydratingId !== null || submittingId !== null}
-                              type="button"
-                              onClick={() => void loadWalletReview(launch)}
-                            >
-                              Load exact wallet review
-                            </button>
-                          )
-                      ) : null}
-                    {launch.status === "awaiting_funding_authorization"
-                      && launch.routeId === "custom-launch:create:v3" ? (
-                        fundingReview && projectRequestBinding ? (
-                          <button
-                            className={styles.walletButton}
-                            aria-busy={submittingId === key || hydratingId === key || fundingId === key}
-                            disabled={
-                              fundingId !== null
-                              || hydratingId !== null
-                              || submittingId !== null
-                              || checkingId !== null
-                              || Boolean(pollingIds[key])
-                              || fundingRetryDelayMs !== null
-                              || handoffExpired
-                            }
-                            type="button"
-                            onClick={() => void submitFundingAuthorization(
-                              reviewLaunch,
-                            )}
-                          >
-                            {pendingFundingIds[key]
-                              ? "Retry funding submission"
-                              : "Review and sign USDC authorization"}
-                          </button>
-                        ) : (
-                          projectMetadataReadyForProfile
-                        ) || projectRequestBinding?.mode
-                          === "legacy-exact-retry" ? (
-                          <button
-                            className={styles.walletButton}
-                            aria-busy={submittingId === key || hydratingId === key || fundingId === key}
-                            disabled={
-                              hydratingId !== null
-                              || fundingId !== null
-                              || handoffExpired
-                              || submittingId !== null
-                              || checkingId !== null
-                              || Boolean(pollingIds[key])
-                            }
-                            type="button"
-                            onClick={() => void loadWalletReview(launch)}
-                          >
-                            {reviewLaunch.output === null
-                              ? "Load funding review"
-                              : "Reload funding review"}
-                          </button>
-                        ) : null
-                      ) : null}
-                    {launch.status === "authorized"
-                      && launch.routeId !== "custom-launch:create:v4" ? (
-                      launch.routeId !== "custom-launch:create:v3"
-                        || (routerReview && projectRequestBinding) ? (
-                          <button
-                            className={styles.walletButton}
-                            aria-busy={submittingId === key || hydratingId === key || fundingId === key}
-                            disabled={
-                              submittingId !== null
-                              || hydratingId !== null
-                              || Boolean(pollingIds[key])
-                              || checkingId !== null
-                              || fundingId !== null
-                              || handoffExpired
-                            }
-                            type="button"
-                            onClick={() => void submitWalletTransaction(
-                              launch.routeId === "custom-launch:create:v3"
-                                ? reviewLaunch
-                                : launch,
-                            )}
-                          >
-                            Review and send launch transaction
-                          </button>
-                        ) : (
-                          projectMetadataReadyForProfile
-                        ) || projectRequestBinding?.mode
-                          === "legacy-exact-retry" ? (
-                          <button
-                            className={styles.walletButton}
-                            aria-busy={submittingId === key || hydratingId === key || fundingId === key}
-                            disabled={
-                              hydratingId !== null
-                              || submittingId !== null
-                              || checkingId !== null
-                              || fundingId !== null
-                              || Boolean(pollingIds[key])
-                            }
-                            type="button"
-                            onClick={() => void loadWalletReview(launch)}
-                          >
-                            {reviewLaunch.output === null
-                              ? "Load Router review"
-                              : "Reload Router review"}
-                          </button>
-                        ) : null
-                    ) : null}
                     <button
                       className={styles.checkButton}
                       aria-busy={checkingId === key || Boolean(pollingIds[key])}

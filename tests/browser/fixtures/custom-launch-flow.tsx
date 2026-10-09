@@ -34,7 +34,7 @@ let record: LaunchPlanRecordV1 = { ...base, plan, planHash, rawRequestSha256: pl
 if (atomic) record = atomicRecordFixture(record);
 if (mode === "atomic-mismatch") record = { ...record, steps: [bindStep({ ...record.steps[0], transaction: { ...record.steps[0].transaction, to: component } })] };
 const control = {
-  mode, indexed: false, proofCalls: 0, navigated: "", requests: [] as { method: string; params: readonly unknown[] }[],
+  mode, indexed: false, proofCalls: 0, startCalls: 0, navigated: "", requests: [] as { method: string; params: readonly unknown[] }[],
   sends: () => Number(localStorage.getItem("fixture:launch-sends") ?? 0),
   finalize: () => {
     const steps: LaunchWalletStepV1[] = record.steps.map(step => ({ ...step, status: "final", transactionHash: hash }));
@@ -51,6 +51,11 @@ if (mode === "manual-review") record = { ...record, status: "accepted", steps: [
   manualReview: { schemaVersion: "programmable.custom-launch-manual-review.v1", reviewId: "20000000-0000-4000-8000-000000000001",
     subjectHash: `sha256:${"ab".repeat(32)}`, chainId: "4663", controller, state: "pending", revision: 1,
     submittedAt: new Date().toISOString(), approvedAt: null, expiresAt: null, reason: null } };
+if (mode.startsWith("approved")) record = { ...record, status: "accepted", steps: [],
+  manualReview: { schemaVersion: "programmable.custom-launch-manual-review.v1", reviewId: "20000000-0000-4000-8000-000000000001",
+    subjectHash: `sha256:${"ab".repeat(32)}`, chainId: "4663", controller, state: "approved", revision: 1,
+    submittedAt: new Date(now * 1000).toISOString(), approvedAt: new Date(now * 1000).toISOString(),
+    expiresAt: new Date((now + 86400) * 1000).toISOString(), reason: null, launchRequestedAt: null, launchDeadline: null } };
 if (mode === "stamp") record = { ...record, steps: [ { ...record.steps[0], status: "final", transactionHash: hash },
   bindStep({ ...record.steps[0], stepId: "stamp", actionIds: ["platform:stampPlanV1"], transaction: { ...record.steps[0].transaction, nonce: "8" } }) ] };
 if (mode === "issuer") record = { ...record, status: "analysis_pending", steps: [{ ...record.steps[0], status: "final", transactionHash: hash }] };
@@ -78,6 +83,13 @@ if (["unknown", "release-change-unknown", "release-change-known"].includes(mode)
 
 window.fetch = async (input) => {
   const url = new URL(input instanceof Request ? input.url : String(input), window.location.origin);
+  if (url.pathname === "/api/custom-launch-reviews/start") {
+    control.startCalls += 1;
+    if (mode === "approved-retry" && control.startCalls === 1) return Response.json({ error: "Preparation temporarily unavailable." }, { status: 503 });
+    record = { ...record, status: base.status, steps: base.steps,
+      manualReview: { ...record.manualReview!, launchRequestedAt: new Date().toISOString(), launchDeadline: record.manualReview!.expiresAt } };
+    return Response.json({ ok: true });
+  }
   if (url.pathname.includes("custom-launch-capabilities")) return Response.json({ fixture: true });
   if (url.pathname.includes("/proofs")) { control.proofCalls += 1; return control.mode === "tracking-error" ? Response.json({ error: "unavailable" }, { status: 503 }) : Response.json({ fixture: "proof recorded" }); }
   if (url.pathname.startsWith("/api/launch-projections/")) {
