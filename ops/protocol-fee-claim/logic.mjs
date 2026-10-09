@@ -1370,6 +1370,18 @@ export function requireAtomicClaimCapability(capability) {
   return capability;
 }
 
+// MetaMask currently accepts at most ten calls in wallet_sendCalls.
+export const WALLET_CLAIM_BATCH_LIMIT = 10;
+
+export function nextWalletClaimBatch(claims, afterId = null) {
+  const ordered = [...claims].sort((a, b) => a.id.localeCompare(b.id));
+  const start = typeof afterId === "string"
+    ? ordered.findIndex(claim => claim.id.localeCompare(afterId) > 0) : 0;
+  const offset = start < 0 ? 0 : start;
+  return [...ordered.slice(offset), ...ordered.slice(0, offset)]
+    .slice(0, WALLET_CLAIM_BATCH_LIMIT);
+}
+
 export function buildWalletSendCalls(account, claims) {
   if (!isTreasury(account))
     throw new Error("Die Treasury-Wallet muss verbunden sein");
