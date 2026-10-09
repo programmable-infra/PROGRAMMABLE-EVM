@@ -464,6 +464,19 @@ describe("finalized Custom launch metadata feed v1", () => {
     })).rejects.toThrow(/metadata quality/u);
   });
 
+  it("repairs placeholder identity text only after matching token readback", async () => {
+    const snapshot = routerSnapshot();
+    const placeholders = { ...snapshot, entries: snapshot.entries.map(entry => ({
+      ...entry, name: "Custom token", symbol: "A753915BD7",
+    })) };
+    for (const readbackStatus of ["matching", "unavailable"] as const) {
+      const feed = await parsedFeed(launchFixture({ readbackStatus }));
+      const result = await enrichRouterCustomSnapshotWithFinalizedMetadataV1(placeholders, { readFeed: async () => feed });
+      expect(result.identityCommitment).toBe(snapshot.identityCommitment);
+      expect(result.entries[0]?.symbol).toBe(readbackStatus === "matching" ? customGraphExploreEntry.symbol : "A753915BD7");
+    }
+  });
+
   it("binds immutable partner attribution into the public Router overlay", async () => {
     const feed = await parsedFeed(launchFixture({
       partnerAttribution: PARTNER_ATTRIBUTION,

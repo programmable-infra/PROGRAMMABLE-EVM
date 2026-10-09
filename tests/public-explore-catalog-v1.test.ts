@@ -36,6 +36,23 @@ function routerEntry(
 }
 
 describe("public Explore catalog exclusions", () => {
+  it("attaches Ethperiment artwork and X only to its exact finalized launch", () => {
+    const entry = {
+      ...routerEntry("0xf9f7944aa311535fd86b7daa17e6d3e753915bd7", "0x41f47f07e4afeba4495130c065d6cf60e4263c2628e03092ccc328a9d29d02b1"),
+      launchStampProvenance: { ...customGraphExploreEntry.launchStampProvenance,
+        launchId: "0x41f47f07e4afeba4495130c065d6cf60e4263c2628e03092ccc328a9d29d02b1",
+        stampHash: "0x25bb83d3b2ec32e8f7af86ff76134dfd3416ed50f216f6ee83bd4144cb84bf0b" },
+      links: [{ kind: "website", url: "https://ethperiment.live/e/house" }],
+    } as CanonicalTokenExploreEntry;
+    expect(publicExplorePresentationEntryV1(entry)).toMatchObject({
+      imageUrl: "/token-images/ethperiment.png",
+      links: [...entry.links!, { kind: "x", url: "https://x.com/Ethperiment" }],
+      launchStampProvenance: entry.launchStampProvenance,
+    });
+    const otherChain = { ...entry, launchStampProvenance: { ...entry.launchStampProvenance!, chainId: 4663 } } as CanonicalTokenExploreEntry;
+    expect(publicExplorePresentationEntryV1(otherChain)).toBe(otherChain);
+  });
+
   it("requires both the exact token address and exact launch id", () => {
     const tokenAddress =
       "0x69D278968AbF120F878F2E1E016Ab615D3686c19" as const;

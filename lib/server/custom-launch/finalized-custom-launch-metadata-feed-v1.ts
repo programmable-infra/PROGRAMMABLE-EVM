@@ -530,6 +530,10 @@ export async function enrichRouterCustomSnapshotWithFinalizedMetadataV1<
     }));
     return Object.freeze({
       ...identity,
+      ...(metadata.tokenMetadataReadback.status === "matching" ? {
+        name: metadata.tokenMetadataReadback.declared.name,
+        symbol: metadata.tokenMetadataReadback.declared.symbol,
+      } : {}),
       ...(presentation.description ? { description: presentation.description } : {}),
       ...(presentation.imageUrl ? { imageUrl: presentation.imageUrl } : {}),
       ...(presentation.links.length > 0
