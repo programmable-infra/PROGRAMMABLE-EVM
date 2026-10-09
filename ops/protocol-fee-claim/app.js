@@ -14,6 +14,7 @@ import {
   ROUTER_CUSTOM_CLAIM_PROFILES,
   SELECTORS,
   TREASURY,
+  WALLET_CLAIM_BATCH_LIMIT,
   atomicCapabilityStatus,
   buildWalletSendCalls,
   confirmedBatchReceiptProof,
@@ -46,6 +47,7 @@ import {
   launchStampLogSetFingerprint,
   launchStampPoolReadData,
   normalizeBatchId,
+  nextWalletClaimBatch,
   metaMaskProviderFrom,
   parseCustomV2Release,
   poolManagerBalanceOfData,
@@ -74,6 +76,7 @@ const DEMO_MODE = new URLSearchParams(window.location.search).has("demo");
 const EVENT_LOG_CHUNK_SIZE = 10_000n;
 const MAX_ROUTER_LAUNCHES = 4_096;
 const MAX_BATCH_CALLS = 64;
+const CLAIM_PACKET_CURSOR_KEY = "programmable.ethereum.claim-packet-cursor.v1";
 const ROUTER_QUORUM_RPC_GROUPS = Object.freeze([
   Object.freeze([
     "https://mainnet.gateway.tenderly.co",
@@ -205,7 +208,8 @@ function loadConfirmedBatchLock() {
   try {
     const parsed = JSON.parse(stored);
     const batchId = normalizeBatchId(parsed.batchId);
-    const batch = normalizeStoredBatch(parsed.batch, batchId);
+    const requestId = normalizeBatchId(parsed.requestId ?? batchId);
+    const batch = normalizeStoredBatch(parsed.batch, requestId);
     const receipts =
       parsed.receipts === null
         ? null
@@ -230,10 +234,13 @@ function loadConfirmedBatchLock() {
       account: parsed.account.toLowerCase(),
       chainId: MAINNET_CHAIN_ID,
       batchId,
+      requestId,
       batch,
       phase: parsed.phase,
       receipts,
       failureStatus: parsed.failureStatus,
+      packetCursor: typeof parsed.packetCursor === "string" && parsed.packetCursor.length <= 512
+        ? parsed.packetCursor : null,
     };
   } catch {
     return invalidConfirmedBatchLock();
@@ -698,7 +705,8 @@ function statusLabel(claim) {
   if (claim.status === "claimed") return "Geclaimt";
   if (claim.status === "failed") return "Nicht verfügbar";
   if (state.confirmedBatch && claimHasOpenAmount(claim))
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (!hookVerified(claim)) return "Contract nicht verifiziert";
   if (!claim.recipientMatches) return "Falscher Empfänger";
   if (!claimHasOpenAmount(claim)) return "Nichts offen";
@@ -736,7 +744,8 @@ function customStatusLabel(launch) {
   if (launch.status === "claimed") return "Geclaimt";
   if (launch.status === "failed") return "Nicht verfügbar";
   if (state.confirmedBatch && classification === "ready")
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "no-market") return "Kein Fee-Markt";
@@ -787,7 +796,8 @@ function customV2StatusLabel(source) {
   if (source.status === "failed") return "Nicht verfügbar";
   const classification = customV2SourceClassification(source);
   if (state.confirmedBatch && classification === "ready")
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "quarantined") return "Nicht ausführbar";
@@ -833,7 +843,8 @@ function routerCustomStatusLabel(source) {
     ...current,
   });
   if (state.confirmedBatch && classification === "ready")
-    return "Bestätigt · Finalität ausstehend";
+    return state.confirmedBatch.phase === "confirmed"
+      ? "Bestätigt · Finalität ausstehend" : "Claim-Status wird geprüft";
   if (classification === "ready") return "Bereit";
   if (classification === "empty") return "Nichts offen";
   if (classification === "no-manual-claim")
@@ -1206,8 +1217,6 @@ function claimSafetyError({ ignoreConfirmedBatch = false } = {}) {
     return "Mindestens eine Classic- oder Stock-Bindung stimmt nicht";
   if (CLAIMS.some(({ id }) => state.claims.get(id)?.status === "failed"))
     return "Mindestens ein bekanntes Guthaben konnte nicht gelesen werden";
-  if (claimableClaims({ ignoreConfirmedBatch }).length > MAX_BATCH_CALLS)
-    return `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`;
   return null;
 }
 
@@ -1417,14 +1426,14 @@ function renderSummary() {
     elements.actionLabel.textContent = state.confirmedBatch.invalid
       ? "Claim-Status prüfen"
       : resumable
-        ? "Claim-Batch sicher fortsetzen"
+        ? "Claim-Status aktualisieren"
         : "Claim bereits bestätigt";
     elements.actionDetail.textContent = state.confirmedBatch.invalid
       ? "Lokale Sperre unvollständig · nichts erneut senden"
       : (state.confirmedBatch.failureStatus ?? 0) >= 600
         ? "Mögliche Teil-Ausführung muss onchain geprüft werden"
         : resumable
-          ? "Exakt dieselbe Batch-ID · kein zweiter Claim"
+          ? "Nur Statusabfrage · kein erneutes Senden"
           : `Neuer Scan erst nach finalisiertem Block ${highestConfirmedReceiptBlock()?.toString()}`;
     elements.action.disabled = state.busy || !resumable;
   } else if (scanNeedsRetry(verifiedHooks)) {
@@ -1447,10 +1456,6 @@ function renderSummary() {
     elements.actionLabel.textContent = "Quellenbindung prüfen";
     elements.actionDetail.textContent = "Eine Contract-Bindung konnte nicht verifiziert werden";
     elements.action.disabled = true;
-  } else if (claimable.length > MAX_BATCH_CALLS) {
-    elements.actionLabel.textContent = "Zu viele offene Claims";
-    elements.actionDetail.textContent = "Details prüfen";
-    elements.action.disabled = true;
   } else if (claimable.length === 0) {
     elements.actionLabel.textContent = "Fees aktualisieren";
     elements.actionDetail.textContent = "Aktuell nichts offen";
@@ -1464,9 +1469,14 @@ function renderSummary() {
     elements.actionDetail.textContent = "Gemeinsamer Claim nicht unterstützt";
     elements.action.disabled = true;
   } else {
-    elements.actionLabel.textContent = "Geprüfte Fees claimen";
-    const claimLabel = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
-    elements.actionDetail.textContent = `${claimLabel} · eine Bestätigung${excludedRouterClaims.length ? " · weitere Quellen ausgeschlossen" : ""}`;
+    const nextCount = Math.min(claimable.length, WALLET_CLAIM_BATCH_LIMIT);
+    const multipleBatches = nextCount < claimable.length;
+    elements.actionLabel.textContent = multipleBatches
+      ? "Nächstes Fee-Paket claimen" : "Geprüfte Fees claimen";
+    const claimLabel = multipleBatches
+      ? `${nextCount} von ${claimable.length} Claims · Rest nach Bestätigung und Finalisierung`
+      : `${nextCount} ${nextCount === 1 ? "Claim" : "Claims"} · eine Bestätigung`;
+    elements.actionDetail.textContent = `${claimLabel}${excludedRouterClaims.length ? " · weitere Quellen ausgeschlossen" : ""}`;
     elements.action.disabled = state.busy;
   }
 
@@ -2971,6 +2981,8 @@ async function reconcileConfirmedBatchLock() {
 
     try {
       await verifyCanonicalConfirmedBatchReceipts(lock.receipts);
+      if (lock.packetCursor)
+        window.localStorage.setItem(CLAIM_PACKET_CURSOR_KEY, lock.packetCursor);
       clearConfirmedBatchLock(lock.batchId);
     } catch {
       // A reorged, missing or divergent receipt remains locked until a later scan.
@@ -3255,11 +3267,13 @@ async function submitStoredBatchAndWait(initialLock) {
   const id = lock.batchId;
   try {
     const result = await request("wallet_sendCalls", [lock.batch]);
-    const returnedId = normalizeBatchId(result);
-    if (returnedId.toLowerCase() !== id.toLowerCase())
-      throw new Error(
-        "MetaMask hat eine abweichende Batch-ID geliefert. Claims bleiben gesperrt.",
-      );
+    // Some wallets replace the caller's ID. Track their returned ID while
+    // retaining the original request and never resubmit an uncertain outcome.
+    lock = {
+      ...lock,
+      requestId: lock.requestId ?? normalizeBatchId(lock.batch.id),
+      batchId: normalizeBatchId(result),
+    };
   } catch (error) {
     if (walletSendDefinitelyNotSubmitted(error)) {
       clearConfirmedBatchLock(id);
@@ -3288,17 +3302,13 @@ async function preflightWalletBatch(batch) {
 }
 
 async function preflightClaimBatch(claims) {
-  if (claims.length > MAX_BATCH_CALLS)
+  if (claims.length > WALLET_CLAIM_BATCH_LIMIT)
     throw new Error(
-      `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`,
+      `MetaMask unterstützt maximal ${WALLET_CLAIM_BATCH_LIMIT} Claims pro Bestätigung`,
     );
   const batch = buildWalletSendCalls(state.account, claims);
   await preflightWalletBatch(batch);
   return batch;
-}
-
-function walletCallKey({ to, data, value }) {
-  return `${to.toLowerCase()}:${data.toLowerCase()}:${value.toLowerCase()}`;
 }
 
 async function walletRecognizesStoredBatch(lock) {
@@ -3311,35 +3321,17 @@ async function walletRecognizesStoredBatch(lock) {
   }
 }
 
-async function validateStoredBatchForResubmission(lock) {
-  await refreshClaims();
-  await requireActiveRewardWallet(lock.account);
-  const safetyError = claimSafetyError({ ignoreConfirmedBatch: true });
-  if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
-
-  const currentClaims = claimableClaims({ ignoreConfirmedBatch: true });
-  const currentCalls =
-    currentClaims.length === 0
-      ? []
-      : buildWalletSendCalls(lock.account, currentClaims).calls;
-  const currentCallKeys = new Set(currentCalls.map(walletCallKey));
-  if (lock.batch.calls.some((call) => !currentCallKeys.has(walletCallKey(call))))
-    throw new Error(
-      "Der gespeicherte Claim ist nicht mehr Teil des aktuell verifizierten Fee-Inventars. Es wurde nichts gesendet.",
-    );
-
-  await preflightWalletBatch(lock.batch);
-  await requireActiveRewardWallet(lock.account);
-}
-
 async function claimAll() {
   const expectedAccount = await requireActiveRewardWallet();
   await refreshClaims();
   await requireActiveRewardWallet(expectedAccount);
   const safetyError = claimSafetyError();
   if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
-  const claims = claimableClaims();
-  if (claims.length === 0) return;
+  const allClaims = claimableClaims();
+  if (allClaims.length === 0) return;
+  // Validate uniqueness across the whole inventory, including later packets.
+  buildWalletSendCalls(expectedAccount, allClaims);
+  const claims = nextWalletClaimBatch(allClaims, window.localStorage.getItem(CLAIM_PACKET_CURSOR_KEY));
   requireAtomicClaimCapability(state.capability);
   state.busy = true;
   setError();
@@ -3364,6 +3356,7 @@ async function claimAll() {
         phase: "submitting",
         receipts: null,
         failureStatus: null,
+        packetCursor: claims.at(-1).id,
       };
       if (!saveConfirmedBatchLock(submissionLock, { requireEmpty: true }))
         throw new Error(
@@ -3377,10 +3370,8 @@ async function claimAll() {
     setStatus("Die ausgewählten geprüften Fees wurden geclaimt");
     await refreshClaims();
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Der Claim konnte nicht abgeschlossen werden";
+    const message = typeof error?.message === "string"
+      ? error.message : "Der Claim konnte nicht abgeschlossen werden";
     setError(
       /reject|denied|cancel/i.test(message)
         ? "Claim in MetaMask abgebrochen"
@@ -3404,9 +3395,9 @@ async function resumeStoredBatch() {
       await requireActiveRewardWallet(lock.account);
       if (lock.phase === "pending" || (await walletRecognizesStoredBatch(lock)))
         return waitForBatch(lock);
-      await validateStoredBatchForResubmission(lock);
-      setStatus("Der gespeicherte Claim-Batch wird mit derselben ID fortgesetzt");
-      return submitStoredBatchAndWait(lock);
+      throw new Error(
+        "MetaMask findet diesen Claim noch nicht. Bitte die Wallet-Aktivität prüfen. Es wird kein zweiter Claim gesendet.",
+      );
     });
     setStatus("Die ausgewählten geprüften Fees wurden geclaimt");
     await refreshClaims();
