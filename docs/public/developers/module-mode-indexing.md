@@ -4,7 +4,7 @@ description: Verify existing Native and Engine launches with their original sour
 
 # Native and Engine indexing
 
-This reference covers the earlier Native and Engine sources on Robinhood Chain, `eip155:4663`. For Foundation coins, use [Foundation indexing](https://programmable.market/docs/developers/foundation-indexing).
+This reference covers the earlier Native and Engine sources on Robinhood Chain, `eip155:4663`. For Foundation coins, use [Foundation indexing](https://programmable.market/docs/developers/indexing/foundation-indexing).
 
 Select the adapter by source version. Coins with and without modules use the same launch identity; the selected modules are configuration attached to that record.
 
