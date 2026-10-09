@@ -14,6 +14,7 @@ import {
   ROUTER_CUSTOM_CLAIM_PROFILES,
   SELECTORS,
   TREASURY,
+  WALLET_CLAIM_BATCH_LIMIT,
   atomicCapabilityStatus,
   buildWalletSendCalls,
   confirmedBatchReceiptProof,
@@ -46,6 +47,7 @@ import {
   launchStampLogSetFingerprint,
   launchStampPoolReadData,
   normalizeBatchId,
+  nextWalletClaimBatch,
   metaMaskProviderFrom,
   parseCustomV2Release,
   poolManagerBalanceOfData,
@@ -1206,8 +1208,6 @@ function claimSafetyError({ ignoreConfirmedBatch = false } = {}) {
     return "Mindestens eine Classic- oder Stock-Bindung stimmt nicht";
   if (CLAIMS.some(({ id }) => state.claims.get(id)?.status === "failed"))
     return "Mindestens ein bekanntes Guthaben konnte nicht gelesen werden";
-  if (claimableClaims({ ignoreConfirmedBatch }).length > MAX_BATCH_CALLS)
-    return `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`;
   return null;
 }
 
@@ -1447,10 +1447,6 @@ function renderSummary() {
     elements.actionLabel.textContent = "Quellenbindung prüfen";
     elements.actionDetail.textContent = "Eine Contract-Bindung konnte nicht verifiziert werden";
     elements.action.disabled = true;
-  } else if (claimable.length > MAX_BATCH_CALLS) {
-    elements.actionLabel.textContent = "Zu viele offene Claims";
-    elements.actionDetail.textContent = "Details prüfen";
-    elements.action.disabled = true;
   } else if (claimable.length === 0) {
     elements.actionLabel.textContent = "Fees aktualisieren";
     elements.actionDetail.textContent = "Aktuell nichts offen";
@@ -1464,9 +1460,14 @@ function renderSummary() {
     elements.actionDetail.textContent = "Gemeinsamer Claim nicht unterstützt";
     elements.action.disabled = true;
   } else {
-    elements.actionLabel.textContent = "Geprüfte Fees claimen";
-    const claimLabel = `${claimable.length} ${claimable.length === 1 ? "Claim" : "Claims"}`;
-    elements.actionDetail.textContent = `${claimLabel} · eine Bestätigung${excludedRouterClaims.length ? " · weitere Quellen ausgeschlossen" : ""}`;
+    const nextCount = nextWalletClaimBatch(claimable).length;
+    const multipleBatches = nextCount < claimable.length;
+    elements.actionLabel.textContent = multipleBatches
+      ? "Nächstes Fee-Paket claimen" : "Geprüfte Fees claimen";
+    const claimLabel = multipleBatches
+      ? `${nextCount} von ${claimable.length} Claims · Rest nach Bestätigung und Finalisierung`
+      : `${nextCount} ${nextCount === 1 ? "Claim" : "Claims"} · eine Bestätigung`;
+    elements.actionDetail.textContent = `${claimLabel}${excludedRouterClaims.length ? " · weitere Quellen ausgeschlossen" : ""}`;
     elements.action.disabled = state.busy;
   }
 
@@ -3288,9 +3289,9 @@ async function preflightWalletBatch(batch) {
 }
 
 async function preflightClaimBatch(claims) {
-  if (claims.length > MAX_BATCH_CALLS)
+  if (claims.length > WALLET_CLAIM_BATCH_LIMIT)
     throw new Error(
-      `Mehr als ${MAX_BATCH_CALLS} offene Claims passen nicht sicher in einen atomaren Batch`,
+      `MetaMask unterstützt maximal ${WALLET_CLAIM_BATCH_LIMIT} Claims pro Bestätigung`,
     );
   const batch = buildWalletSendCalls(state.account, claims);
   await preflightWalletBatch(batch);
@@ -3338,7 +3339,7 @@ async function claimAll() {
   await requireActiveRewardWallet(expectedAccount);
   const safetyError = claimSafetyError();
   if (safetyError) throw new Error(`${safetyError}. Claims bleiben gesperrt.`);
-  const claims = claimableClaims();
+  const claims = nextWalletClaimBatch(claimableClaims());
   if (claims.length === 0) return;
   requireAtomicClaimCapability(state.capability);
   state.busy = true;
@@ -3377,10 +3378,8 @@ async function claimAll() {
     setStatus("Die ausgewählten geprüften Fees wurden geclaimt");
     await refreshClaims();
   } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : "Der Claim konnte nicht abgeschlossen werden";
+    const message = typeof error?.message === "string"
+      ? error.message : "Der Claim konnte nicht abgeschlossen werden";
     setError(
       /reject|denied|cancel/i.test(message)
         ? "Claim in MetaMask abgebrochen"
