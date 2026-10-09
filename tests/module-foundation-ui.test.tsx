@@ -18,6 +18,17 @@ const descriptor: FoundationModuleDescriptor = { id: "technical.fixture.counter"
 const selected: FoundationModuleSelection = { id: descriptor.id, version: descriptor.version, digest: descriptor.digest, configuration: { recipient: address } };
 
 describe("Module foundation UI financial and lifecycle boundaries", () => {
+  it("shows an empty wallet immediately in both launch layouts without opening the wallet", () => {
+    for (const layout of ["studio", "form"] as const) for (const chainId of [1, 4663] as const) {
+      const chainName = chainId === 1 ? "Ethereum" : "Robinhood Chain";
+      const props = { layout, availability: { ...availability, chainId, chainName }, contextKey: `balance:${chainId}`, catalog: [], quoteAssets: [], ...actions };
+      expect(renderToStaticMarkup(<ModuleFoundationBuilder {...props} nativeBalance={0n} />)).toContain(`Not enough ETH on ${chainName}`);
+      expect(renderToStaticMarkup(<ModuleFoundationBuilder {...props} />)).not.toContain("Not enough ETH");
+      expect(renderToStaticMarkup(<ModuleFoundationBuilder {...props} nativeBalance={0n} walletAction={{ label: "Switch network", onClick: vi.fn() }} />)).not.toContain("Not enough ETH");
+    }
+    expect(actions.onPrepareLaunch).not.toHaveBeenCalled();
+    expect(actions.onConfirmLaunch).not.toHaveBeenCalled();
+  });
   it("keeps the pair-token option and optional wallet cap independently selectable in all four combinations", () => {
     const eth = { address: "0x2222222222222222222222222222222222222222" as const, chainId: 4663,
       symbol: "WETH", name: "Wrapped Ether", decimals: 18, supported: true, supportsNativeEth: true };

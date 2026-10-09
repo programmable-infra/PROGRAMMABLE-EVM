@@ -11,6 +11,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from "next/navigation";
 import { formatUnits, getAddress, keccak256, toHex, type Address, type Hex, type PublicClient } from "viem";
 import { ModuleFoundationBuilder } from "./module-foundation-builder";
+import { useFoundationLaunchBalance } from "./use-foundation-launch-balance";
 import { FoundationSessionStatus, useFoundationSession, type FoundationExecutionResult } from "./module-foundation-session";
 import { uploadModuleModeImage } from "./module-mode-wallet-state";
 import { bindFoundationCatalogV1 } from "@/lib/module-foundation/catalog";
@@ -63,6 +64,7 @@ export async function verifiedSavedFoundationLaunchUrl(client: PublicClient, sav
 export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: { layout?: "form" | "studio"; chainId?: FoundationChainId } = {}) {
   const profile = foundationChainProfile(chainId), FOUNDATION_INFRASTRUCTURE = profile.infrastructure, FOUNDATION_WETH = profile.wrappedEth.address;
   const router = useRouter(), session = useFoundationSession(undefined, chainId);
+  const launchBalance = useFoundationLaunchBalance(session.client, session.account, profile.name);
   const [changingNetwork, startNetworkChange] = useTransition();
   // Presentation metadata can share one HTTP batch; preparation uses the session's fresh client.
   const displayClient = useMemo(() => createFoundationClient({ batchRpc: true, chainId }), [chainId]);
@@ -148,6 +150,8 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
     const assertCurrent = () => { signal?.throwIfAborted(); session.assertCurrent(account, context); };
     assertCurrent();
     if (session.preparationBlocked) throw new Error(session.preparationBlocked);
+    await launchBalance.check(draft.initialBuy);
+    assertCurrent();
     const moduleErrors = foundationSelectionErrors(draft.modules, catalog);
     if (moduleErrors.length) throw new Error(moduleErrors.join(" "));
     // Reviewing a new draft acknowledges only the completed result currently shown.
@@ -275,7 +279,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
       </fieldset>
     } recoveryAction={inlineRecovery ? sessionStatus : undefined} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
-    catalog={catalog} quoteAssets={quotes} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
+    catalog={catalog} quoteAssets={quotes} nativeBalance={launchBalance.balance} onCheckFunding={launchBalance.check} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
     onWarmLaunch={session.account && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}
     onPrepareLaunch={prepare} onConfirmLaunch={async review => { const sequence = prepared.current.get(review);
       if (!sequence) throw new Error("Prepare this launch again with your current wallet."); session.assertCurrent(sequence.account, review.contextKey);
