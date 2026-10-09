@@ -10,7 +10,7 @@ export const MULTICALL = "0xcA11bde05977b3631167028862bE2a173976CA11";
 export const MULTICALL_HASH = "0xd5c15df687b16f2ff992fc8d767b4216323184a2bbc6ee2f9c398c318e770891";
 export const MANAGER = "0x8366a39CC670B4001A1121B8F6A443A643e40951";
 export const MANAGER_HASH = "0xbd3881180b547f5fe817545743cfb4343e96b1bc6640dcd70c106b0066e95626";
-export const RPC_URLS = ["https://rpc.mainnet.chain.robinhood.com", "https://rpc-robinhood.blockmachine.io"];
+export const RPC_URLS = ["/api/robinhood-rpc?provider=primary", "/api/robinhood-rpc?provider=secondary"];
 export const MAX_CLAIMS = 128;
 const MAX_AMOUNT = (1n << 127n) - 1n;
 const HASH = /^0x[0-9a-f]{64}$/i;
@@ -39,8 +39,21 @@ const HOOK_ABI = parseAbi(["function ledger() view returns (address)", "function
 const BACKING_ABI = parseAbi(["function balanceOf(address owner,uint256 id) view returns (uint256)"]);
 export const CLAIM_DATA = encodeFunctionData({ abi: LEDGER_ABI, functionName: "claimPlatform" });
 
-export function createClients() {
-  return RPC_URLS.map(url => createPublicClient({ transport: http(url, { timeout: 15000, retryCount: 1 }), batch: { multicall: false } }));
+export function pacedFetch(fetcher = fetch, intervalMs = 300) {
+  let next = 0;
+  return async (url, options) => {
+    const now = Date.now(), start = Math.max(now, next);
+    next = start + intervalMs;
+    if (start > now) await new Promise(resolve => setTimeout(resolve, start - now));
+    options?.signal?.throwIfAborted();
+    return fetcher(url, options);
+  };
+}
+
+export function createClients(origin = globalThis.location?.origin) {
+  if (!origin) throw new Error("Die Claim-Seite muss über ihren Webserver geöffnet werden.");
+  return RPC_URLS.map((url, index) => createPublicClient({ transport: http(new URL(url, origin).href,
+    { timeout: 20000, retryCount: 1, fetchFn: pacedFetch(fetch, index === 0 ? 1500 : 50) }), batch: { multicall: false } }));
 }
 
 export function parseReleases(history, active) {
@@ -108,8 +121,18 @@ async function readBoth(clients, calls, blockNumber) {
   return decoded.map((item, index) => decodeFunctionResult({ ...calls[index], data: item.returnData }));
 }
 
-async function logsInRange(client, release, fromBlock, toBlock) {
+export async function logsInRange(client, release, fromBlock, toBlock) {
   if (fromBlock > toBlock) return [];
+  // Use stable windows within the provider's limit instead of failed oversized requests.
+  const window = 1_000_000n;
+  if (toBlock - fromBlock + 1n > window) {
+    const logs = [];
+    for (let first = fromBlock; first <= toBlock; first += window) {
+      const last = first + window - 1n < toBlock ? first + window - 1n : toBlock;
+      logs.push(...await logsInRange(client, release, first, last));
+    }
+    return logs;
+  }
   const abi = FACTORY_ABIS[release.factoryVersion];
   const event = abi.find(item => item.type === "event");
   try {
@@ -156,7 +179,7 @@ export async function scanFees({ clients, releases, progress = () => {}, minimum
   ]);
   const groups = await mapLimit(releases, 4, async release => {
     progress("Launches werden geladen…");
-    const logs = await logsInRange(clients[0], release, release.startBlock, block.number);
+    const logs = await logsInRange(clients[1], release, release.startBlock, block.number);
     return logs.map(log => {
       need(!log.removed && log.blockHash && log.transactionHash && log.blockNumber >= release.startBlock &&
         log.blockNumber <= block.number && same(log.address, release.factory.address), "Ungültiger Launch-Eintrag.");
@@ -171,24 +194,41 @@ export async function scanFees({ clients, releases, progress = () => {}, minimum
     need(!identities.has(key) && BigInt(key) !== 0n, "Ein Gebührenkonto wurde doppelt gefunden.");
     identities.add(key);
   }
-  const checked = await mapLimit(launches, 4, async (launch, index) => {
-    progress("Gebühren werden geprüft… " + (index + 1) + "/" + launches.length);
-    // Verify each discovered event independently; the explorer and website lists are not claim authority.
+  await mapLimit(launches, 4, async launch => {
+    // Receipt validation checks event integrity. Both providers independently
+    // verify every immutable factory, hook and ledger binding below.
     const receipt = await clients[1].getTransactionReceipt({ hash: launch.log.transactionHash });
     need(receipt.status === "success" && same(receipt.blockHash, launch.log.blockHash) &&
       receipt.logs.some(log => log.logIndex === launch.log.logIndex && same(log.address, launch.log.address) &&
         same(log.data, launch.log.data) && serialize(log.topics) === serialize(launch.log.topics)),
     "Ein Launch konnte auf der Chain nicht bestätigt werden.");
-    const ledger = name => ({ address: launch.ledger, abi: LEDGER_ABI, functionName: name });
-    const hook = name => ({ address: launch.hook, abi: HOOK_ABI, functionName: name });
-    const values = await readBoth(clients, [
-      { address: launch.release.factory.address, abi: FACTORY_ABIS[launch.release.factoryVersion], functionName: "launchOf", args: [launch.token] },
-      ...["poolManager", "hook", "quote", "creator", "platformReceived", "platformClaimed", "outstandingBacking"].map(ledger),
-      { address: MANAGER, abi: BACKING_ABI, functionName: "balanceOf", args: [launch.ledger, BigInt(launch.quote)] },
-      ...["ledger", "initializer", "token", "quote"].map(hook),
-    ], block.number);
-    return validateLedger(launch, values);
   });
+  const batches = [];
+  for (let index = 0; index < launches.length; index += 6) batches.push(launches.slice(index, index + 6));
+  let verified = 0;
+  const checked = (await mapLimit(batches, 2, async batch => {
+    const descriptors = batch.map(launch => {
+      const ledger = name => ({ address: launch.ledger, abi: LEDGER_ABI, functionName: name });
+      const hook = name => ({ address: launch.hook, abi: HOOK_ABI, functionName: name });
+      return [
+        { address: launch.release.factory.address, abi: FACTORY_ABIS[launch.release.factoryVersion], functionName: "launchOf", args: [launch.token] },
+        ...["poolManager", "hook", "quote", "creator", "platformReceived", "platformClaimed", "outstandingBacking"].map(ledger),
+        { address: MANAGER, abi: BACKING_ABI, functionName: "balanceOf", args: [launch.ledger, BigInt(launch.quote)] },
+        ...["ledger", "initializer", "token", "quote"].map(hook),
+      ];
+    });
+    const values = await readBoth(clients, descriptors.flat(), block.number);
+    let offset = 0;
+    const checked = batch.map((launch, index) => {
+      const count = descriptors[index].length;
+      const result = validateLedger(launch, values.slice(offset, offset + count));
+      offset += count;
+      return result;
+    });
+    verified += checked.length;
+    progress("Gebühren werden geprüft… " + verified + "/" + launches.length);
+    return checked;
+  })).flat();
   const claims = checked.filter(item => item.amount > 0n);
   need(claims.length <= MAX_CLAIMS, "Mehr als 128 Gebührenkonten sind offen. Ein größerer Sammelclaim muss vorbereitet werden.");
   const assets = await mapLimit([...new Set(claims.map(item => getAddress(item.quote)))], 4, async address => {

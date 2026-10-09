@@ -3,6 +3,8 @@
   "chainId": "1",
   "rewardWallet": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
   "execution": {
+    "claimScope": "verified_sources_only",
+    "unsupportedSourceBehavior": "visible_excluded_without_blocking_verified_sources",
     "method": "wallet_sendCalls",
     "atomicRequired": true,
     "preflightEveryCallImmediatelyBeforeWallet": true,
@@ -28,7 +30,7 @@
     "futureRouterLaunchesAutoDiscovered": true,
     "classicClaimPolicy": {
       "knownHook": "covered_by_verified_aggregate_hook",
-      "unknownHook": "visible_and_block_all_claims"
+      "unknownHook": "visible_excluded_from_verified_scope"
     },
     "maximumScannedLaunches": 4096,
     "logQuorum": {
@@ -160,7 +162,7 @@
         ]
       }
     ],
-    "unknownClaimProfile": "visible_and_block_all_claims"
+    "unknownClaimProfile": "visible_excluded_from_verified_scope"
   },
   "classic": {
     "claimMode": "one_aggregate_claim_per_hook_version",
