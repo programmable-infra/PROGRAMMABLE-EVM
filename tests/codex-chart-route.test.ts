@@ -26,6 +26,16 @@ describe("verified chart identity", () => {
     for (const chain of [1,4663]) expect((await GET(new Request(`https://example.com/api/market/chart?token=${address}&chain=${chain}`))).status).toBe(404);
     expect(mocks.chart).not.toHaveBeenCalled();
   });
+  it("does not report a missing launch when its index is unavailable", async () => {
+    mocks.robinhood.mockResolvedValue({ token: null, status: "unavailable" });
+    mocks.ethereum.mockResolvedValue({ entries: [], status: "partial" });
+    for (const chain of [1, 4663]) {
+      const response = await GET(new Request(`https://example.com/api/market/chart?token=${address}&chain=${chain}`));
+      expect(response.status).toBe(503);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+    expect(mocks.chart).not.toHaveBeenCalled();
+  });
   it("returns bounded cacheable chart data and hides provider failures", async () => {
     mocks.robinhood.mockResolvedValue({ token: { tokenAddress: address } });
     mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1D", source: "codex", points: [{ time: 1, price: 1 }] });
