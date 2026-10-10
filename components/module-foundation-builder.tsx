@@ -13,6 +13,7 @@ import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { sha256, type Address, type Hex } from "viem";
 import { prepareTokenImage, isProgrammableTokenImageUrl } from "@/lib/token-image";
 import { validateModuleSocialLinks, type ModuleSocialKind, type ModuleSocialLinks } from "@/lib/module-mode/token-metadata";
+import { foundationInitialBuyError } from "@/lib/module-foundation/first-buy";
 import { foundationDecimalError, foundationReviewError, foundationSelectionErrors, isFoundationCreatorFee, type FoundationAvailability, type FoundationImage, type FoundationLaunchDraft, type FoundationLaunchReview, type FoundationModuleDescriptor, type FoundationModuleSelection, type FoundationQuoteAsset, type FoundationTransactionResult, type FoundationWalletAction } from "@/lib/module-foundation/ui-types";
 import { foundationCreatorFeesEqual } from "@/lib/module-foundation/creator-fees";
 import { foundationChainProfile } from "@/lib/module-foundation/chains";
@@ -63,6 +64,7 @@ export interface ModuleFoundationBuilderProps {
   /** Keep editable fields and image bytes across navigation in this browser tab. */
   persistDraft?: boolean;
   suggestedInitialBuy?: string;
+  minimumInitialBuy?: string;
   launchProgress?: string;
   /** Host-owned durable wallet operation guard, including uncertain submissions. */
   submissionBlocked?: string;
@@ -94,11 +96,11 @@ function initialForm(initial: Partial<FoundationLaunchDraft> | undefined, quotes
     initialBuy: initial?.initialBuy ?? "", ...(initial?.quoteValuation !== undefined ? { quoteValuation: initial.quoteValuation } : {}), additionalLiquidity: "0", modules: initial?.modules ?? EMPTY_MODULES };
 }
 
-export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, recoveryAction, networkControl, availability, contextKey, catalog, quoteAssets, nativeBalance, onCheckFunding, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, persistDraft = false, suggestedInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
+export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction, recoveryAction, networkControl, availability, contextKey, catalog, quoteAssets, nativeBalance, onCheckFunding, onResolveQuote, onResolveSuggestedInitialBuy, onUploadImage, onPrepareLaunch, onWarmLaunch, onConfirmLaunch, onRefreshResult, onBack, onRetryAvailability, walletAction, initialDraft, persistDraft = false, suggestedInitialBuy, minimumInitialBuy, launchProgress, submissionBlocked }: ModuleFoundationBuilderProps) {
   const [restored] = useState(() => persistDraft && !initialDraft ? readFoundationLaunchDraft(availability.chainId) : null);
   const [draft, setDraft] = useState<EditableDraft>(() => restored?.draft ?? initialForm(initialDraft, quoteAssets, availability.chainId));
   const [buyEdited, setBuyEdited] = useState(restored?.buyEdited ?? (initialDraft?.initialBuy !== undefined));
-  const initialBuy = draft.quoteValuation !== undefined ? "0" : buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
+  const initialBuy = buyEdited ? draft.initialBuy : suggestedInitialBuy ?? "";
   const [localImage, setLocalImage] = useState<LocalImage | null>(null);
   const [imageRestored, setImageRestored] = useState(!restored?.localImage);
   const [imagePreparing, setImagePreparing] = useState(false);
@@ -267,7 +269,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
     if (draft.image && !isFoundationDefaultImage(draft.image) && !isProgrammableTokenImageUrl(draft.image.url)) next.image = "Choose an image to save with this launch.";
     if (!selectedQuote?.supported || selectedQuote.chainId !== availability.chainId || (!customQuote && !selectedQuote.supportsNativeEth)) next.quoteAsset = selectedQuote?.reason ?? (customQuote ? /^0x[0-9a-fA-F]{40}$/.test(quoteAddress) ? "This token could not be verified. Try launching again." : `Enter a token contract address on ${availability.chainName}.` : "ETH pairing could not be verified. Try again.");
     if (!isFoundationCreatorFee(draft.creatorFeeBps)) next.creatorFeeBps = "Choose a whole percentage from 0% to 10%.";
-    const buyError = foundationDecimalError(buyAmount, 18);
+    const buyError = foundationInitialBuyError(buyAmount, minimumInitialBuy);
     if (buyError) next.initialBuy = buyError;
     if (draft.quoteValuation !== undefined) {
       const priceError = foundationDecimalError(draft.quoteValuation, selectedQuote?.decimals ?? 18, false);
@@ -520,7 +522,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
                   <Field id="foundation-quote-valuation" label={`Starting market cap · ${quoteSymbol}`} error={errors.quoteValuation}>
                     <input id="foundation-quote-valuation" name="quoteValuation" inputMode="decimal" autoComplete="off" value={draft.quoteValuation} placeholder="Enter a value" aria-invalid={Boolean(errors.quoteValuation) || undefined} aria-describedby={errors.quoteValuation ? "foundation-quote-valuation-error foundation-quote-value-help" : "foundation-quote-value-help"} onChange={event => update("quoteValuation", event.target.value)} />
                   </Field>
-                  <p id="foundation-quote-value-help" className={styles.help}>Total supply value in {quoteSymbol}. No deposit or first buy.</p>
+                  <p id="foundation-quote-value-help" className={styles.help}>Total supply value in {quoteSymbol}. The ETH first buy is included in your launch.</p>
                 </> : null}
               </section> : null}
               {draft.modules.length ? <div className={styles.catalog}>{catalog.filter(descriptor => draft.modules.some(item => item.id === descriptor.id)).map(descriptor => {
@@ -530,7 +532,7 @@ export function ModuleFoundationBuilder({ layout = "form", previousLaunchAction,
               {errors.modules ? <p className={styles.error} role="alert">{errors.modules}</p> : null}
               <div className={styles.feesBuyRow}>
                 <CreatorFeeField value={draft.creatorFeeBps} error={errors.creatorFeeBps} onChange={value => update("creatorFeeBps", value)} />
-                <Field label="First buy" id="foundation-initial-buy" error={errors.initialBuy}><div className={styles.amountInput}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" required disabled={draft.quoteValuation !== undefined} value={initialBuy} placeholder="ETH amount" aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} onChange={event => update("initialBuy", event.target.value)} /><span>ETH</span></div></Field>
+                <Field label="First buy · min. $2" id="foundation-initial-buy" error={errors.initialBuy}><div className={styles.amountInput}><input id="foundation-initial-buy" name="initialBuy" inputMode="decimal" autoComplete="off" required value={initialBuy} placeholder="ETH amount" aria-invalid={Boolean(errors.initialBuy) || undefined} aria-describedby={errors.initialBuy ? "foundation-initial-buy-error" : undefined} onChange={event => update("initialBuy", event.target.value)} /><span>ETH</span></div></Field>
               </div>
             </section>
           </fieldset>

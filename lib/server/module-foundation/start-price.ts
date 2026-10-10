@@ -11,6 +11,6 @@ export async function readFoundationStartPrice(quote: { address: Address; decima
     if (isFoundationQuotePrice(result)) throw new Error("Expected a verified USD reference.");
     return result;
   } catch {
-    throw new Error("A current price for this quote token is unavailable. In Any Quote Pool, set the starting value in the token to launch without a first buy.");
+    throw new Error("A current price for this quote token is unavailable. Set the starting value in quote tokens or choose another pool pair.");
   }
 }

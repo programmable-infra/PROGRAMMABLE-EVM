@@ -6,22 +6,24 @@ import { foundationV2Fixture } from "./module-foundation-v2-fixture";
 const readQuote = vi.hoisted(() => vi.fn());
 const readSuggestedBuy = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/module-foundation/client", () => ({ readFoundationQuote: readQuote }));
-vi.mock("@/lib/module-foundation/first-buy", () => ({ readFoundationSuggestedBuy: readSuggestedBuy }));
+vi.mock("@/lib/module-foundation/first-buy", () => ({ readFoundationFirstBuyPolicy: readSuggestedBuy }));
 const client = { chain: { id: 4663 } } as PublicClient;
 const address = "0x1111111111111111111111111111111111111111";
 const quote = { address, name: "Quote", symbol: "Q", decimals: 18, balance: null, codeHash: `0x${"1".repeat(64)}` };
 
-beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); readQuote.mockReset().mockResolvedValue(quote); readSuggestedBuy.mockReset().mockResolvedValue("0.001"); });
+beforeEach(() => { vi.resetModules(); vi.useFakeTimers(); readQuote.mockReset().mockResolvedValue(quote); readSuggestedBuy.mockReset().mockResolvedValue({ minimumEth: "0.0006", suggestedEth: "0.001" }); });
 afterEach(() => vi.useRealTimers());
 
 describe("Foundation presentation reads", () => {
   it("joins first-buy reads and reuses the suggestion briefly across route visits", async () => {
-    const { readFoundationSuggestedBuyForDisplay } = await import("@/lib/module-foundation/launch-display-cache");
+    const { readFoundationSuggestedBuyForDisplay, readFoundationFirstBuyPolicyForDisplay } = await import("@/lib/module-foundation/launch-display-cache");
     const first = readFoundationSuggestedBuyForDisplay(client);
     const second = readFoundationSuggestedBuyForDisplay({ chain: { id: 4663 } } as PublicClient);
     expect(second).toBe(first);
     await expect(first).resolves.toBe("0.001");
     expect(readSuggestedBuy).toHaveBeenCalledExactlyOnceWith(client);
+    await expect(readFoundationFirstBuyPolicyForDisplay(client)).resolves.toEqual({ minimumEth: "0.0006", suggestedEth: "0.001" });
+    expect(readSuggestedBuy).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(29_999);
     await readFoundationSuggestedBuyForDisplay(client);
     expect(readSuggestedBuy).toHaveBeenCalledOnce();
@@ -35,7 +37,7 @@ describe("Foundation presentation reads", () => {
     readSuggestedBuy.mockRejectedValueOnce(new Error("Unavailable"));
     await expect(readFoundationSuggestedBuyForDisplay(client)).rejects.toThrow("Unavailable");
     await expect(readFoundationSuggestedBuyForDisplay(client)).resolves.toBe("0.001");
-    readSuggestedBuy.mockResolvedValueOnce("0.0011");
+    readSuggestedBuy.mockResolvedValueOnce({ minimumEth: "0.0007", suggestedEth: "0.0011" });
     await expect(readFoundationSuggestedBuyForDisplay({ chain: { id: 1 } } as PublicClient)).resolves.toBe("0.0011");
     await expect(readFoundationSuggestedBuyForDisplay(client)).resolves.toBe("0.001");
     expect(readSuggestedBuy).toHaveBeenCalledTimes(3);
