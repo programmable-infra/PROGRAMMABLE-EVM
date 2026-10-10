@@ -27,9 +27,25 @@ describe("Shared chart navigation cache", () => {
     await expect(cache.load(token, 4663, "1D")).rejects.toThrow();
     for (let index = 0; index < 3; index++) await expect(cache.load(token, 4663, "1D")).rejects.toThrow();
     expect(cache.peek(token, 4663, "1D")).toEqual(chart()); expect(fetcher).toHaveBeenCalledTimes(2);
-    now += 60_001; fetcher.mockResolvedValueOnce(Response.json(chart("1D", now)));
+    expect(cache.waitMs(token, 4663, "1D")).toBe(5_000);
+    now += 5_001; fetcher.mockResolvedValueOnce(Response.json(chart("1D", now)));
     await expect(cache.load(token, 4663, "1D")).resolves.toEqual(chart("1D", now));
     expect(fetcher).toHaveBeenCalledTimes(3);
+  });
+  it("polls empty charts sooner and backs off repeated failures without discarding history", async () => {
+    let now = time;
+    const fetcher = vi.fn().mockResolvedValueOnce(Response.json({ ...chart(), points: [] }));
+    const cache = createCodexChartCache({ fetcher, now: () => now });
+    await cache.load(token, 4663, "1D");
+    expect(cache.waitMs(token, 4663, "1D")).toBe(10_000);
+    now += 10_001;
+    fetcher.mockRejectedValue(new Error("Unavailable"));
+    for (const delay of [5_000, 10_000, 20_000, 30_000, 30_000]) {
+      await expect(cache.load(token, 4663, "1D")).rejects.toThrow();
+      expect(cache.waitMs(token, 4663, "1D")).toBe(delay);
+      now += delay + 1;
+    }
+    expect(cache.peek(token, 4663, "1D")?.points).toEqual([]);
   });
   it("isolates tokens, networks and periods and rejects malformed or stale values", async () => {
     for (const invalid of [

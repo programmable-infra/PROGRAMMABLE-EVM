@@ -15,10 +15,18 @@ export async function GET(request: Request) {
   try {
     if (chainId === 4663) {
       const record = await readRobinhoodToken(address);
+      if (!record.token && record.status === "unavailable") throw new Error("Launch index unavailable");
       if (!record.token) return NextResponse.json({ error: "Launch not found" }, { status: 404 });
     }
-    if (chainId === 1 && !(await readEthereumExploreCatalog()).entries.some(token => token.tokenAddress.toLowerCase() === address)) return NextResponse.json({ error: "Launch not found" }, { status: 404 });
+    if (chainId === 1) {
+      const catalog = await readEthereumExploreCatalog();
+      if (!catalog.entries.some(token => token.tokenAddress.toLowerCase() === address)) {
+        if (catalog.status === "unavailable" || catalog.status === "partial") throw new Error("Launch index unavailable");
+        return NextResponse.json({ error: "Launch not found" }, { status: 404 });
+      }
+    }
     const chart = await readCodexChart(address, chainId, range as CodexChartRange);
-    return NextResponse.json(chart, { headers: { "Cache-Control": `public, max-age=15, s-maxage=${CODEX_CHART_RANGES[range as CodexChartRange].refreshMs / 1_000}, stale-while-revalidate=30` } });
+    const refreshSeconds = chart.points.length ? CODEX_CHART_RANGES[range as CodexChartRange].refreshMs / 1_000 : 5;
+    return NextResponse.json(chart, { headers: { "Cache-Control": `public, max-age=${Math.min(15, refreshSeconds)}, s-maxage=${refreshSeconds}, stale-while-revalidate=30` } });
   } catch { return NextResponse.json({ error: "Price history is temporarily unavailable" }, { status: 503, headers: { "Cache-Control": "no-store" } }); }
 }

@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseCodexBars } from "@/lib/market/codex";
+const cacheMock = vi.hoisted(() => ({ calls: [] as unknown[][] }));
 vi.mock("server-only", () => ({}));
-vi.mock("next/cache", () => ({ unstable_cache: (fn: unknown) => fn }));
+vi.mock("next/cache", () => ({ unstable_cache: (fn: (...args: unknown[]) => unknown) => (...args: unknown[]) => {
+  cacheMock.calls.push(args); return fn(...args);
+} }));
 let readCodexChart: typeof import("@/lib/server/codex-market").readCodexChart;
 let readCodexMarkets: typeof import("@/lib/server/codex-market").readCodexMarkets;
 const address = `0x${"ab".repeat(20)}`, poolId = `0x${"ef".repeat(32)}`;
 beforeEach(async () => {
   vi.resetModules(); vi.useFakeTimers({ now: new Date("2026-10-03T09:30:00Z") });
+  cacheMock.calls.length = 0;
   ({ readCodexChart, readCodexMarkets } = await import("@/lib/server/codex-market"));
 });
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); vi.useRealTimers(); });
@@ -15,6 +19,16 @@ const pool = (overrides = {}) => ({ address: poolId, networkId: 4663, token0: `0
 const row = () => ({ token: { address, networkId: 4663 }, priceUSD: "0.001", marketCap: "1000000", circulatingMarketCap: "500000", liquidity: "215595", totalLiquidityUsd: "2027259", volume24: "0", change24: "-0.05" });
 
 describe("Codex price history", () => {
+  it("keeps a stable shared-cache identity across refresh windows", async () => {
+    vi.stubEnv("CODEX_API_KEY", "test-private-key");
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ data: { getTokenBars: bars({
+      t: [Math.floor(Date.now() / 1000) - 60], c: [.001],
+    }) } })));
+    await readCodexChart(address, 4663, "1D");
+    vi.setSystemTime(Date.now() + 60_000);
+    await readCodexChart(address, 4663, "1D");
+    expect(cacheMock.calls).toEqual([[address, 4663, "1D"], [address, 4663, "1D"]]);
+  });
   it("does not show unknown circulating supply as zero market cap when the provider has a total-supply valuation", async () => {
     vi.stubEnv("CODEX_API_KEY", "test-private-key");
     const fetcher = vi.fn().mockResolvedValue(Response.json({ data: { filterTokens: { results: [{ ...row(), circulatingMarketCap: "0" }] }, filterPairs: { results: [] } } }));

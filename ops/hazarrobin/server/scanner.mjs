@@ -6,7 +6,7 @@ import { createFoundationScanner } from './foundation.mjs';
 import { scanLegacyEthereum } from './legacy-ethereum.mjs';
 import { executableClaims } from './claimability.mjs';
 import { immutablePoolFeeRequiredAddresses, proveImmutablePoolFeeRuntime, ethereumNative30RequiredAddressesV1, proveEthereumNative30RuntimeV1 } from '../vendor/native-proofs.mjs';
-import { rpcClients, checkpoint, pin, readBoth, mapLimit, rangeLogs, same, need, json, MULTICALL, MULTICALL_HASH } from './rpc.mjs';
+import { rpcClients, checkpoint, pin, readBoth, mapLimit, recoverRpcRead, rangeLogs, same, need, json, MULTICALL, MULTICALL_HASH } from './rpc.mjs';
 import { LAUNCH_STAMP_TOPICS, reduceLaunchStampLogs } from '../vendor/logic.mjs';
 
 export const PROJECT_WALLETS=['0xD88539d3c4C460136a733A3Fd60cf6BF269079da','0x39544A7023081B56D7405c1af0bFaf72da7e24F6','0x4957f49620AFf3Adbbe8195a4f633E49cc93376c'];
@@ -52,10 +52,10 @@ async function ethereumDiscovery(clients, block, abis, progress=()=>{}) {
   })).flat();
 }
 
-export async function scanFoundation(chainId, clients, progress) {
+export async function scanFoundation(chainId, clients, progress, onDiscovered) {
   const manager=chainId===1?deployments.ethereum.contracts.poolManager:deployments.robinhoodCustom.contracts.poolManager;
   const scanner=createFoundationScanner({chainId,manager,lag:chainId===1?2:16});
-  const result=await scanner.scanFees({clients,releases:chainId===4663?scanner.parseReleases(deployments.foundation):[],progress,
+  const result=await scanner.scanFees({clients,releases:chainId===4663?scanner.parseReleases(deployments.foundation):[],progress,onDiscovered,
     ...(chainId===1?{discover:(c,b,a)=>ethereumDiscovery(c,b,a,progress)}:{})});
   const assets=new Map(result.assets.map(a=>[a.address.toLowerCase(),a]));
   return {claims:result.claims.map(c=>descriptor({chainId,to:c.ledger,data:selectors.platform,recipient:PROJECT_WALLETS[0],amount:c.amount,
@@ -146,18 +146,19 @@ export async function scanEcosystem(chainId,progress=()=>{},minimumBlock=0n) {
   need(block.number>=minimumBlock,'Der neue Gebührenstand wird noch übernommen. Bitte erneut scannen.');
   await pin(pair,{address:MULTICALL,runtimeCodeHash:MULTICALL_HASH},block.number);
   const results=[];const issues=[];
-  const run=async(label,fn)=>{progress(label);try{const result=await fn();results.push(result);return result;}catch(e){const message=cleanError(e);issues.push({source:label,message});progress(label+': '+message);return null;}};
+  const run=async(label,fn)=>{progress(label);try{const result=await recoverRpcRead(fn,()=>progress(label+': Verbindung wird erneut geprüft…'));results.push(result);return result;}catch(e){const message=cleanError(e);issues.push({source:label,message});progress(label+': '+message);return null;}};
   // Foundation provenance and balances are already verified independently. Do
   // not re-read hundreds of the same tokens through the older custom adapter.
-  let foundation,legacy;
+  let foundation,legacy,discovered=[];
+  const capture=launches=>{discovered=launches;};
   if(chainId===1){
-    foundation=await run('Module Mode',()=>scanFoundation(chainId,pair,progress));
-    legacy=await run('Frühere Launch-Versionen',()=>scanLegacyEthereum({clients,progress,balanceBlockNumber:block.number,excludedTokens:new Set((foundation?.coveredTokens??[]).map(t=>t.toLowerCase()))}));
+    foundation=await run('Module Mode',()=>scanFoundation(chainId,pair,progress,capture));
+    legacy=await run('Frühere Launch-Versionen',()=>scanLegacyEthereum({clients,progress,balanceBlockNumber:block.number,excludedTokens:new Set(discovered.map(l=>l.token.toLowerCase()))}));
   }else [foundation,legacy]=await Promise.all([
-    run('Module Mode',()=>scanFoundation(chainId,pair,progress)),run('Frühere Launch-Versionen',()=>scanHistoricalRobinhood(pair,block)),
+    run('Module Mode',()=>scanFoundation(chainId,pair,progress,capture)),run('Frühere Launch-Versionen',()=>scanHistoricalRobinhood(pair,block)),
   ]);
   const candidates=chainId===1?legacy?.launches:await run('Custom-Launch-Historie',async()=>({launches:await robinhoodHooks(pair,block),claims:[],unsupported:[]}));
-  const knownHooks=new Set((foundation?.coveredHooks??[]).map(h=>h.toLowerCase()));
+  const knownHooks=new Set(discovered.map(l=>l.hook.toLowerCase()));
   const list=(chainId===1?(candidates??[]):(candidates?.launches??[])).filter(c=>!knownHooks.has(c.hook.toLowerCase())&&c.claimMode!=='covered-by-known-hook');
   const native=await run('Custom Launches',()=>scanNativeVaults(chainId,pair,block,list,progress));
   const claims=new Map();for(const result of results)for(const raw of result.claims??[]){
@@ -169,9 +170,9 @@ export async function scanEcosystem(chainId,progress=()=>{},minimumBlock=0n) {
     else need(json(claims.get(c.id))===json(c),'Ein Claim wurde widersprüchlich ermittelt.');
   }
   const historicalHooks=deployments.legacy.flatMap(r=>[r.contracts.hook?.address,r.contracts.sharedHook?.address].filter(Boolean));
-  const covered=new Set([...(native?.covered??[]),...(foundation?.coveredHooks??[]),...historicalHooks,
+  const covered=new Set([...(native?.covered??[]),...discovered.map(l=>l.hook),...historicalHooks,
     '0x720e649549F7BC2118aCBA9F4C9ae6fCC7586080'].map(a=>a.toLowerCase()));
-  const unsupported=(chainId===1?(legacy?.unsupported??[]):(native?.unsupported??[])).filter(x=>!covered.has((x.hook??x).toLowerCase()));
+  const unsupported=(!foundation&&discovered.length===0?[]:(chainId===1?(legacy?.unsupported??[]):(native?.unsupported??[]))).filter(x=>!covered.has((x.hook??x).toLowerCase()));
   // Unknown custom adapters stay visible; a scan failure must never masquerade as zero fees.
   const latest=await checkpoint(pair,chainId);
   const canonical=await pair[0].getBlock({blockNumber:block.number});need(same(canonical.hash,block.hash),'Scan-Block hat sich geändert.');

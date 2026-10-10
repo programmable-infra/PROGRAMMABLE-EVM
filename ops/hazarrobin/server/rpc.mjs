@@ -68,9 +68,33 @@ export async function checkpoint(clients, chainId) {
   return {number,hash:blocks[0].hash};
 }
 export async function mapLimit(items, limit, action) {
-  const output=new Array(items.length); let index=0;
-  await Promise.all(Array.from({length:Math.min(items.length,limit)},async()=>{while(index<items.length){const i=index++;output[i]=await action(items[i],i);}}));
+  const output=new Array(items.length); let index=0, failed=false, failure;
+  await Promise.all(Array.from({length:Math.min(items.length,limit)},async()=>{
+    while(!failed&&index<items.length){
+      const i=index++;
+      try{output[i]=await action(items[i],i);}catch(error){if(!failed){failed=true;failure=error;}}
+    }
+  }));
+  if(failed)throw failure;
   return output;
+}
+
+/** Retry only interrupted reads. Contract reverts and failed proofs stay errors. */
+export async function recoverRpcRead(read, onRetry=()=>{}) {
+  try{return await read();}catch(error){
+    let current=error, transient=false;
+    for(let i=0;current&&i<8;i++,current=current.cause){
+      if(['ContractFunctionRevertedError','ExecutionRevertedError'].includes(current.name))throw error;
+      const status=Number(current.status??current.statusCode);
+      if([408,429,500,502,503,504].includes(status)||[-32005,-32016].includes(current.code)
+        ||['HttpRequestError','TimeoutError','SocketClosedError'].includes(current.name)
+        ||(current instanceof TypeError&&/fetch|network/i.test(current.message)))transient=true;
+    }
+    if(!transient)throw error;
+    onRetry();
+    await new Promise(resolve=>setTimeout(resolve,600));
+    return read();
+  }
 }
 export async function rangeLogs(client, filter, from, to, window=10000n) {
   const ranges=[];for(let first=from;first<=to;first+=window) ranges.push([first,first+window-1n<to?first+window-1n:to]);

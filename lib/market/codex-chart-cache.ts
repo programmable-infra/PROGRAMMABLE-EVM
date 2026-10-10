@@ -10,7 +10,7 @@ export function acceptsCodexChart(value: unknown, token: string, chain: number, 
     && typeof point.price === "number" && Number.isFinite(point.price) && point.price > 0);
 }
 
-type Entry = { chart?: CodexChart; nextAttemptAt: number; failed: boolean };
+type Entry = { chart?: CodexChart; nextAttemptAt: number; failed: boolean; failures: number };
 export function createCodexChartCache({ fetcher = (input, init) => fetch(input, init), now = Date.now }: {
   fetcher?: typeof fetch; now?: () => number;
 } = {}) {
@@ -44,10 +44,13 @@ export function createCodexChartCache({ fetcher = (input, init) => fetch(input, 
           if (!response.ok) throw new Error("Price history unavailable");
           const value: unknown = await response.json();
           if (!acceptsCodexChart(value, token, chain, range, now())) throw new Error("Price history unavailable");
-          remember(key, { chart: value, failed: false, nextAttemptAt: now() + CODEX_CHART_RANGES[range].refreshMs });
+          const refreshMs = value.points.length ? CODEX_CHART_RANGES[range].refreshMs : 10_000;
+          remember(key, { chart: value, failed: false, failures: 0, nextAttemptAt: now() + refreshMs });
           return value;
         } catch {
-          remember(key, { chart: previous?.chart, failed: true, nextAttemptAt: now() + CODEX_CHART_RANGES[range].refreshMs });
+          const failures = (previous?.failures ?? 0) + 1;
+          remember(key, { chart: previous?.chart, failed: true, failures,
+            nextAttemptAt: now() + Math.min(5_000 * 2 ** Math.min(failures - 1, 3), 30_000) });
           throw new Error("Price history unavailable");
         } finally { clearTimeout(timeout); pending.delete(key); }
       });
