@@ -648,8 +648,15 @@ export function createRouterCustomIdentitySnapshotReaderV1(
               "Router Custom snapshots conflict at one boundary",
             );
           }
+          // The current source has independently confirmed this exact boundary
+          // and every immutable identity. Keep stable saved proof bytes without
+          // misreporting a successful fresh observation as a source outage.
           return cacheSnapshot(
-            lastKnownGoodRouterCustomSnapshotV1(previous),
+            Object.freeze({
+              ...previous,
+              status: snapshot.status,
+              generatedAt: snapshot.generatedAt,
+            }),
           );
         }
         if (
