@@ -391,9 +391,9 @@ describe("finalized Router Custom public projection", () => {
     });
   });
 
-  it("keeps one durable boundary when only finality observation fields drift", async () => {
+  it.each(["current", "last-known-good"] as const)("keeps stable proof bytes and %s freshness when only finality observations drift", async (status) => {
     const durable = routerCustomIdentitySnapshotFromSourceV1(source());
-    const reobservedSource = source([
+    const reobservedSource = { ...source([
       {
         ...customGraphToken,
         launchStampProvenance: {
@@ -403,7 +403,7 @@ describe("finalized Router Custom public projection", () => {
         },
       },
       stampedClassicToken,
-    ]);
+    ]), status, generatedAt: "2026-08-25T06:00:30.000Z" };
     const reobserved = routerCustomIdentitySnapshotFromSourceV1(
       reobservedSource,
     );
@@ -425,7 +425,8 @@ describe("finalized Router Custom public projection", () => {
       durable,
     )).toBe(true);
     await expect(reader()).resolves.toMatchObject({
-      status: "last-known-good",
+      status,
+      generatedAt: reobservedSource.generatedAt,
       identityCommitment: durable.identityCommitment,
       entries: [customGraphExploreEntry],
     });

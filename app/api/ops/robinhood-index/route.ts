@@ -31,7 +31,16 @@ export async function GET(request: Request) {
     catch { /* A failed Custom source must not suppress independent Module Mode verification. */ }
     let launchProjections: Awaited<ReturnType<typeof syncLaunchProjectionIndex>> | { status: "unavailable" } = { status: "unavailable" };
     const projectionBudget = Math.min(45000, Math.max(1, 165000 - (Date.now() - startedAt)));
-    try { launchProjections = await syncLaunchProjectionIndex(launchProjectionSourceV1(AbortSignal.timeout(projectionBudget)), store); }
+    const projectionDeadline = Date.now() + projectionBudget;
+    try {
+      const source = launchProjectionSourceV1(AbortSignal.timeout(projectionBudget));
+      // Each verified page commits its cursor before the next read. Drain the
+      // bounded backlog instead of leaving one page for each cron invocation.
+      for (let page = 0; page < 20; page++) {
+        launchProjections = await syncLaunchProjectionIndex(source, store);
+        if (launchProjections.nextCursor === null || Date.now() + 5000 >= projectionDeadline) break;
+      }
+    }
     catch { /* Keep the previous verified rows and retry this source on the next scheduled pass. */ }
     // Keep a genuine rollup proof inside the job's wall-clock budget. A deadline is an error,
     // never permission to publish a partial proof or skip the final canonical checkpoint read.

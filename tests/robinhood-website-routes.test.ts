@@ -77,6 +77,30 @@ describe("Robinhood website HTTP boundaries", () => {
     }))).status).toBe(400);
     expect(mocks.source).not.toHaveBeenCalled();
   });
+  it("drains continuation pages in one job and stops after the completed page", async () => {
+    mocks.source.mockRejectedValue(new Error("Custom unavailable"));
+    mocks.projectionSync.mockResolvedValueOnce({ status: "syncing", indexed: 1, nextCursor: "next-page" })
+      .mockResolvedValueOnce({ status: "ready", indexed: 2, nextCursor: null });
+    const response = await update(new Request("https://website.invalid/api/ops/robinhood-index", {
+      headers: { authorization: `Bearer ${"a".repeat(48)}` },
+    }));
+    expect(mocks.projectionSync).toHaveBeenCalledTimes(2);
+    expect(mocks.projectionSource).toHaveBeenCalledOnce();
+    expect(await response.json()).toMatchObject({ launchProjections: { status: "ready", indexed: 2, nextCursor: null } });
+  });
+  it("bounds continuation work and preserves committed progress when a later page fails", async () => {
+    mocks.source.mockRejectedValue(new Error("Custom unavailable"));
+    const progress = { status: "syncing", indexed: 1, nextCursor: "next-page" };
+    mocks.projectionSync.mockResolvedValueOnce(progress).mockRejectedValueOnce(new Error("Provider unavailable"));
+    const request = () => new Request("https://website.invalid/api/ops/robinhood-index", {
+      headers: { authorization: `Bearer ${"a".repeat(48)}` },
+    });
+    expect(await (await update(request())).json()).toMatchObject({ launchProjections: progress });
+    expect(mocks.projectionSync).toHaveBeenCalledTimes(2);
+    mocks.projectionSync.mockReset().mockResolvedValue(progress);
+    expect(await (await update(request())).json()).toMatchObject({ launchProjections: progress });
+    expect(mocks.projectionSync).toHaveBeenCalledTimes(20);
+  });
   it.each(["disabled", "unavailable"])("hides provider credentials when Module Mode is %s", async (moduleStatus) => {
     mocks.source.mockRejectedValue(new Error("https://rpc.invalid/private-key"));
     const unavailableSources: ModuleModeUnavailableSource[] = moduleStatus === "disabled"
