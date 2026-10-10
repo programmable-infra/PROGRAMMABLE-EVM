@@ -19,5 +19,7 @@ export default defineConfig([
     "indexer/envio-env.d.ts",
     "ops/**/.cre_build_tmp.*",
     "ops/**/binary.wasm",
+    // Independent Vite app; checked by its own build and test scripts.
+    "ops/hazarrobin/**",
   ]),
 ]);
