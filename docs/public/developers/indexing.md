@@ -19,6 +19,8 @@ A coin is identified by **chain ID + token address**. A verified launch record p
 
 For older Robinhood Module Mode launches, retain the [Native and Engine adapter](module-mode-indexing.md). A new module within the same interface does not need a name-based allowlist. A new source interface needs its own adapter.
 
+For historical Ethereum Classic launches, read the public [Classic identity snapshot](https://programmable.market/api/indexers/v1/classic-identities). It contains the verified catalog before Explore visibility and market-data filters, using Codex discovery and canonical Ethereum receipt checks. No API key is required. Preserve its release, block hash, status and source evidence; `last-known-good` is a cached observation. Its `identityCommitment` is SHA-256 of `programmable.classic-launch-identity-snapshot.v1`, a zero byte, and canonical JSON of `{chainId, releaseDigest, asOfBlock, asOfBlockHash, entries}`. Check the snapshot block against Ethereum before advancing a checkpoint. The retired `/api/explore` route is not this source.
+
 ## Start with discovery
 
 The website feeds are the shortest path to discovering currently listed coins:
