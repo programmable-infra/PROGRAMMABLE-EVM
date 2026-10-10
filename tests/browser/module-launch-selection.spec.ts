@@ -52,7 +52,7 @@ for (const [width, chainId] of [[1440, 4663], [390, 4663], [1440, 1], [390, 1]])
 }
 
 for (const width of [1440, 390]) {
-  test(`arbitrary quote pricing uses token units and clears the ETH first buy at ${width}px`, async ({ page }) => {
+  test(`arbitrary quote pricing uses token units and retains the ETH first buy at ${width}px`, async ({ page }) => {
     const studio = await createModuleStudioServer(); studio.listen(0, "127.0.0.1"); await once(studio, "listening");
     const address = studio.address(); if (!address || typeof address === "string") throw new Error("Fixture did not start");
     try {
@@ -67,7 +67,7 @@ for (const width of [1440, 390]) {
       await page.getByRole("button", { name: "Set in PAIR", exact: true }).click();
       await page.getByLabel("Starting market cap · PAIR").fill("12.345678");
       const lastDraft = () => page.evaluate(() => (window as unknown as { launchEvents: { lastDraft?: { quoteValuation?: string; initialBuy: string }; walletRequests: number } }).launchEvents);
-      await expect.poll(async () => (await lastDraft()).lastDraft).toMatchObject({ quoteValuation: "12.345678", initialBuy: "0" });
+      await expect.poll(async () => (await lastDraft()).lastDraft).toMatchObject({ quoteValuation: "12.345678", initialBuy: "0.001" });
       expect((await lastDraft()).walletRequests).toBe(0);
       await page.getByRole("button", { name: "Launch coin", exact: true }).click();
       await expect.poll(async () => (await lastDraft()).walletRequests).toBe(1);
@@ -273,16 +273,18 @@ test.describe("Module Studio", () => {
     await expect(page.getByRole("switch", { name: "Initial wallet buy limit", exact: true, includeHidden: true })).toHaveAttribute("aria-checked", "false");
   });
 
-  for (const chainId of [1, 4663]) test(`zero first buy reaches preparation on chain ${chainId}`, async ({ page }) => {
+  for (const chainId of [1, 4663]) test(`zero and under-minimum first buys stop before the wallet on chain ${chainId}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`${studioOrigin}?mode=launch-speed&chainId=${chainId}`);
     await page.getByLabel("Name", { exact: true }).fill("No first buy");
     await page.getByLabel("Ticker", { exact: true }).fill("ZERO");
-    await page.getByLabel("First buy · ETH", { exact: true }).fill("0");
-    await page.getByRole("button", { name: "Launch coin", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("Fixture wallet rejected");
-    const events = await page.evaluate(() => (window as unknown as { launchEvents: { walletRequests: number; lastDraft: { initialBuy: string } } }).launchEvents);
-    expect(events.walletRequests).toBe(1); expect(events.lastDraft.initialBuy).toBe("0");
+    for (const amount of ["0", "0.0001"]) {
+      await page.getByLabel("First buy · ETH", { exact: true }).fill(amount);
+      await page.getByRole("button", { name: "Launch coin", exact: true }).click();
+      await expect(page.locator("#foundation-initial-buy-error")).toContainText("$2");
+      const events = await page.evaluate(() => (window as unknown as { launchEvents: { walletRequests: number; preparations: number } }).launchEvents);
+      expect(events.walletRequests).toBe(0); expect(events.preparations).toBe(0);
+    }
   });
 
   for (const width of [1440, 390]) test(`coming soon modules stay disabled while available modules can launch at ${width}px`, async ({ page }) => {

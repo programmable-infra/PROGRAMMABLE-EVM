@@ -94,7 +94,7 @@ export async function createModuleStudioServer() {
       return <><button data-testid="wallet-switch" onClick={()=>setContext('other-wallet:'+chainId+':release')}>Fixture wallet switch</button>
         <button data-testid="rerender" onClick={()=>setRenders(value=>value+1)}>Fixture render {renders}</button>
         <ModuleFoundationBuilder layout="studio" availability={{status:'ready',chainId,chainName:chainId===1?'Ethereum':'Robinhood Chain'}}
-          contextKey={context} catalog={catalog} quoteAssets={[quote]} suggestedInitialBuy="0.001"
+          contextKey={context} catalog={catalog} quoteAssets={[quote]} suggestedInitialBuy="0.001" minimumInitialBuy="0.0008"
           walletAction={new URLSearchParams(location.search).get('mode')==='wallet-recovery' && context==='wallet:4663:release'
             ? {label:'Switch to Ethereum',onClick:async()=>{throw new Error('Network change cancelled.');}} : undefined}
           onResolveQuote={new URLSearchParams(location.search).get('mode')==='open-quote' ? async address=>({address,chainId:4663,name:'Pair token',symbol:'PAIR',decimals:6,supported:true}) : undefined}
