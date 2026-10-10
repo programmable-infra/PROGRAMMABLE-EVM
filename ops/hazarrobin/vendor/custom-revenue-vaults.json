@@ -1,0 +1,22 @@
+[
+  {
+    "chainId": 1,
+    "hook": "0x37bfb8ac7c960e558657871d41ca70e07e7dbfff",
+    "address": "0xF1749E78e76CfE1119206833aE93beD2dede5353",
+    "runtimeCodeHash": "0x0c809a6af46fb81e31c079263cf6889f1002eb4a3d71508d1cfa0f1fdccd709c",
+    "beneficiary": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    "source": "vendor/fwa-platform-revenue.sol",
+    "sourceSha256": "11ffcded45a0c549fa79b9e56f3b4e329451d08e3fbaf15a97d33aae010613b5"
+  },
+  {
+    "chainId": 1,
+    "hook": "0xe2d9a7d916e7d7ad85d486989c50bb55ca6effff",
+    "address": "0xC3FdDCef8d96ed0f648245a96c44162FB77bf014",
+    "runtimeCodeHash": "0x4acb7aa9416ce76a3aa2fec3144cd64324ff3f72a3dbc92a2af2692ffb36241f",
+    "beneficiary": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "poolManager": "0x000000000004444c5dc75cB358380D2e3dE08A90",
+    "source": "vendor/test-platform-revenue.sol",
+    "sourceSha256": "34055f8ef8992237a7418ee5e280a8b67566b1234b0f217797df8f7352124493"
+  }
+]

@@ -4,9 +4,11 @@ Three claim areas on https://hazarrobin.vercel.app:
 
 1. Programmable V4: immutable Robinhood LP locker, position 1708785.
 2. Robinhood ecosystem: Foundation releases, historical Module Mode ledgers, verified native custom fee vaults.
-3. Ethereum ecosystem: Foundation graph launches, classic/stock hooks, supported custom fee profiles and native fee vaults.
+3. Ethereum ecosystem: Foundation graph launches, classic/stock hooks, supported custom fee profiles, native fee vaults, and pinned canonical/additional platform revenue vaults.
 
 The app has no signing key. Users sign with their wallets. Fixed-recipient claims are grouped through the pinned Multicall3; sender-restricted legacy claims require the recipient wallet. Claims never withdraw LP principal, redirect fees, swap assets, or impose a minimum amount. Incomplete sources remain explicitly visible and are never reported as zero balances.
+
+Each detected payout is simulated against two providers. Already-collected amounts are removed. Token contracts that reject payment are shown separately and do not block other claims. The CLAUS transfer policy currently rejects payments from Foundation ledgers; those balances are not presented as spendable fees. Reviewed fee-free and non-project sources are distinguished from unknown adapters.
 
 ## Local verification
 

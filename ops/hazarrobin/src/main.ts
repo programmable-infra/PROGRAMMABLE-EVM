@@ -26,7 +26,7 @@ function card(g:Group,index:number){
  const v=values(g),loaded=g.id==='v4'?!!g.snapshot:!!g.scan;
  const incomplete=g.scan&&!g.scan.complete;
  const status=g.busy?'scan':g.error||incomplete?'partial':loaded?'ready':'idle';
- const statusText=g.busy?'Scan läuft':g.error?'Erneut prüfen':incomplete?'Teilweise geprüft':loaded?'Geprüft':'Bereit zum Scan';
+ const statusText=g.busy?'Scan läuft':g.error?'Erneut prüfen':incomplete?(g.scan?.blockedClaims?.length&&!g.scan.issues.length&&!g.scan.unsupported.length?'Fees verfügbar':'Teilweise geprüft'):loaded?'Geprüft':'Bereit zum Scan';
  return `<section class="card ${status}" aria-labelledby="title-${g.id}"><div class="card-top"><span class="number">0${index+1}</span><span class="network">${g.network}</span></div>
  <h2 id="title-${g.id}">${g.title}</h2><p class="description">${g.description}</p>
  <div class="amounts">${v.length?v.filter(x=>x.amount>0n||v.every(y=>y.amount===0n)).map(x=>`<div class="amount"><strong>${amount(x.amount,x.decimals)}</strong><span>${escape(x.symbol)}</span></div>`).join(''):'<div class="amount empty"><strong>—</strong><span>Gebühren</span></div>'}</div>
@@ -39,6 +39,7 @@ function card(g:Group,index:number){
  ${recipients(g).map(r=>`<div class="recipient"><span>Empfänger</span><a href="${explorer(g)}/address/${r}" target="_blank" rel="noreferrer">${short(r)}</a></div>`).join('')}
  ${g.scan?.claims.some(c=>!c.permissionless)?'<p>Einige ältere Verträge benötigen die jeweilige Empfänger-Wallet zum Claimen.</p>':''}
  ${g.scan?.issues.map(i=>`<p class="warning">${escape(i.source)}: ${escape(i.message)}</p>`).join('')??''}
+ ${g.scan?.blockedClaims?.length?`<p class="warning">${g.scan.blockedClaims.length} weitere Gebührenkonten sind derzeit nicht auszahlbar. Die übrigen Fees kannst du normal claimen.</p>${g.scan.blockedClaims.map(({claim:c,reason})=>`<p>${amount(BigInt(c.amount),c.decimals)} ${escape(c.symbol)} · ${escape(reason)}</p>`).join('')}`:''}
  ${g.scan?.unsupported.length?`<p class="warning">${g.scan.unsupported.length} Custom-Verträge benötigen einen zusätzlichen Claim-Adapter. Diese Ansprüche sind noch nicht als claimbar bestätigt.</p>`:''}
  ${g.scan?.claims.length?`<div class="claim-list">${g.scan.claims.map(c=>`<div><span>${escape(c.source)}</span><b>${amount(BigInt(c.amount),c.decimals)} ${escape(c.symbol)}</b><a href="${explorer(g)}/address/${c.to}" target="_blank" rel="noreferrer">${short(c.to)}</a></div>`).join('')}</div>`:''}
  </div></details>`:''}</section>`;
@@ -62,7 +63,7 @@ const message=(error:unknown)=>error instanceof Error?(('shortMessage' in error?
 async function connectWallet(){try{wallet=await connect();notice='Wallet verbunden.';}catch(e){notice=message(e);}render();}
 async function scanGroup(g:Group){if(g.busy||claiming)return;g.busy=true;g.error='';g.message='Gebühren werden geprüft…';render();try{
  if(g.id==='v4'){g.snapshot=await readSnapshot();if(!g.snapshot.trusted)throw Error('LP-Vertragsprüfung fehlgeschlagen. Auszahlung pausiert.');g.message='LP-Gebühren live gelesen.';}
- else{g.scan=await scanChain(g.chainId,s=>{g.message=s;render();});g.message=g.scan.complete?'Alle unterstützten Quellen geprüft.':g.scan.issues.length?'Ein Teil der Quellen ist noch nicht erreichbar.':'Geprüfte Beträge bereit. Weitere Custom-Ansprüche siehe Details.';}
+ else{g.scan=await scanChain(g.chainId,s=>{g.message=s;render();});g.message=g.scan.complete?'Alle unterstützten Quellen geprüft.':g.scan.issues.length?'Ein Teil der Quellen ist noch nicht erreichbar.':'Verfügbare Fees bereit. Weitere Informationen siehe Details.';}
  }catch(e){g.error=message(e);}finally{g.busy=false;render();}}
 async function scanAll(){notice='';await Promise.all(groups.map(scanGroup));}
 async function recover(){claiming=true;try{await checkPending(s=>{notice=s;render();});notice='Auszahlung bestätigt.';}catch(e){notice=message(e);}finally{claiming=false;render();}}

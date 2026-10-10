@@ -1,8 +1,10 @@
 import { parseAbi, encodeFunctionData, keccak256, getAddress } from 'viem';
 import deployments from '../vendor/deployments.json' with {type:'json'};
 import nonProjectCustom from '../vendor/non-project-custom.json' with {type:'json'};
+import customRevenueVaults from '../vendor/custom-revenue-vaults.json' with {type:'json'};
 import { createFoundationScanner } from './foundation.mjs';
 import { scanLegacyEthereum } from './legacy-ethereum.mjs';
+import { executableClaims } from './claimability.mjs';
 import { immutablePoolFeeRequiredAddresses, proveImmutablePoolFeeRuntime, ethereumNative30RequiredAddressesV1, proveEthereumNative30RuntimeV1 } from '../vendor/native-proofs.mjs';
 import { rpcClients, checkpoint, pin, readBoth, mapLimit, rangeLogs, same, need, json, MULTICALL, MULTICALL_HASH } from './rpc.mjs';
 import { LAUNCH_STAMP_TOPICS, reduceLaunchStampLogs } from '../vendor/logic.mjs';
@@ -14,6 +16,10 @@ const ABI=parseAbi(['function claimable(address) view returns(uint256)','functio
   'function claimPlatform() returns(uint256)','function platformAccrued() view returns(uint256)','function creatorAccrued() view returns(uint256)',
   'function creatorRecipient() view returns(address)','function PLATFORM_RECIPIENT() view returns(address)','function balanceOf(address,uint256) view returns(uint256)',
   'function FEE_RECIPIENT() view returns(address)',
+  'function platformRevenue() view returns(address)','function poolManager() view returns(address)','function beneficiary() view returns(address)',
+  'function hook() view returns(address)','function canonicalPlatformBalance() view returns(uint256)','function additionalPlatformBalance() view returns(uint256)',
+  'function unassignedBalance() view returns(uint256)','function balance() view returns(uint256)',
+  'function claimCanonical(uint256)','function claimAdditional(uint256)','function claimUnassigned(uint256)',
   'function lpFee() view returns(uint24)','function tickSpacing() view returns(int24)','function token() view returns(address)',
   'function implementation() view returns(address)','function implementationCodeHash() view returns(bytes32)','function GRAPH_FACTORY() view returns(address)','function initialized() view returns(bool)']);
 const call=(address,functionName,args=[])=>({address,abi:ABI,functionName,args});
@@ -93,9 +99,22 @@ export async function scanNativeVaults(chainId,clients,block,candidates,progress
     const hook=candidate.hook??candidate.hookAddress;
     const codes=await Promise.all(clients.map(c=>c.getCode({address:hook,blockNumber:block.number})));
     need(codes.every(c=>same(c,codes[0])),'Custom-Hook-Daten unterscheiden sich.');
+    const revenue=customRevenueVaults.find(p=>p.chainId===chainId&&same(p.hook,hook));
+    if(revenue){
+      await pin(clients,revenue,block.number);
+      const [recipient,boundHook,core,canonical,additional,unassigned,balance]=await readBoth(clients,
+        ['beneficiary','hook','poolManager','canonicalPlatformBalance','additionalPlatformBalance','unassignedBalance','balance'].map(n=>call(revenue.address,n)),block.number);
+      need(same(recipient,revenue.beneficiary)&&PROJECT_WALLETS.some(w=>same(w,recipient))&&same(boundHook,hook)&&same(core,manager.address)&&balance===canonical+additional+unassigned,'Custom-Gebührenzuordnung stimmt nicht.');
+      const [activeVault]=await readBoth(clients,[call(hook,'platformRevenue')],block.number,true);
+      const claims=[['claimCanonical',canonical],['claimAdditional',additional],['claimUnassigned',unassigned]]
+        .filter(([,amount])=>amount>0n).map(([fn,amount])=>descriptor({chainId,to:revenue.address,data:encodeFunctionData(call(revenue.address,fn,[amount])),amount,
+          recipient,source:'Custom Launch',permissionless:true,runtimeCodeHash:revenue.runtimeCodeHash}));
+      return {claims,...(same(activeVault,revenue.address)?{covered:hook}:{unsupported:hook})};
+    }
     const excluded=nonProjectCustom.find(p=>p.chainId===chainId&&same(p.address,hook));
     if(excluded){
       need(same(keccak256(codes[0]),excluded.runtimeCodeHash),'Der geprüfte Custom-Vertrag hat sich geändert.');
+      if(excluded.noFees)return {covered:hook};
       const [recipient]=await readBoth(clients,[call(hook,'FEE_RECIPIENT')],block.number);
       need(same(recipient,excluded.recipient)&&!PROJECT_WALLETS.some(w=>same(w,recipient)),'Die Custom-Gebührenzuordnung hat sich geändert.');
       return {covered:hook};
@@ -118,7 +137,7 @@ export async function scanNativeVaults(chainId,clients,block,candidates,progress
       runtimeCodeHash:keccak256(codeMap[proof.feeVault]),token:fields[2]}):null,covered:hook};
   });
   progress('Custom-Gebühren geprüft.');
-  return {claims:found.flatMap(x=>x.claim?[x.claim]:[]),launchCount:unique.length,unsupported:found.filter(x=>x.unsupported).map(x=>x.unsupported),covered:found.filter(x=>x.covered).map(x=>x.covered)};
+  return {claims:found.flatMap(x=>x.claims??(x.claim?[x.claim]:[])),launchCount:unique.length,unsupported:found.filter(x=>x.unsupported).map(x=>x.unsupported),covered:found.filter(x=>x.covered).map(x=>x.covered)};
 }
 
 export async function scanEcosystem(chainId,progress=()=>{},minimumBlock=0n) {
@@ -156,9 +175,11 @@ export async function scanEcosystem(chainId,progress=()=>{},minimumBlock=0n) {
   // Unknown custom adapters stay visible; a scan failure must never masquerade as zero fees.
   const latest=await checkpoint(pair,chainId);
   const canonical=await pair[0].getBlock({blockNumber:block.number});need(same(canonical.hash,block.hash),'Scan-Block hat sich geändert.');
-  return {chainId,scannedAt:Date.now(),blockNumber:block.number.toString(),head:latest.number.toString(),claims:[...claims.values()],
-    complete:issues.length===0&&unsupported.length===0,issues,unsupported:unsupported.map(x=>typeof x==='string'?x:x.hook),
-    launchCount:(foundation?.launchCount??0)+(legacy?.launchCount??0),sourceCount:claims.size};
+  progress('Auszahlungen werden geprüft…');
+  const execution=await executableClaims(pair,[...claims.values()],latest.number);
+  return {chainId,scannedAt:Date.now(),blockNumber:latest.number.toString(),head:latest.number.toString(),claims:execution.available,blockedClaims:execution.blocked,
+    complete:issues.length===0&&unsupported.length===0&&execution.blocked.length===0,issues,unsupported:unsupported.map(x=>typeof x==='string'?x:x.hook),
+    launchCount:(foundation?.launchCount??0)+(legacy?.launchCount??0),sourceCount:execution.available.length};
 }
 
 export function cleanError(e) {

@@ -3,7 +3,7 @@ import { mainnet } from 'viem/chains';
 import { robinhoodChain } from './config';
 interface ClaimAsset {asset:Address;amount:string;symbol:string;decimals:number}
 export interface FeeClaim extends ClaimAsset {id:string;chainId:1|4663;to:Address;data:Hex;recipient:Address;source:string;permissionless:boolean;runtimeCodeHash:Hex|null;additionalAssets?:ClaimAsset[]}
-export interface Scan {chainId:1|4663;scannedAt:number;blockNumber:string;claims:FeeClaim[];complete:boolean;issues:{source:string;message:string}[];unsupported:string[];launchCount:number;sourceCount:number}
+export interface Scan {chainId:1|4663;scannedAt:number;blockNumber:string;claims:FeeClaim[];blockedClaims?:{claim:FeeClaim;reason:string}[];complete:boolean;issues:{source:string;message:string}[];unsupported:string[];launchCount:number;sourceCount:number}
 const MULTICALL='0xcA11bde05977b3631167028862bE2a173976CA11' as Address;
 const MULTICALL_HASH='0xd5c15df687b16f2ff992fc8d767b4216323184a2bbc6ee2f9c398c318e770891';
 const KEY='hazarrobin.pending-claim.v2';
