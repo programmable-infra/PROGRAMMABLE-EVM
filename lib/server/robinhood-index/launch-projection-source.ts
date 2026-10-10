@@ -87,7 +87,9 @@ export function launchProjectionSourceV1(signal: AbortSignal = AbortSignal.timeo
       if (!projectionObject(value) || value.schemaVersion !== "programmable.launch-projection-page.v1"
         || !Array.isArray(value.launches) || value.launches.length > 10
         || !(value.nextCursor === null || typeof value.nextCursor === "string" && value.nextCursor.length > 0 && value.nextCursor.length <= 4096)
-        || value.nextCursor !== null && (value.nextCursor === cursor || value.launches.length === 0)) throw new Error("Invalid projection page");
+        || value.nextCursor !== null && value.nextCursor === cursor) throw new Error("Invalid projection page");
+      // The backend pages over bounded provenance candidates. A skipped candidate
+      // may leave an empty page with a valid continuation; only null ends traversal.
       return { launches: value.launches.map(parseLaunchProjectionV1), nextCursor: value.nextCursor };
     },
     async verify(value) {
