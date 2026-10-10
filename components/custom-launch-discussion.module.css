@@ -1,0 +1,6 @@
+.discussion { margin: 12px 0; }
+.discussion summary { cursor: pointer; }
+.discussion label { display: block; margin-top: 12px; }
+.discussion textarea { display: block; width: 100%; min-height: 88px; box-sizing: border-box; margin: 6px 0 12px; padding: 12px; border: 1px solid #ffffff30; border-radius: 10px; background: #08090de8; color: inherit; font: inherit; resize: vertical; }
+.discussion textarea:focus-visible { outline: 2px solid #95cfff; outline-offset: 2px; }
+.discussion a { overflow-wrap: anywhere; }

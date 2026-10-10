@@ -1,4 +1,5 @@
-export type CustomLaunchReview = Readonly<{
+import { parseReviewWorkflowV4, type ReviewWorkflowV4 } from "./custom-launch-review-workflow";
+export type CustomLaunchReview = Readonly<ReviewWorkflowV4 & {
   schemaVersion: "programmable.custom-launch-manual-review.v1";
   reviewId: string;
   subjectHash: string;
@@ -32,6 +33,7 @@ export function parseCustomLaunchReview(value: unknown): CustomLaunchReview {
     || (v.reviewOverdue !== undefined && typeof v.reviewOverdue !== "boolean")
     || (v.launchRequestedAt !== undefined && v.launchRequestedAt !== null && !Number.isFinite(Date.parse(v.launchRequestedAt)))
     || (v.launchDeadline !== undefined && v.launchDeadline !== null && !Number.isFinite(Date.parse(v.launchDeadline)))) throw new Error("Invalid launch review");
+  parseReviewWorkflowV4(v);
   return v;
 }
 
@@ -57,6 +59,8 @@ export function customLaunchReviewOverdue(review: CustomLaunchReview, now = Date
 }
 
 export function customLaunchReviewLabel(review: CustomLaunchReview, now = Date.now()) {
+  if (review.supersededBy) return "Replaced";
+  if (review.state === "rejected") return "Changes requested";
   if (review.requiresRepack === true) return "Update required";
   if (review.state === "approved") {
     const approved = Date.parse(review.approvedAt ?? ""), expires = Date.parse(review.expiresAt ?? "");
@@ -64,10 +68,13 @@ export function customLaunchReviewLabel(review: CustomLaunchReview, now = Date.n
     // Its status is approved even while signing waits for the start time.
     return expires > now && [3_600_000, 86_400_000].includes(expires - approved) ? "Approved" : "Approval expired";
   }
-  return review.state === "pending" ? "Review pending" : review.state === "rejected" ? "Changes requested" : "Approval expired";
+  return review.state === "pending" ? (review.discussion?.at(-1)?.author === "reviewer" ? "Reply requested" : "Review pending") : "Approval expired";
 }
 
 export function customLaunchReviewDescription(review: CustomLaunchReview) {
+  if (review.supersededBy) return `Replaced by request ${review.supersededBy.launchId}. Continue with that request.`;
+  if (review.state === "pending" && review.reason) return review.reason;
+  if (review.state === "rejected" && review.reason) return review.reason;
   if (review.requiresRepack === true) return "Repack this launch with the current contract bindings for the 24-hour signing window, then submit it for review.";
   if (customLaunchReviewLabel(review) === "Approved") return `Approved. Launch by ${new Date(review.expiresAt!).toLocaleString()}.`;
   if (review.state === "pending") return customLaunchReviewOverdue(review)

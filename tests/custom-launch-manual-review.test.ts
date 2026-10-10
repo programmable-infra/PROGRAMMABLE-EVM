@@ -91,3 +91,16 @@ describe("24-hour review and launch windows", () => {
     expect(fetchBackend).toHaveBeenCalledTimes(1);
   });
 });
+
+
+it("keeps concrete review feedback visible when a repack is also required", () => {
+  const rejected = { ...review, state: "rejected" as const, reason: "Change the fee recipient and deadline", requiresRepack: true };
+  expect(customLaunchReviewLabel(rejected)).toBe("Changes requested");
+  expect(customLaunchReviewDescription(rejected)).toBe(rejected.reason);
+  expect(customLaunchReviewLabel({ ...rejected, supersededBy: {reviewId: review.reviewId, launchId: review.reviewId} })).toBe("Replaced");
+});
+it("does not let a discussion reply grant signing permission", () => {
+  const pending = {...review, state: "pending" as const, discussion: [{revision: 3,createdAt: "2026-10-10T12:00:00Z",author: "reviewer" as const,message: "Please link the source",links: []}]};
+  expect(customLaunchReviewLabel(pending)).toBe("Reply requested");
+  expect(customLaunchReviewAllowsSigning(pending)).toBe(false);
+});

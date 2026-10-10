@@ -1,5 +1,7 @@
 "use client";
 
+import { CustomLaunchAssessment } from "./custom-launch-assessment";
+import { CustomLaunchDiscussion } from "./custom-launch-discussion";
 import { CustomLaunchStartButton } from "./custom-launch-start-button";
 import { customLaunchReviewAllowsSigning } from "@/lib/custom-launch-review";
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -188,6 +190,8 @@ export function DeveloperUniversalLaunchFlow({ entry, highlighted = false, autoP
       <p>{indexedHref ? "The finalized launch is stored in the website index." : unknownSend ? "The wallet call may have been sent. Check the original wallet activity or explorer and recover its hash. This step stays paused until the same transaction is verified." : ready ? "Confirm the transaction in your wallet." : state.description}</p></div>
     {plan?.manualReview && !hasUnresolved && !state.terminal
       ? <CustomLaunchStartButton key={`${id}:${plan.manualReview.revision}`} review={plan.manualReview} launchId={id} onStarted={load} /> : null}
+    <CustomLaunchAssessment value={(plan?.preflight as unknown as Record<string, unknown>)?.reviewReadiness} />
+    {plan?.manualReview ? <CustomLaunchDiscussion review={plan.manualReview} launchId={id} onUpdated={load} /> : null}
     {journalError ? <p role="alert" className={styles.error}>{journalError} This launch remains paused.</p> : null}
     {attempt && !ownAttempt ? <p className={styles.notice}>A previous launch transaction needs recovery or finality. <a href={launchPlanWalletUrlV1(attempt.launchId)}>Open its launch</a> before sending another transaction.</p> : null}
     {unknownSend && busy !== "send" ? <form className={styles.recovery} onSubmit={event => { event.preventDefault(); void action("recover"); }}><label htmlFor={recoveryId}>Transaction hash from your wallet</label><input ref={recoveryInput} id={recoveryId} value={recoveryHash} onChange={event => setRecoveryHash(event.target.value.trim())} autoComplete="off" spellCheck={false} placeholder="0x…" aria-describedby={`${recoveryId}-nonce`} />
