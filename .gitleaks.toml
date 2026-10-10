@@ -2,6 +2,38 @@
 useDefault = true
 
 [[allowlists]]
+description = "Hazarrobin pins the public migrated Programmable token address"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+paths = ['''^ops/hazarrobin/src/config\.ts$''']
+regexes = ['''^TOKEN = "0xC60bA256B44334A0Cd2C7242E98B88f031abB006"$''']
+
+[[allowlists]]
+description = "Hazarrobin uses a public local-storage key for pending claim recovery"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "match"
+paths = ['''^ops/hazarrobin/src/ecosystem\.ts$''']
+regexes = ['''^KEY='hazarrobin\.pending-claim\.v2'$''']
+
+[[allowlists]]
+description = "Vendored fee reader pins two public Ethereum token identities"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^ops/hazarrobin/vendor/logic\.mjs$''']
+regexes = ['''^\s*token: "0x(?:FAce73B63787960282f2d4682d3752Beb25271Ad|D0f3E1e5C985D2b37a66Cf07feCB0d8191c0445F)",$''']
+
+[[allowlists]]
+description = "Hazarrobin release history repeats the public token creation-bytecode commitment"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "line"
+paths = ['''^ops/hazarrobin/vendor/deployments\.json$''']
+regexes = ['''^\s*"tokenCreationCodeHash": "0x445809d9f7a34e959de4a96dec1e1beddfb265755bf28c57c42744adea1128ef",?$''']
+
+[[allowlists]]
 description = "Completed launch regression pins the public ASACASC coin address"
 targetRules = ["generic-api-key"]
 condition = "AND"

@@ -1,0 +1,18 @@
+[
+  {
+    "chainId": 4663,
+    "address": "0xa3b48907aCDD42A1Ec74E1D9208122eC34af4A88",
+    "runtimeCodeHash": "0x47147fc79c877a6a9f2f7666dafd3f9d0885fe0ca30842388a2d3d52ddae1162",
+    "recipient": "0x2Bb333d48DFAF1596D9036671d2E43168994249E",
+    "source": "https://repo.sourcify.dev/4663/0xa3b48907aCDD42A1Ec74E1D9208122eC34af4A88",
+    "reason": "RobinhoodCleanRoomHook has no LP fee and mints its temporary launch tax to a vault bound to this non-project FEE_RECIPIENT. Its verified runtime contains no project fee claim."
+  },
+  {
+    "chainId": 1,
+    "address": "0x5d1da2756a5c919a0906599075e463144b4ca000",
+    "runtimeCodeHash": "0x55b89671774753f30f9739183fe5e263dab8bf418d5e10dc138c863eb5248738",
+    "noFees": true,
+    "source": "https://repo.sourcify.dev/1/0x5d1da2756a5c919a0906599075e463144b4ca000",
+    "reason": "OrdinaryCanaryHook only validates pool initialization; its immutable runtime has no swap or fee-claim path."
+  }
+]
