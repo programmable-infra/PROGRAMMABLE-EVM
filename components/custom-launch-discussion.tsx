@@ -7,9 +7,14 @@ import { reviewLinksV4 } from "@/lib/custom-launch-review-workflow";
 import discussionStyles from "./custom-launch-discussion.module.css";
 import styles from "./developer-api-keys.module.css";
 
-export function CustomLaunchDiscussion({ review, launchId, onUpdated }: {
-  review: CustomLaunchReview; launchId: string; onUpdated: () => unknown;
-}) {
+type DiscussionProps = { review: CustomLaunchReview; launchId: string; onUpdated: () => unknown };
+
+export function CustomLaunchDiscussion(props: DiscussionProps) {
+  const { wallet } = useWallet();
+  return <LaunchDiscussion key={`${wallet?.account ?? "disconnected"}:${props.launchId}:${props.review.reviewId}`} {...props} />;
+}
+
+function LaunchDiscussion({ review, launchId, onUpdated }: DiscussionProps) {
   const { wallet, getAccessToken, getIdentityToken } = useWallet();
   const [message, setMessage] = useState(""), [links, setLinks] = useState("");
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState("");

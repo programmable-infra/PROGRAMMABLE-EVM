@@ -6,7 +6,7 @@ export function CustomLaunchAssessment({ value, admin = false }: { value: unknow
   return <section aria-label="Launch readiness">
     {deadlines.length ? <div role="status"><strong>Embedded deadline needs attention</strong>
       {deadlines.map((d, i) => <p key={i}>{String(d.path)}: {d.state === "unknown_semantics" ? "may be a sentinel, duration or block number; confirm its meaning in the source" : d.state === "expired" ? "already expired" : "ends before the review and launch window"}{typeof d.expiresAt === "string" ? ` (${new Date(d.expiresAt).toLocaleString()})` : ""}.</p>)}
-      <p>Approval cannot extend a deadline inside your contract call. Update it to cover review and launch, then submit the new request.</p>
+      {deadlines.some(d => d.state === "expired" || d.state === "short_window") ? <p>Approval cannot extend a deadline inside your contract call. Update it to cover review and launch, then submit the new request.</p> : <p>The argument name alone does not establish a time limit. Confirm its meaning in the contract source.</p>}
     </div> : null}
     {admin && a.timing === null ? <p>Embedded deadlines have not been checked. Inspect the initializer before approval.</p> : null}
     {Object.keys(fees).length ? <details><summary>Trading fees</summary>
