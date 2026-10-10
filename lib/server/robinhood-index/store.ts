@@ -13,15 +13,20 @@ export function indexStore(): IndexStore {
   if (!token) throw new Error("Robinhood index storage is not configured");
   return {
     async read() {
-      const { get, head } = await import("@vercel/blob");
+      const { get } = await import("@vercel/blob");
       const result = await get(PATH, { access: "private", token, useCache: false });
       if (!result) return null;
       if (result.statusCode !== 200 || !result.stream) throw new Error("Robinhood index read failed");
-      const metadata = await head(PATH, { token });
       const etag = result.blob.etag.trim().replace(/^W\//, "");
-      if (!/^"[\da-f]{32}"$/i.test(etag) || metadata.etag !== etag || metadata.size > MAX_BYTES) {
+      // Bind the body and the conditional-write ETag to one response. A second
+      // metadata read can observe a different upload while the cron is writing.
+      const encoded = result.headers.get("content-encoding");
+      const length = result.headers.get("content-length");
+      const expectedSize = !encoded || encoded === "identity" ? (length === null ? null : Number(length)) : null;
+      if (!/^"[\da-f]{32}"$/i.test(etag) || (expectedSize !== null
+        && (!Number.isSafeInteger(expectedSize) || expectedSize < 0 || expectedSize > MAX_BYTES))) {
         await result.stream.cancel();
-        throw new Error("Robinhood index changed during read");
+        throw new Error("Robinhood index response metadata invalid");
       }
       const reader = result.stream.getReader();
       const chunks: Uint8Array[] = [];
@@ -40,7 +45,7 @@ export function indexStore(): IndexStore {
       } finally {
         reader.releaseLock();
       }
-      if (size !== metadata.size) throw new Error("Robinhood index size mismatch");
+      if (expectedSize !== null && size !== expectedSize) throw new Error("Robinhood index size mismatch");
       return { snapshot: parseSnapshot(JSON.parse(Buffer.concat(chunks).toString("utf8"))), etag };
     },
     async write(snapshot, etag) {
