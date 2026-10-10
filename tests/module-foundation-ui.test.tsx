@@ -18,6 +18,21 @@ const descriptor: FoundationModuleDescriptor = { id: "technical.fixture.counter"
 const selected: FoundationModuleSelection = { id: descriptor.id, version: descriptor.version, digest: descriptor.digest, configuration: { recipient: address } };
 
 describe("Module foundation UI financial and lifecycle boundaries", () => {
+  it("keeps the first buy required and editable for custom starting values in both layouts", () => {
+    for (const layout of ["studio", "form"] as const) for (const chainId of [1, 4663]) {
+      const html = renderToStaticMarkup(<ModuleFoundationBuilder {...actions} layout={layout}
+        availability={{ ...availability, chainId }} contextKey={`first-buy:${chainId}`} catalog={[]}
+        quoteAssets={[{ ...quote, chainId }]} minimumInitialBuy="0.0008"
+        initialDraft={{ quoteAsset: quote.address, quoteValuation: "1000", initialBuy: "0.0014" }} />);
+      const input = html.match(/<input[^>]+id="foundation-initial-buy"[^>]*>/)?.[0];
+      expect(input).toContain('value="0.0014"');
+      expect(input).toContain("required");
+      expect(input).not.toContain("disabled");
+      expect(html).toContain("$2");
+      expect(html).not.toContain("Enter 0 to launch without a first buy");
+    }
+    expect(actions.onConfirmLaunch).not.toHaveBeenCalled();
+  });
   it("shows an empty wallet immediately in both launch layouts without opening the wallet", () => {
     for (const layout of ["studio", "form"] as const) for (const chainId of [1, 4663] as const) {
       const chainName = chainId === 1 ? "Ethereum" : "Robinhood Chain";

@@ -22,6 +22,7 @@ import { moduleHash, moduleRecord } from "@/lib/module-mode/release";
 import type { FoundationLaunchDraft } from "@/lib/module-foundation/ui-types";
 import { readFoundationStartPrice } from "@/lib/server/module-foundation/start-price";
 import { parseFoundationStartPrice } from "@/lib/module-foundation/start-price";
+import { foundationInitialBuyError, readFoundationFirstBuyPolicy } from "@/lib/module-foundation/first-buy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,6 +65,8 @@ export async function POST(request: Request): Promise<NextResponse> {
     const feeRates = foundationCreatorFeeRates(creatorFees);
     const account = getAddress(body.account);
     if (!/^0x[0-9a-fA-F]{64}$/.test(body.tokenSalt)) throw new Error("The launch salt is invalid.");
+    const initialBuyError = foundationInitialBuyError(draft.initialBuy);
+    if (initialBuyError) throw new Error(initialBuyError);
     // The authority can spend 50 seconds checking runtime and finality. Match the
     // availability route's deadline and leave time for the remaining launch reads.
     const availability = await readLaunchAvailability(chainId);
@@ -93,12 +96,13 @@ export async function POST(request: Request): Promise<NextResponse> {
     foundationRequire(new Set(selected.map(({ entry }) => entry.runtime.descriptor.moduleId)).size === selected.length,
       "FOUNDATION_MODULE_DUPLICATE", "Choose each module identity once.");
     request.signal.throwIfAborted();
-    const client = createFoundationServerClient(chainId), checkpoint = await assertFoundationInfrastructure(client, binding);
+    const client = createFoundationServerClient(chainId);
+    const firstBuyPolicy = await readFoundationFirstBuyPolicy(client);
+    const minimumBuyError = foundationInitialBuyError(draft.initialBuy, firstBuyPolicy.minimumEth);
+    if (minimumBuyError) throw new Error(minimumBuyError);
+    const checkpoint = await assertFoundationInfrastructure(client, binding);
     request.signal.throwIfAborted();
     const maximumEth = foundationParseAmount(draft.initialBuy, 18);
-    if (draft.quoteValuation !== undefined && (maximumEth !== 0n || foundationParseAmount(draft.additionalLiquidity, 18) !== 0n)) {
-      throw new Error("A start value in quote tokens launches without an ETH first buy. Set the first buy to 0.");
-    }
     if (maximumEth > 0n) await assertFoundationAtomicEth(client, binding, checkpoint.blockNumber);
     const [ethFunding, quote] = await Promise.all([
       maximumEth > 0n ? readFoundationEthFunding(getAddress(draft.quoteAsset), maximumEth, chainId) : undefined,

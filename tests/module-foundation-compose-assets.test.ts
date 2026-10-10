@@ -21,8 +21,15 @@ import {
 import type { FoundationConfiguration, FoundationLaunchDraft, FoundationModuleSelection } from "@/lib/module-foundation/ui-types";
 
 const mocks = vi.hoisted(() => ({ availability: vi.fn(), infrastructure: vi.fn(), client: vi.fn(), startPrice: vi.fn(),
-  getChainId: vi.fn(), getBlock: vi.fn(), getCode: vi.fn(), readContract: vi.fn() }));
+  getChainId: vi.fn(), getBlock: vi.fn(), getCode: vi.fn(), readContract: vi.fn(), firstBuyPolicy: vi.fn(), ethFunding: vi.fn() }));
 vi.mock("server-only", () => ({}));
+vi.mock("@/lib/module-foundation/first-buy", async original => ({
+  ...await original<typeof import("@/lib/module-foundation/first-buy")>(), readFoundationFirstBuyPolicy: mocks.firstBuyPolicy,
+}));
+vi.mock("@/lib/module-foundation/atomic-launch", async original => ({
+  ...await original<typeof import("@/lib/module-foundation/atomic-launch")>(), assertFoundationAtomicEth: vi.fn(),
+}));
+vi.mock("@/lib/server/module-foundation/eth-funding", () => ({ readFoundationEthFunding: mocks.ethFunding }));
 vi.mock("@/lib/server/module-foundation/start-price", () => ({ readFoundationStartPrice: mocks.startPrice }));
 // The fixed server admission boundary and RPC transport are mocked; all source, metadata and asset parsers run.
 vi.mock("@/lib/server/module-foundation/availability", () => ({ readFoundationAvailabilityResponse: mocks.availability }));
@@ -102,7 +109,7 @@ function accepted(entries: FoundationCatalogEntryV1[] = []) {
 function body(selections: FoundationModuleSelection[] = []) {
   const draft: FoundationLaunchDraft = { name: "Fixture coin", symbol: "FIX", description: "A source-bound technical fixture.",
     image: { url: "https://programmable.market/fixture.webp", sha256: hash("image") }, socialLinks: {}, quoteAsset: quote,
-    creatorFeeBps: 300, initialBuy: "0", additionalLiquidity: "0", modules: selections };
+    creatorFeeBps: 300, initialBuy: "0.01", additionalLiquidity: "0", modules: selections };
   return { account: creator, releaseDigest, tokenSalt, draft, launchFlow: "single-eth-v1" };
 }
 const request = (value: unknown) => new Request("http://localhost/api/module-foundation/compose", {
@@ -110,13 +117,14 @@ const request = (value: unknown) => new Request("http://localhost/api/module-fou
 });
 const predictions = () => mocks.readContract.mock.calls.filter(([call]) => call.functionName === "predictTokenAddress");
 
-it.each([0, 6, 8, 18, 36])("composes an arbitrary %i-decimal quote without a market lookup or ETH funding", async decimals => {
+it.each([0, 6, 8, 18, 36])("keeps the initial buy when composing a %i-decimal quote with a custom valuation", async decimals => {
   assets.set(quote, { code, decimals });
   mocks.startPrice.mockRejectedValue(new Error("No market exists"));
   const input = body(); input.draft.quoteValuation = "1";
   const response = await POST(request(input)); const value = await response.json();
   expect(response.status, JSON.stringify(value)).toBe(200);
-  expect(value.ethFunding).toBeNull();
+  expect(value.ethFunding).toMatchObject({ maximumEth: "10000000000000000" });
+  expect(mocks.ethFunding).toHaveBeenCalledWith(getAddress(quote), 10n ** 16n, 4663);
   expect(value.startPrice).toMatchObject({ mode: "quote", quoteAsset: getAddress(quote), decimals,
     valuationQuoteRaw: (10n ** BigInt(decimals)).toString() });
   expect(value.startPrice).not.toHaveProperty("price");
@@ -130,12 +138,22 @@ it.each(["", "0", "-1", "1e6", "0.0000001"])("rejects invalid quote valuation %s
   expect(mocks.startPrice).not.toHaveBeenCalled();
 });
 
-it("never silently changes a requested ETH first buy into a zero-buy launch", async () => {
-  const input = body(); input.draft.quoteValuation = "100"; input.draft.initialBuy = "0.01";
+it.each([1, 4663])("rejects zero-buy launches before provider reads on chain %s", async chainId => {
+  const input = { ...body(), chainId }; input.draft.initialBuy = "0";
   const response = await POST(request(input));
   expect(response.status).toBe(400);
-  expect((await response.json()).error).toContain("Set the first buy to 0");
-  expect(mocks.startPrice).not.toHaveBeenCalled();
+  expect((await response.json()).error).toContain("$2");
+  expect(mocks.availability).not.toHaveBeenCalled();
+  expect(mocks.firstBuyPolicy).not.toHaveBeenCalled();
+  expect(mocks.ethFunding).not.toHaveBeenCalled();
+});
+it("rejects an under-minimum buy before infrastructure and funding preparation", async () => {
+  const input = body(); input.draft.initialBuy = "0.0001";
+  const response = await POST(request(input));
+  expect(response.status).toBe(400);
+  expect((await response.json()).error).toContain("$2");
+  expect(mocks.infrastructure).not.toHaveBeenCalled();
+  expect(mocks.ethFunding).not.toHaveBeenCalled();
 });
 function predicted(metadata: FoundationMetadata) {
   return getAddress(`0x${keccak256(encodeAbiParameters(foundationMetadataParameters, [metadata])).slice(-40)}`);
@@ -143,6 +161,8 @@ function predicted(metadata: FoundationMetadata) {
 
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(now * 1000); vi.clearAllMocks();
+  mocks.firstBuyPolicy.mockResolvedValue({ minimumEth: "0.0008", suggestedEth: "0.0014" });
+  mocks.ethFunding.mockImplementation(async (_quote: Address, maximumEth: bigint) => ({ maximumEth, quoteAmount: 1n, path: [] }));
   assets.clear(); for (const asset of [quote, first, second, third]) assets.set(asset, { code, decimals: asset === second ? 8 : 6 });
   mocks.startPrice.mockImplementation(async (asset: { address: Address; decimals: number; codeHash: Hex }) => ({
     chainId: 4663, quoteAsset: asset.address, quoteCodeHash: asset.codeHash, decimals: asset.decimals, targetMarketCapUsd: "5000",

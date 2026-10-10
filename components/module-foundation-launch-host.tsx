@@ -19,7 +19,7 @@ import { presentFoundationLaunchCatalogV1 } from "@/lib/module-foundation/launch
 import { FOUNDATION_HOST_ADAPTER_ID_V1 } from "@/lib/module-foundation/manifest";
 import { parseFoundationAssetPinsV1 } from "@/lib/module-foundation/assets";
 import { createFoundationClient, foundationMetadata, prepareFoundationLaunch } from "@/lib/module-foundation/client";
-import { readFoundationQuoteForDisplay, readFoundationSuggestedBuyForDisplay } from "@/lib/module-foundation/launch-display-cache";
+import { readFoundationQuoteForDisplay, readFoundationFirstBuyPolicyForDisplay } from "@/lib/module-foundation/launch-display-cache";
 import { isFoundationDefaultImage } from "@/lib/module-foundation/default-image";
 import { retryFoundationReadOnlyPreparation } from "@/lib/module-foundation/preparation-retry";
 import { foundationSupportsEth } from "@/lib/module-foundation/native-funding";
@@ -70,6 +70,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
   const displayClient = useMemo(() => createFoundationClient({ batchRpc: true, chainId }), [chainId]);
   const [completedDraft, setCompletedDraft] = useState<string | null>(null);
   const [suggestedInitialBuy, setSuggestedInitialBuy] = useState<string>();
+  const [minimumInitialBuy, setMinimumInitialBuy] = useState<string>();
   const suggestedBuyRequest = useRef<Promise<string> | null>(null);
   const draftKey = `${session.contextKey}:${session.resultGeneration}`;
   const [quoteState, setQuoteState] = useState<{ context: string; assets: FoundationQuoteAsset[] }>({ context: "", assets: [] });
@@ -114,8 +115,8 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
   }
 
   const resolveSuggestedInitialBuy = useCallback(() => {
-    if (!suggestedBuyRequest.current) suggestedBuyRequest.current = readFoundationSuggestedBuyForDisplay(session.client)
-      .then(amount => { setSuggestedInitialBuy(amount); return amount; })
+    if (!suggestedBuyRequest.current) suggestedBuyRequest.current = readFoundationFirstBuyPolicyForDisplay(session.client)
+      .then(policy => { setSuggestedInitialBuy(policy.suggestedEth); setMinimumInitialBuy(policy.minimumEth); return policy.suggestedEth; })
       .catch(error => { suggestedBuyRequest.current = null; throw error; });
     return suggestedBuyRequest.current;
   }, [session.client]);
@@ -279,7 +280,7 @@ export function ModuleFoundationLaunchHost({ layout = "form", chainId = 4663 }: 
       </fieldset>
     } recoveryAction={inlineRecovery ? sessionStatus : undefined} previousLaunchAction={previousLaunchAction} availability={session.availability} contextKey={session.contextKey}
     factoryVersion={session.envelope?.binding ? session.envelope.binding.factoryVersion ?? "v1" : undefined}
-    catalog={catalog} quoteAssets={quotes} nativeBalance={launchBalance.balance} onCheckFunding={launchBalance.check} suggestedInitialBuy={suggestedInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
+    catalog={catalog} quoteAssets={quotes} nativeBalance={launchBalance.balance} onCheckFunding={launchBalance.check} suggestedInitialBuy={suggestedInitialBuy} minimumInitialBuy={minimumInitialBuy} onResolveSuggestedInitialBuy={resolveSuggestedInitialBuy} launchProgress={session.progress} onResolveQuote={resolveQuote} onUploadImage={upload}
     onWarmLaunch={session.account && !session.preparationBlocked ? (draft, signal) => prepare(draft, signal) : undefined}
     onPrepareLaunch={prepare} onConfirmLaunch={async review => { const sequence = prepared.current.get(review);
       if (!sequence) throw new Error("Prepare this launch again with your current wallet."); session.assertCurrent(sequence.account, review.contextKey);

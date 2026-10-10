@@ -23,7 +23,7 @@ export default function ModuleModeOverviewPage() {
       <h2>Launch a coin</h2>
       <ol className={styles.steps}>
         <li>Open <Link href="/launch/modules">Module Mode</Link> and connect your wallet.</li>
-        <li>Enter the coin details, optional image and social links, creator fees and initial buy.</li>
+        <li>Enter the coin details, optional image and social links, creator fees and initial buy. Website launches require a first buy worth at least about $2 in ETH, plus gas, on Ethereum and Robinhood. The buy is included in the launch transaction.</li>
         <li>Open <strong>Modules</strong> to find optional modules and complete their configuration.</li>
         <li>Check the total fees and funding, select <strong>Launch coin</strong>, then confirm in your wallet.</li>
       </ol>

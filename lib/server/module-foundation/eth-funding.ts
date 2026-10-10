@@ -12,7 +12,7 @@ export async function readFoundationEthFunding(quote: Address, maximumEth: bigin
   const result = await assessAnyQuoteAssetV1({ quoteAsset: quote, probeEthAmount: maximumEth }, { chainId });
   if (result.status !== "compatible") throw new Error(result.status === "inconclusive"
     ? "The quote token's market could not be verified. Try again in a moment."
-    : "No ETH funding route is available for this amount. In Any Quote Pool, set the starting value in the token to launch without a first buy.");
+    : "No ETH funding route is available for this amount. Increase the first buy or choose another pool pair.");
   const hops = requireAnyQuoteNativeUnlockRouteV1(result.routes.buy, "buy", chainId);
   if (getAddress(hops.at(-1)!.tokenOut) !== getAddress(quote)) throw new Error("The ETH route ends in another quote token.");
   const path = hops.map(hop => ({ intermediateCurrency: hop.tokenIn, fee: hop.key.fee,
