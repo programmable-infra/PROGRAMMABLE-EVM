@@ -71,8 +71,8 @@ import {
 import { legacyReader } from "./rpc.mjs";
 import { claimData } from "../vendor/logic.mjs";
 
-export async function scanLegacyEthereum({clients, progress=()=>{}, excludedTokens=new Set()}) {
- const state={claims:new Map(),hooks:new Map(),custom:{launches:[]},customV2:{sources:[]},router:{launches:[]},classic:{launches:[]},confirmedBatch:null};
+export async function scanLegacyEthereum({clients, progress=()=>{}, balanceBlockNumber, excludedTokens=new Set()}) {
+ const state={balanceBlockTag:balanceBlockNumber?'0x'+balanceBlockNumber.toString(16):null,claims:new Map(),hooks:new Map(),custom:{launches:[]},customV2:{sources:[]},router:{launches:[]},classic:{launches:[]},confirmedBatch:null};
  const EVENT_LOG_CHUNK_SIZE=10000n, MAX_ROUTER_LAUNCHES=4096;
  const renderSummary=()=>progress("Ethereum: ältere Gebührenverträge werden geprüft…");
  const request=legacyReader(clients[0]);
@@ -953,7 +953,7 @@ async function readVerifiedRouterLaunch(candidate, finalizedTag) {
   return readRouterCustomClaim(
     { ...verified, runtimeCodeHash: recordedRuntime },
     hookCode,
-    finalizedTag,
+    state.balanceBlockTag??finalizedTag,
   );
 }
 
@@ -1519,7 +1519,7 @@ async function readClaim(claim, blockTag) {
 
  await readLaunchStampRouter();
  if(state.router.status!=='ready') throw new Error(state.router.error||'Ethereum-Launch-Historie nicht verfügbar');
- const blockTag=toQuantityHex(state.router.finalizedBlock);
+ const blockTag=state.balanceBlockTag??toQuantityHex(state.router.finalizedBlock);
  await Promise.all([readCustomRegistry(blockTag),readCustomV2(blockTag),readClassicLaunches(blockTag)]);
  await Promise.all(HOOKS.map(async hook=>state.hooks.set(hook.id,await readHook(hook,blockTag))));
  await Promise.all(CLAIMS.map(async claim=>state.claims.set(claim.id,await readClaim(claim,blockTag))));

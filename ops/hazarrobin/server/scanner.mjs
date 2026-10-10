@@ -105,8 +105,10 @@ export async function scanNativeVaults(chainId,clients,block,candidates,progress
   return {claims:found.flatMap(x=>x.claim?[x.claim]:[]),launchCount:unique.length,unsupported:found.filter(x=>x.unsupported).map(x=>x.unsupported),covered:found.filter(x=>x.covered).map(x=>x.covered)};
 }
 
-export async function scanEcosystem(chainId,progress=()=>{}) {
-  const clients=rpcClients(chainId); const pair=clients.slice(0,2);const block=await checkpoint(pair,chainId);
+export async function scanEcosystem(chainId,progress=()=>{},minimumBlock=0n) {
+  const clients=rpcClients(chainId); const pair=clients.slice(0,2);let block=await checkpoint(pair,chainId);
+  for(let i=0;block.number<minimumBlock&&i<30;i++){progress('Auszahlung bestätigt. Gebührenstand wird aktualisiert…');await new Promise(r=>setTimeout(r,1000));block=await checkpoint(pair,chainId);}
+  need(block.number>=minimumBlock,'Der neue Gebührenstand wird noch übernommen. Bitte erneut scannen.');
   await pin(pair,{address:MULTICALL,runtimeCodeHash:MULTICALL_HASH},block.number);
   const results=[];const issues=[];
   const run=async(label,fn)=>{progress(label);try{const result=await fn();results.push(result);return result;}catch(e){const message=cleanError(e);issues.push({source:label,message});progress(label+': '+message);return null;}};
@@ -115,7 +117,7 @@ export async function scanEcosystem(chainId,progress=()=>{}) {
   let foundation,legacy;
   if(chainId===1){
     foundation=await run('Module Mode',()=>scanFoundation(chainId,pair,progress));
-    legacy=await run('Frühere Launch-Versionen',()=>scanLegacyEthereum({clients,progress,excludedTokens:new Set((foundation?.coveredTokens??[]).map(t=>t.toLowerCase()))}));
+    legacy=await run('Frühere Launch-Versionen',()=>scanLegacyEthereum({clients,progress,balanceBlockNumber:block.number,excludedTokens:new Set((foundation?.coveredTokens??[]).map(t=>t.toLowerCase()))}));
   }else [foundation,legacy]=await Promise.all([
     run('Module Mode',()=>scanFoundation(chainId,pair,progress)),run('Frühere Launch-Versionen',()=>scanHistoricalRobinhood(pair,block)),
   ]);

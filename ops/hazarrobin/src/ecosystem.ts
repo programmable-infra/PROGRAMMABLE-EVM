@@ -7,6 +7,7 @@ export interface Scan {chainId:1|4663;scannedAt:number;blockNumber:string;claims
 const MULTICALL='0xcA11bde05977b3631167028862bE2a173976CA11' as Address;
 const MULTICALL_HASH='0xd5c15df687b16f2ff992fc8d767b4216323184a2bbc6ee2f9c398c318e770891';
 const KEY='hazarrobin.pending-claim.v2';
+const confirmedBlocks=new Map<number,bigint>();
 const same=(a:unknown,b:unknown)=>String(a).toLowerCase()===String(b).toLowerCase();
 const address=(v:unknown):v is Address=>typeof v==='string'&&/^0x[0-9a-f]{40}$/i.test(v);
 const hex=(v:unknown):v is Hex=>typeof v==='string'&&/^0x(?:[0-9a-f]{2})+$/i.test(v);
@@ -23,7 +24,7 @@ export function validateScan(value:Scan):Scan {
   }return value;
 }
 export async function scanChain(id:1|4663,progress:(s:string)=>void):Promise<Scan>{
-  const response=await fetch(`/api/scan?chainId=${id}`,{cache:'no-store'});if(!response.ok||!response.body)throw Error('Scan ist gerade nicht erreichbar.');
+  const response=await fetch(`/api/scan?chainId=${id}&minimumBlock=${confirmedBlocks.get(id)??0n}`,{cache:'no-store'});if(!response.ok||!response.body)throw Error('Scan ist gerade nicht erreichbar.');
   const reader=response.body.getReader(),decoder=new TextDecoder();let text='',result:Scan|undefined;
   const line=(s:string)=>{if(!s.trim())return;const data=JSON.parse(s);if(data.type==='progress')progress(data.message);if(data.type==='error')throw Error(data.message);if(data.type==='result')result=validateScan(data.result);};
   try{for(;;){const chunk=await reader.read();text+=decoder.decode(chunk.value,{stream:!chunk.done});let n;while((n=text.indexOf('\n'))>=0){line(text.slice(0,n));text=text.slice(n+1);}if(chunk.done)break;}if(text)line(text);}finally{reader.releaseLock();}
@@ -60,7 +61,7 @@ export async function checkPending(progress:(message:string)=>void){
       if(!same(status.id,entry.batchId)||BigInt(status.chainId)!==BigInt(entry.chainId)||status.atomic!==true)throw Error('Die Wallet-Bestätigung stimmt nicht mit diesem Sammelclaim überein.');
       if(status.status===200){
         if(!status.receipts?.length||status.receipts.some(r=>r.status!=='0x1'))throw Error('Die Wallet hat keinen vollständigen Beleg geliefert.');
-        for(const proof of status.receipts){const receipts=await Promise.all(clients.map(c=>c.getTransactionReceipt({hash:proof.transactionHash})));if(receipts.some(r=>r.status!=='success'||!same(r.blockHash,proof.blockHash)))throw Error('Sammelclaim wird noch auf der Chain geprüft.');}
+        for(const proof of status.receipts){const receipts=await Promise.all(clients.map(c=>c.getTransactionReceipt({hash:proof.transactionHash})));if(receipts.some(r=>r.status!=='success'||!same(r.blockHash,proof.blockHash)))throw Error('Sammelclaim wird noch auf der Chain geprüft.');confirmedBlocks.set(entry.chainId,receipts[0]!.blockNumber);}
         remember(null);progress('Sammelclaim bestätigt.');return status.receipts[0]!.transactionHash;
       }
       if(status.status>=400){remember(null);throw Error('Sammelclaim fehlgeschlagen. Bitte erneut scannen.');}
@@ -80,6 +81,7 @@ export async function checkPending(progress:(message:string)=>void){
   const [other,tx]=await Promise.all([clients[1]!.getTransactionReceipt({hash:receipt.transactionHash}),clients[0]!.getTransaction({hash:receipt.transactionHash})]);
   if(!same(receipt.blockHash,other.blockHash)||!same(tx.to,entry.to)||!same(tx.input,entry.data)||!same(tx.from,entry.account)||tx.value!==0n)throw Error('Die Bestätigung muss erneut geprüft werden.');
   if(receipt.status!=='success'){remember(null);throw Error('Claim fehlgeschlagen. Es wurden keine Gebühren ausgezahlt.');}
+  confirmedBlocks.set(entry.chainId,receipt.blockNumber);
   remember(null);progress('Claim bestätigt.');return receipt.transactionHash;
 }
 export async function claimEcosystem(scan:Scan,connection:{provider:EIP1193Provider;account:Address},progress:(message:string)=>void){
