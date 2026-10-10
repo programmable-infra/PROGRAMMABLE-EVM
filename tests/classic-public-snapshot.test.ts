@@ -14,7 +14,7 @@ function catalog(status: ClassicLaunchCatalogV1["status"] = "current"): ClassicL
     asOfBlock: "26158000", asOfBlockHash: hash,
     entries: [1, 2].map(n => canonicalTokenExploreEntryV1({
       id: `1:${n}`, name: `Launch ${n}`, symbol: `L${n}`, tokenAddress: `0x${String(n).repeat(40)}`,
-      creatorAddress: `0x${"3".repeat(40)}`, hookAddress: release.sources[2]!.hook,
+      creatorAddress: `0x${"3".repeat(40)}`, hookAddress: release.sources[2]!.hook as `0x${string}`,
       poolId: hash, launchTransactionHash: hash, launchBlockNumber: "26157000", launchLogIndex: n,
       launchedAt: "2026-10-09T23:00:00.000Z", tokenDecimals: 18, totalSwapFeeBps: 100,
       launchModel: "classic", liquidityPath: "meme", imageUrl: undefined,
