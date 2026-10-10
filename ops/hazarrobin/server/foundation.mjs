@@ -197,7 +197,7 @@ async function scanFees({ clients, releases, progress = () => {}, minimumBlock =
     need(!identities.has(key) && BigInt(key) !== 0n, "Ein Gebührenkonto wurde doppelt gefunden.");
     identities.add(key);
   }
-  await mapLimit(launches, 4, async launch => {
+  await mapLimit(launches, 12, async launch => {
     // Receipt validation checks event integrity. Both providers independently
     // verify every immutable factory, hook and ledger binding below.
     const receipt = await clients[1].getTransactionReceipt({ hash: launch.log.transactionHash });
@@ -235,6 +235,8 @@ async function scanFees({ clients, releases, progress = () => {}, minimumBlock =
   const claims = checked.filter(item => item.amount > 0n);
   need(claims.length <= MAX_CLAIMS, "Mehr als 128 Gebührenkonten sind offen. Ein größerer Sammelclaim muss vorbereitet werden.");
   const assets = await mapLimit([...new Set(claims.map(item => getAddress(item.quote)))], 4, async address => {
+    if (BigInt(address) === 0n) return {address, symbol:'ETH', decimals:18,
+      amount:claims.filter(item=>same(item.quote,address)).reduce((sum,item)=>sum+item.amount,0n)};
     const [symbol, decimals] = await readBoth(clients, ["symbol", "decimals"].map(functionName => ({
       address, abi: erc20Abi, functionName,
     })), block.number);

@@ -22,26 +22,33 @@ function descriptor(input) {
   return {...input,id:`${input.chainId}:${input.to.toLowerCase()}:${input.data.toLowerCase()}`,amount:String(input.amount),decimals:input.decimals??18,symbol:input.symbol??'ETH',asset:input.asset??ZERO};
 }
 
-async function ethereumDiscovery(clients, block, abis) {
+async function ethereumDiscovery(clients, block, abis, progress=()=>{}) {
   const release=deployments.ethereumModule.payload;
   const root=deployments.ethereum.canonicalStamp;
   await Promise.all([pin(clients,release.implementation,block.number),pin(clients,root.graphFactory,block.number)]);
   const event=abis.v3.find(e=>e.type==='event');
   const logs=await rangeLogs(clients[1],{event},BigInt(release.startBlock),block.number);
-  return mapLimit(logs,4,async log=>{
-    need(log.args?.token&&log.args?.ledger&&!log.removed,'Ungültiger Ethereum-Moduleintrag.');
-    await pin(clients,{address:log.address,runtimeCodeHash:release.proxyRuntimeCodeHash},block.number);
-    const [impl,hash,factory,initialized]=await readBoth(clients,['implementation','implementationCodeHash','GRAPH_FACTORY','initialized'].map(n=>call(log.address,n)),block.number);
-    need(same(impl,release.implementation.address)&&same(hash,release.implementation.runtimeCodeHash)&&same(factory,root.graphFactory.address)&&initialized,'Module-Quelle stimmt nicht.');
-    return {...log.args,log,release:{factoryVersion:'v3',factory:{address:log.address},startBlock:BigInt(release.startBlock)}};
-  });
+  progress(`${logs.length} Ethereum-Module werden geprüft…`);
+  let checked=0;
+  const batches=[];for(let i=0;i<logs.length;i+=12)batches.push(logs.slice(i,i+12));
+  return (await mapLimit(batches,2,async batch=>{
+    for(const log of batch)need(log.args?.token&&log.args?.ledger&&!log.removed,'Ungültiger Ethereum-Moduleintrag.');
+    await Promise.all(batch.map(log=>pin(clients,{address:log.address,runtimeCodeHash:release.proxyRuntimeCodeHash},block.number)));
+    const values=await readBoth(clients,batch.flatMap(log=>['implementation','implementationCodeHash','GRAPH_FACTORY','initialized'].map(n=>call(log.address,n))),block.number);
+    const found=batch.map((log,i)=>{
+      const [impl,hash,factory,initialized]=values.slice(i*4,i*4+4);
+      need(same(impl,release.implementation.address)&&same(hash,release.implementation.runtimeCodeHash)&&same(factory,root.graphFactory.address)&&initialized,'Module-Quelle stimmt nicht.');
+      return {...log.args,log,release:{factoryVersion:'v3',factory:{address:log.address},startBlock:BigInt(release.startBlock)}};
+    });
+    checked+=found.length;progress(`Ethereum-Module: ${checked}/${logs.length}`);return found;
+  })).flat();
 }
 
-async function scanFoundation(chainId, clients, progress) {
+export async function scanFoundation(chainId, clients, progress) {
   const manager=chainId===1?deployments.ethereum.contracts.poolManager:deployments.robinhoodCustom.contracts.poolManager;
   const scanner=createFoundationScanner({chainId,manager,lag:chainId===1?2:16});
   const result=await scanner.scanFees({clients,releases:chainId===4663?scanner.parseReleases(deployments.foundation):[],progress,
-    ...(chainId===1?{discover:ethereumDiscovery}:{})});
+    ...(chainId===1?{discover:(c,b,a)=>ethereumDiscovery(c,b,a,progress)}:{})});
   const assets=new Map(result.assets.map(a=>[a.address.toLowerCase(),a]));
   return {claims:result.claims.map(c=>descriptor({chainId,to:c.ledger,data:selectors.platform,recipient:PROJECT_WALLETS[0],amount:c.amount,
     asset:c.quote,symbol:assets.get(c.quote.toLowerCase()).symbol,decimals:assets.get(c.quote.toLowerCase()).decimals,source:'Module Mode',permissionless:true,
