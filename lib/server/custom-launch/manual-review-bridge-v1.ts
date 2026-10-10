@@ -1,3 +1,4 @@
+import { reviewLinksV4 } from "@/lib/custom-launch-review-workflow";
 import "server-only";
 import { randomBytes } from "node:crypto";
 import { getAddress, isAddress } from "viem";
@@ -47,8 +48,15 @@ export function createManualReviewBridgeV1(input: {
       let body: Buffer | undefined;
       if (request.method === "POST") {
         let value;
-        try { value = JSON.parse(await boundedBody(request, 8192)); } catch (error) { if (error instanceof InputError) throw error; throw new InputError(400, "REVIEW_DECISION_INVALID"); }
-        if (!value || typeof value !== "object" || Array.isArray(value)
+        try { value = JSON.parse(await boundedBody(request, 20000)); } catch (error) { if (error instanceof InputError) throw error; throw new InputError(400, "REVIEW_DECISION_INVALID"); }
+        const collaborative = value && ["request_information", "replace", "record_checks"].includes(value.operation);
+        if (collaborative) {
+          const keys = value.operation === "record_checks" ? "operation,report,reviewId,revision,subjectHash" : value.operation === "replace" ? "operation,replacementReviewId,reviewId,revision,subjectHash" : "links,message,operation,reviewId,revision,subjectHash";
+          if (Object.keys(value).sort().join(",") !== keys || !UUID.test(value.reviewId) || !/^sha256:[0-9a-f]{64}$/u.test(value.subjectHash)
+            || !Number.isSafeInteger(value.revision) || value.revision < 1
+            || (value.operation === "record_checks" ? !value.report || typeof value.report !== "object" || JSON.stringify(value.report).length > 12000
+              : value.operation === "replace" ? !UUID.test(value.replacementReviewId) : typeof value.message !== "string" || !value.message.trim() || value.message.length > 12000 || !reviewLinksV4(value.links))) throw new InputError(400, "REVIEW_MESSAGE_INVALID");
+        } else if (!value || typeof value !== "object" || Array.isArray(value)
           || Object.keys(value).sort().join(",") !== "decision,reason,reviewId,revision,subjectHash"
           || !UUID.test(value.reviewId) || !/^sha256:[0-9a-f]{64}$/u.test(value.subjectHash)
           || !Number.isSafeInteger(value.revision) || value.revision < 1 || !["approve", "reject"].includes(value.decision)
@@ -63,10 +71,15 @@ export function createManualReviewBridgeV1(input: {
       const backend = await input.fetchBackend(target, { method: request.method, body: body?.toString("utf8"),
         headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${input.websiteToken}`,
           "X-Programmable-Privy-User-Id": principal.privyUserId, "X-Programmable-Wallet-Address": getAddress(wallet), ...assertion },
-        cache: "no-store", redirect: "error", signal: AbortSignal.any([request.signal, AbortSignal.timeout(12_000)]) });
+        cache: "no-store", redirect: "error", signal: AbortSignal.any([request.signal, AbortSignal.timeout(reviewId || request.method === "POST" ? 60_000 : 12_000)]) });
+      if (backend.status === 409) {
+        const error = JSON.parse(await boundedBody(backend, 65536));
+        const code = ["REVIEW_EMBEDDED_DEADLINE_TOO_SHORT", "REVIEW_REPLAN_REQUIRED"].includes(error?.error?.code) ? error.error.code : "REVIEW_CHANGED_REFRESH";
+        return Response.json({ error: { code } }, { status: 409, headers });
+      }
       if (!backend.ok) throw new InputError([400, 403, 404, 409].includes(backend.status) ? backend.status : 503,
         backend.status === 409 ? "REVIEW_CHANGED_REFRESH" : "REVIEW_UNAVAILABLE");
-      const value = JSON.parse(await boundedBody(backend, reviewId ? 64 * 1024 * 1024 : 2 * 1024 * 1024));
+      const value = JSON.parse(await boundedBody(backend, reviewId ? 64 * 1024 * 1024 : 8 * 1024 * 1024));
       if (request.method === "GET" && !reviewId) {
         if (!Array.isArray(value.reviews) || value.reviews.length > 100) throw new Error("Invalid review list");
         value.reviews.forEach(parseCustomLaunchReview);

@@ -2,7 +2,7 @@
 .page h1 { font-size: clamp(26px, 4vw, 38px); margin: 16px 0; }
 .page h2 { font-size: 22px; }
 .page p { line-height: 1.5; }
-.page button, .page textarea { font: inherit; color: inherit; background: #202020; border: 1px solid #555; border-radius: 8px; padding: 12px 16px; }
+.page button, .page textarea, .page select { font: inherit; color: inherit; background: #202020; border: 1px solid #555; border-radius: 8px; padding: 12px 16px; }
 .page button { cursor: pointer; }
 .page button:disabled { opacity: .5; cursor: default; }
 .page button:focus-visible, .page textarea:focus-visible { outline: 2px solid #95cfff; outline-offset: 3px; }

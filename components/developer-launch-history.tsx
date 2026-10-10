@@ -1,4 +1,6 @@
 "use client";
+import { CustomLaunchAssessment } from "./custom-launch-assessment";
+import { CustomLaunchDiscussion } from "./custom-launch-discussion";
 import { CustomLaunchStartButton } from "./custom-launch-start-button";
 import { useLaunchStatusPolling } from "./use-launch-status-polling";
 import { launchStatusFingerprint, launchStatusUpdateMessage } from "@/lib/custom-launch-status-update";
@@ -3697,15 +3699,17 @@ export function DeveloperLaunchHistory({
                     <h3>{projectMetadataSummary?.projectMetadata.token.name ?? `Launch ${shortId(resourceIdentity)}`}</h3>
                   </div>
                   <span className={styles.status} data-status={launch.status}>
-                    {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status) ? customLaunchReviewLabel(launch.manualReview) : statusCopy(launch.status)}
+                    {launch.manualReview && !["submitted", "finalized", "failed", "cancelled"].includes(launch.status) ? customLaunchReviewLabel(launch.manualReview) : statusCopy(launch.status)}
                   </span>
                 </div>
                 <p className={styles.statusDescription}>
-                  {launch.manualReview && !["submitted", "finalized", "failed", "cancelled", "action_required"].includes(launch.status)
+                  {launch.manualReview && !["submitted", "finalized", "failed", "cancelled"].includes(launch.status)
                     ? customLaunchReviewDescription(launch.manualReview) : statusDescription(launch.status)}
                 </p>
                 {launch.manualReview && !["submitted", "finalized", "failed", "cancelled"].includes(launch.status)
                   ? <CustomLaunchStartButton key={`${resourceIdentity}:${launch.manualReview.revision}`} review={launch.manualReview} launchId={resourceIdentity} onStarted={refresh} /> : null}
+                <CustomLaunchAssessment value={launch.output?.reviewReadiness} />
+                {launch.manualReview ? <CustomLaunchDiscussion review={launch.manualReview} launchId={resourceIdentity} onUpdated={refresh} /> : null}
                 {["authorized", "wallet_action_required", "awaiting_wallet_signature", "awaiting_funding_authorization"].includes(launch.status)
                   && (!launch.manualReview || customLaunchReviewAllowsSigning(launch.manualReview)) ? (
                   <button className={styles.walletButton} type="button"

@@ -1,6 +1,6 @@
 import { routeProductionManualReviewsV1 } from "@/lib/server/custom-launch/manual-review-bridge-v1";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-export const maxDuration = 15;
+export const maxDuration = 90;
 export const GET = routeProductionManualReviewsV1;
 export const POST = routeProductionManualReviewsV1;
