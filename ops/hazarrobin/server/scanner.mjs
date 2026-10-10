@@ -1,5 +1,6 @@
 import { parseAbi, encodeFunctionData, keccak256, getAddress } from 'viem';
 import deployments from '../vendor/deployments.json' with {type:'json'};
+import nonProjectCustom from '../vendor/non-project-custom.json' with {type:'json'};
 import { createFoundationScanner } from './foundation.mjs';
 import { scanLegacyEthereum } from './legacy-ethereum.mjs';
 import { immutablePoolFeeRequiredAddresses, proveImmutablePoolFeeRuntime, ethereumNative30RequiredAddressesV1, proveEthereumNative30RuntimeV1 } from '../vendor/native-proofs.mjs';
@@ -12,6 +13,7 @@ const ABI=parseAbi(['function claimable(address) view returns(uint256)','functio
   'function claim(address) returns(uint256)','function claimEthFor(address) returns(uint256)','function claim(address,address) returns(uint256)',
   'function claimPlatform() returns(uint256)','function platformAccrued() view returns(uint256)','function creatorAccrued() view returns(uint256)',
   'function creatorRecipient() view returns(address)','function PLATFORM_RECIPIENT() view returns(address)','function balanceOf(address,uint256) view returns(uint256)',
+  'function FEE_RECIPIENT() view returns(address)',
   'function lpFee() view returns(uint24)','function tickSpacing() view returns(int24)','function token() view returns(address)',
   'function implementation() view returns(address)','function implementationCodeHash() view returns(bytes32)','function GRAPH_FACTORY() view returns(address)','function initialized() view returns(bool)']);
 const call=(address,functionName,args=[])=>({address,abi:ABI,functionName,args});
@@ -91,6 +93,13 @@ export async function scanNativeVaults(chainId,clients,block,candidates,progress
     const hook=candidate.hook??candidate.hookAddress;
     const codes=await Promise.all(clients.map(c=>c.getCode({address:hook,blockNumber:block.number})));
     need(codes.every(c=>same(c,codes[0])),'Custom-Hook-Daten unterscheiden sich.');
+    const excluded=nonProjectCustom.find(p=>p.chainId===chainId&&same(p.address,hook));
+    if(excluded){
+      need(same(keccak256(codes[0]),excluded.runtimeCodeHash),'Der geprüfte Custom-Vertrag hat sich geändert.');
+      const [recipient]=await readBoth(clients,[call(hook,'FEE_RECIPIENT')],block.number);
+      need(same(recipient,excluded.recipient)&&!PROJECT_WALLETS.some(w=>same(w,recipient)),'Die Custom-Gebührenzuordnung hat sich geändert.');
+      return {covered:hook};
+    }
     // These immutable kernels expose the pool key. Arbitrary custom bytecode is never treated as an adapter.
     const fields=await readBoth(clients,['lpFee','tickSpacing','token'].map(n=>call(hook,n)),block.number,true);
     if(fields.some(v=>v===null))return {unsupported:hook};

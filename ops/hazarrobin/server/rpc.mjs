@@ -38,7 +38,9 @@ export function rpcClients(chainId) {
   if(clientsByChain.has(chainId)) return clientsByChain.get(chainId);
   const urls=chainId===1 ? [process.env.ETH_PRIMARY,process.env.ETH_SECONDARY??'https://mainnet.gateway.tenderly.co',process.env.ETH_TERTIARY??'https://rpc.mevblocker.io'] : [process.env.RH_PRIMARY,process.env.RH_SECONDARY];
   need(urls.every(u=>typeof u==='string'&&u.startsWith('https://')), 'Die Netzwerkverbindung ist noch nicht eingerichtet.');
-  const clients=urls.map((url,i)=>cached(createPublicClient({ transport:http(url,{batch:{wait:5,batchSize:40},timeout:20000,retryCount:3,retryDelay:600,fetchFn:paced(fetch)}) }),`${chainId}:${i}`));
+  // The archive fallback can reject large batches with a single rate-limit
+  // object. A conservative batch size preserves viem's response mapping.
+  const clients=urls.map((url,i)=>cached(createPublicClient({ transport:http(url,{batch:{wait:5,batchSize:10},timeout:20000,retryCount:3,retryDelay:600,fetchFn:paced(fetch)}) }),`${chainId}:${i}`));
   clientsByChain.set(chainId,clients); return clients;
 }
 export async function pin(clients, binding, blockNumber) {
