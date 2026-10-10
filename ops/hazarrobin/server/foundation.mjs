@@ -2,6 +2,7 @@ import {
   createPublicClient, decodeEventLog, decodeFunctionResult, encodeFunctionData,
   erc20Abi, getAddress, http, keccak256, multicall3Abi, parseAbi, toHex,
 } from "viem";
+import { mapLimit } from './rpc.mjs';
 
 
 // Adapted from the audited standalone fee console; chain pins are explicit.
@@ -86,15 +87,6 @@ function parseReleases(history, active) {
   return [...found.values()];
 }
 
-async function mapLimit(items, limit, action) {
-  const output = [];
-  let cursor = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) { const index = cursor++; output[index] = await action(items[index], index); }
-  }));
-  return output;
-}
-
 async function checkpoint(clients) {
   const chains = await Promise.all(clients.map(client => client.getChainId()));
   need(chains.every(chain => chain === CHAIN_ID), "Die RPC-Verbindung ist auf der falschen Chain.");
@@ -167,7 +159,7 @@ function validateLedger(launch, values) {
 }
 
 /** All factory launches are included, including unlisted coins and previous releases. */
-async function scanFees({ clients, releases, progress = () => {}, minimumBlock = 0n, discover }) {
+async function scanFees({ clients, releases, progress = () => {}, minimumBlock = 0n, discover, onDiscovered = () => {} }) {
   let block = await checkpoint(clients);
   for (let attempt = 0; block.number < minimumBlock && attempt < 12; attempt++) {
     progress("Auszahlung bestätigt. Gebühren werden aktualisiert…");
@@ -206,6 +198,9 @@ async function scanFees({ clients, releases, progress = () => {}, minimumBlock =
         same(log.data, launch.log.data) && serialize(log.topics) === serialize(launch.log.topics)),
     "Ein Launch konnte auf der Chain nicht bestätigt werden.");
   });
+  // Preserve verified source identity even if a later balance read is interrupted.
+  // This callback does not authorize a payout; validateLedger still checks it.
+  onDiscovered(launches);
   const batches = [];
   for (let index = 0; index < launches.length; index += 6) batches.push(launches.slice(index, index + 6));
   let verified = 0;

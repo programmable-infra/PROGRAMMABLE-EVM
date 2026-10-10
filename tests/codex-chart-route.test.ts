@@ -14,7 +14,7 @@ it.each(["token=bad", `token=${address}&range=all`, `token=${address}&chain=10`,
 describe("verified chart identity", () => {
   it("serves a verified last-minute chart with a bounded shared cache", async () => {
     mocks.robinhood.mockResolvedValue({ token: { tokenAddress: address } });
-    mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1m", source: "codex", points: [] });
+    mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1m", source: "codex", points: [{ time: 1, price: 1 }] });
     const response = await GET(new Request(`https://example.com/api/market/chart?token=${address}&range=1m`));
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toContain("s-maxage=30");
@@ -28,12 +28,18 @@ describe("verified chart identity", () => {
   });
   it("returns bounded cacheable chart data and hides provider failures", async () => {
     mocks.robinhood.mockResolvedValue({ token: { tokenAddress: address } });
-    mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1D", source: "codex", points: [] });
+    mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1D", source: "codex", points: [{ time: 1, price: 1 }] });
     const url = `https://example.com/api/market/chart?token=${address}`;
     const response = await GET(new Request(url));
     expect(response.status).toBe(200); expect(response.headers.get("cache-control")).toContain("s-maxage=60");
     mocks.chart.mockRejectedValue(new Error("private provider response"));
     const failed = await GET(new Request(url));
     expect(failed.status).toBe(503); expect(JSON.stringify(await failed.json())).not.toContain("private provider response");
+  });
+  it("checks empty histories again quickly instead of caching a new coin's empty chart for a minute", async () => {
+    mocks.robinhood.mockResolvedValue({ token: { tokenAddress: address } });
+    mocks.chart.mockResolvedValue({ tokenAddress: address, chainId: 4663, range: "1D", source: "codex", points: [] });
+    const response = await GET(new Request(`https://example.com/api/market/chart?token=${address}`));
+    expect(response.headers.get("cache-control")).toContain("max-age=5, s-maxage=5");
   });
 });

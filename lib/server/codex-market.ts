@@ -122,18 +122,24 @@ export async function readCodexMarkets(tokens: readonly Identity[], chainId = 46
   return result;
 }
 
-const cachedChart = unstable_cache(async (address: string, chainId: number, range: CodexChartRange, bucket: number): Promise<CodexChart> => {
+const cachedChart = unstable_cache(async (address: string, chainId: number, range: CodexChartRange): Promise<CodexChart> => {
   const config = CODEX_CHART_RANGES[range];
+  const bucket = Math.floor(Date.now() / config.refreshMs);
   const to = Math.floor(bucket * config.refreshMs / 1_000), from = to - config.seconds;
   const data = await codexQuery(barsQuery, { symbol: `${address.toLowerCase()}:${chainId}`, from, to, resolution: config.resolution });
   // The first candle can start just before the requested window at its resolution boundary.
   const earliest = from - config.candleSeconds;
   const points = parseCodexBars(data.getTokenBars, address.toLowerCase(), chainId, earliest, to);
   return { tokenAddress: address.toLowerCase(), chainId, range, points, source: "codex", observedAt: new Date().toISOString() };
-}, ["codex-token-bars-v3"], { revalidate: 60 });
+// A stable key serves the previous observation while Next refreshes it.
+// Putting the clock in the key forces a blocking cold read every minute.
+}, ["codex-token-bars-v4"], { revalidate: 15 });
 
 export async function readCodexChart(address: string, chainId: number, range: CodexChartRange): Promise<CodexChart> {
   if (!marketAddress.test(address) || ![1, 4663].includes(chainId) || !Object.hasOwn(CODEX_CHART_RANGES, range)) throw new Error("Invalid chart request");
-  const normalized = address.toLowerCase(), bucket = Math.floor(Date.now() / CODEX_CHART_RANGES[range].refreshMs);
-  return sharedRead(`chart:${chainId}:${normalized}:${range}:${bucket}`, () => cachedChart(normalized, chainId, range, bucket));
+  const normalized = address.toLowerCase();
+  const chart = await sharedRead(`chart:${chainId}:${normalized}:${range}`, () => cachedChart(normalized, chainId, range));
+  const age = Date.now() - Date.parse(chart.observedAt);
+  if (!Number.isFinite(age) || age < 0 || age > 180_000) throw new Error("Market data unavailable");
+  return chart;
 }

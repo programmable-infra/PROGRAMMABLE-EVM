@@ -16,7 +16,7 @@ export default async function handler(req,res) {
   if(!job||job.expires<Date.now()||(job.result&&BigInt(job.result.blockNumber)<minimumBlock)){
     const listeners=new Set();job={expires:Date.now()+300000,listeners,promise:null,result:null};jobs.set(chainId,job);
     job.promise=scanEcosystem(chainId,message=>{for(const fn of listeners)fn({type:'progress',message});},minimumBlock)
-      .then(result=>{job.expires=Date.now()+15000;job.result=result;return result;})
+      .then(result=>{job.expires=Date.now()+(result.issues.length?0:15000);job.result=result;return result;})
       .catch(error=>{jobs.delete(chainId);throw error;});
   }
   job.listeners.add(send);
