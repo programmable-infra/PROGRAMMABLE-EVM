@@ -1,0 +1,48 @@
+{
+  "schemaVersion": "programmable.custom-claim-console.release.v1",
+  "status": "HOLD",
+  "activationAllowed": false,
+  "statusReason": "The reviewed Custom V2 source standard is integrated locally, but no exact Mainnet deployment addresses, constructor-specific runtime code hashes, finalized lifecycle, or source verification exists yet.",
+  "sourceRevision": {
+    "repository": "https://github.com/0xprogrammable/programmable",
+    "commit": "437d84959153dc7aa8514c48cae462175197cd08",
+    "tree": "9949a1a083b006c93b0e237b5648f780db221ccc"
+  },
+  "deployment": {
+    "chainId": "1",
+    "startBlock": null
+  },
+  "contracts": {
+    "sourceRegistry": {
+      "address": null,
+      "runtimeCodeHash": null
+    },
+    "customRegistryV2": {
+      "address": null,
+      "runtimeCodeHash": null
+    },
+    "customRegistrar": {
+      "address": null,
+      "runtimeCodeHash": null
+    },
+    "launchStampRouter": {
+      "address": null,
+      "runtimeCodeHash": null
+    }
+  },
+  "policy": {
+    "asset": "0x0000000000000000000000000000000000000000",
+    "recipient": "0x4957f49620AFf3Adbbe8195a4f633E49cc93376c",
+    "programmableFeeBps": "10",
+    "claimSelector": "0xb9d2fad0",
+    "sourceInterfaceId": "0x808cb67a",
+    "minimumActivationDelayBlocks": "64",
+    "minimumLaunchFinalityBlocks": "64"
+  },
+  "liveEvidence": {
+    "deploymentTransactions": [],
+    "sourceVerification": null,
+    "runtimeReadback": null,
+    "finalizedLifecycle": null
+  }
+}
